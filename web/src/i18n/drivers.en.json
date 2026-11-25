@@ -17,6 +17,7 @@
   "openvpn.caCert": "CA certificate",
   "openvpn.clientCert": "Client certificate",
   "openvpn.clientKey": "Client key",
+  "openvpn.pkcs12": "PKCS#12 file (instead of client certificate and key)",
   "openvpn.keyPassphrase": "Key passphrase",
   "openvpn.cipher": "Data channel cipher",
   "openvpn.authDigest": "Authentication digest",
@@ -32,5 +33,6 @@
   "openvpn.tlsCryptKey": "TLS crypt key",
   "openvpn.resolveRetry": "Retry name resolution (seconds or infinite)",
   "openvpn.keepalive": "Keepalive (interval and timeout in seconds)",
+  "openvpn.remoteNetworks": "Remote networks (behind the VPN, one CIDR per line)",
   "openvpn.extraOptions": "Extra options"
 }

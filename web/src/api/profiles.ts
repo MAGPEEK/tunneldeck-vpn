@@ -28,6 +28,8 @@ export interface SchemaField {
   default?: SettingValue;
   visibleWhen?: VisibleWhen;
   placeholder?: string;
+  /** `base64`: a multi-line secret holding a binary file; offer a file picker and send base64. */
+  encoding?: 'base64';
 }
 
 export interface SchemaSection {

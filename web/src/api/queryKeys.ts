@@ -5,7 +5,7 @@ export const queryKeys = {
   profiles: ['profiles'] as const,
   profile: (id: string) => ['profiles', id] as const,
   drivers: ['drivers'] as const,
-  hostAccess: ['host-access'] as const,
+  firewall: ['firewall'] as const,
   system: ['system'] as const,
   remoteAccess: ['remote-access'] as const,
   importDraft: ['import-draft'] as const,

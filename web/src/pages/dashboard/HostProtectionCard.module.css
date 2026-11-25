@@ -32,3 +32,8 @@
   align-self: center;
   font-size: var(--font-size-md);
 }
+
+.warning {
+  color: var(--state-warning-text);
+  font-size: var(--font-size-sm);
+}

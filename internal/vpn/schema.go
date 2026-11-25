@@ -19,6 +19,15 @@ const (
 	FieldBool       FieldType = "bool"
 )
 
+// FieldEncoding says how a field's value encodes its content. Empty means
+// plain text.
+type FieldEncoding string
+
+// EncodingBase64 marks a multi-line secret field whose content is a binary
+// file: the frontend offers a file picker besides the text input and sends
+// the file as standard base64 (RFC 4648 §4).
+const EncodingBase64 FieldEncoding = "base64"
+
 // FormSchema describes the profile form of a driver as ordered sections.
 // The frontend renders the form from it, so a new driver needs no new page.
 type FormSchema struct {
@@ -47,6 +56,8 @@ type Field struct {
 	Default     any        `json:"default,omitempty"`
 	VisibleWhen *Condition `json:"visibleWhen,omitempty"`
 	Placeholder string     `json:"placeholder,omitempty"`
+	// Encoding is set only on multi-line secret fields; see EncodingBase64.
+	Encoding FieldEncoding `json:"encoding,omitempty"`
 }
 
 // Option is one choice of a select field.
@@ -78,9 +89,9 @@ func (c Condition) Validate() error {
 	return nil
 }
 
-// Validate checks every condition of the schema: its form, and that it
-// refers to a non-secret field (key) or a secret field (secret) of the
-// schema.
+// Validate checks every field's encoding and every condition of the
+// schema: its form, and that it refers to a non-secret field (key) or a
+// secret field (secret) of the schema.
 func (s FormSchema) Validate() error {
 	types := map[string]FieldType{}
 	for _, section := range s.Sections {
@@ -90,10 +101,25 @@ func (s FormSchema) Validate() error {
 	}
 	for _, section := range s.Sections {
 		for _, f := range section.Fields {
+			if err := validateEncoding(f); err != nil {
+				return fmt.Errorf("field %q: %w", f.Key, err)
+			}
 			if err := validateVisibility(f, types); err != nil {
 				return fmt.Errorf("field %q: %w", f.Key, err)
 			}
 		}
+	}
+	return nil
+}
+
+func validateEncoding(f Field) error {
+	switch {
+	case f.Encoding == "":
+		return nil
+	case f.Encoding != EncodingBase64:
+		return fmt.Errorf("unknown encoding %q", f.Encoding)
+	case f.Type != FieldSecret || !f.Multiline:
+		return errors.New("encoding applies only to multi-line secret fields")
 	}
 	return nil
 }

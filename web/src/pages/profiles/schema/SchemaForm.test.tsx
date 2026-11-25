@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { FormSchema, Profile } from '../../../api/profiles';
@@ -286,6 +286,55 @@ describe('SchemaForm', () => {
     });
     expect(screen.getByLabelText('TLS auth key')).toHaveValue('KEY');
     expect(submit().secrets).toEqual({ tlsAuthKey: 'KEY' });
+  });
+
+  it('reads a chosen PKCS#12 file and sends it base64-encoded', async () => {
+    const { submit } = renderHarness({ settings: { authMode: 'certificate' } });
+    const bytes = new Uint8Array([0x30, 0x82, 0x01, 0xff, 0x02, 0x01, 0x03]);
+    const file = new File([bytes], 'client.p12', { type: 'application/x-pkcs12' });
+
+    fireEvent.change(screen.getByLabelText('Load from a file'), { target: { files: [file] } });
+
+    const textarea = screen.getByLabelText('PKCS#12 file (instead of client certificate and key)');
+    await waitFor(() => expect(textarea).toHaveValue('MIIB/wIBAw=='));
+    expect(submit().secrets).toEqual({ pkcs12: 'MIIB/wIBAw==' });
+  });
+
+  it('offers a file picker by the field encoding, not by the key', async () => {
+    const schema: FormSchema = {
+      sections: [
+        {
+          key: 's',
+          labelKey: 'openvpn.section.authentication',
+          fields: [
+            {
+              key: 'bundle',
+              type: 'secret',
+              labelKey: 'openvpn.tlsCryptKey',
+              multiline: true,
+              encoding: 'base64',
+            },
+            { key: 'tlsAuthKey', type: 'secret', labelKey: 'openvpn.tlsAuthKey', multiline: true },
+          ],
+        },
+      ],
+    };
+    const { submit } = renderHarness({ schema });
+    const pickers = screen.getAllByLabelText('Load from a file');
+    expect(pickers).toHaveLength(1);
+
+    fireEvent.change(pickers[0] as HTMLElement, {
+      target: { files: [new File([new Uint8Array([1, 2, 3])], 'x.bin')] },
+    });
+    await waitFor(() => expect(screen.getByLabelText('TLS crypt key')).toHaveValue('AQID'));
+    expect(submit().secrets).toEqual({ bundle: 'AQID' });
+  });
+
+  it('labels the remote networks list', () => {
+    renderHarness();
+    expect(
+      screen.getByRole('group', { name: 'Remote networks (behind the VPN, one CIDR per line)' }),
+    ).toBeInTheDocument();
   });
 
   it('shows errors under the matching field', () => {

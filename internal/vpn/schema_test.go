@@ -57,6 +57,35 @@ func TestFormSchemaValidate(t *testing.T) {
 	}
 }
 
+func TestFormSchemaValidateEncoding(t *testing.T) {
+	tests := []struct {
+		name    string
+		field   Field
+		wantErr bool
+	}{
+		{name: "no encoding", field: Field{Key: "f", Type: FieldText}},
+		{name: "base64 multi-line secret", field: Field{Key: "f", Type: FieldSecret, Multiline: true, Encoding: EncodingBase64}},
+		{name: "base64 single-line secret", field: Field{Key: "f", Type: FieldSecret, Encoding: EncodingBase64}, wantErr: true},
+		{name: "base64 textarea", field: Field{Key: "f", Type: FieldTextarea, Multiline: true, Encoding: EncodingBase64}, wantErr: true},
+		{name: "unknown encoding", field: Field{Key: "f", Type: FieldSecret, Multiline: true, Encoding: "hex"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := FormSchema{Sections: []Section{{Key: "s", Fields: []Field{tt.field}}}}
+			if err := schema.Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFieldEncodingJSON(t *testing.T) {
+	b, err := json.Marshal(Field{Key: "p", Type: FieldSecret, LabelKey: "l", Multiline: true, Encoding: EncodingBase64})
+	if err != nil || string(b) != `{"key":"p","type":"secret","labelKey":"l","multiline":true,"encoding":"base64"}` {
+		t.Errorf("Marshal = %s, %v", b, err)
+	}
+}
+
 func TestSecretConditionJSON(t *testing.T) {
 	b, err := json.Marshal(Condition{Secret: "tlsAuthKey"})
 	if err != nil || string(b) != `{"secret":"tlsAuthKey"}` {

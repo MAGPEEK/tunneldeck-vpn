@@ -60,6 +60,26 @@ describe('SystemPage', () => {
     expect(screen.getByText(/Install iptables in the image and make sure/)).toBeInTheDocument();
   });
 
+  it('labels the IP forwarding and LAN checks and translates their hints', async () => {
+    renderApp(
+      routes({
+        'GET /api/system': {
+          body: {
+            ...SYSTEM,
+            checks: [
+              { id: 'ip-forward', ok: false, detail: 'net.ipv4.ip_forward is 0', hint: 'x' },
+              { id: 'lan-subnets', ok: true, detail: '192.168.2.0/24' },
+            ],
+          },
+        },
+      }),
+      '/system',
+    );
+    expect(await screen.findByText('IP forwarding')).toBeInTheDocument();
+    expect(screen.getByText('LAN subnets')).toBeInTheDocument();
+    expect(screen.getByText(/Enable IPv4 forwarding on the host/)).toBeInTheDocument();
+  });
+
   it('shows a neutral note when this build has no remote access', async () => {
     renderApp(
       routes({

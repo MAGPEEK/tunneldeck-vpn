@@ -83,6 +83,20 @@ func TestDescribeConditionsAreValid(t *testing.T) {
 	}
 }
 
+func TestOnlyThePKCS12FieldIsBase64Encoded(t *testing.T) {
+	for _, section := range Describe().Sections {
+		for _, f := range section.Fields {
+			want := vpn.FieldEncoding("")
+			if f.Key == SecretPKCS12 {
+				want = vpn.EncodingBase64
+			}
+			if f.Encoding != want {
+				t.Errorf("field %q encoding = %q, want %q", f.Key, f.Encoding, want)
+			}
+		}
+	}
+}
+
 func TestKeyDirectionIsVisibleWithTheTLSAuthKey(t *testing.T) {
 	for _, section := range Describe().Sections {
 		for _, f := range section.Fields {

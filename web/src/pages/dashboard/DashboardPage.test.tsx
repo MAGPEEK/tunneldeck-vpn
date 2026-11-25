@@ -7,19 +7,48 @@ import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const profile = makeProfile();
 
+const dsm = {
+  id: 'a',
+  name: 'DSM',
+  direction: 'inbound',
+  action: 'accept',
+  protocol: 'tcp',
+  source: '',
+  destination: { kind: 'host' },
+  destinationPort: { from: 5001 },
+  keepSourceAddress: false,
+  enabled: true,
+  comment: '',
+};
+
+const lancomOut = {
+  ...dsm,
+  id: 'b',
+  name: 'LANCOM out',
+  direction: 'outbound',
+  protocol: 'esp',
+  source: '192.168.2.2',
+  destination: { kind: 'address', cidr: '0.0.0.0/0' },
+  destinationPort: undefined,
+};
+
+function firewall(overrides: Record<string, unknown> = {}) {
+  return {
+    rules: [dsm],
+    settings: { dropInvalid: true, mssClamp: true, synFloodProtection: true, pingLimit: true },
+    hostAddress: '192.168.2.10',
+    lanSubnets: ['192.168.2.0/24'],
+    ipForward: true,
+    ...overrides,
+  };
+}
+
 function routes(overrides: MockRoutes = {}): MockRoutes {
   return {
     'GET /api/session': { body: SIGNED_IN },
     'GET /api/profiles': { body: [profile] },
     'GET /api/connection': { body: makeStatus() },
-    'GET /api/host-access': {
-      body: {
-        rules: [
-          { id: 'a', protocol: 'tcp', port: 5001, sourceCidr: '', enabled: true, comment: 'DSM' },
-          { id: 'b', protocol: 'udp', port: 53, sourceCidr: '', enabled: false, comment: '' },
-        ],
-      },
-    },
+    'GET /api/firewall': { body: firewall() },
     'GET /api/remote-access': problem(404, 'not_found', 'The resource does not exist.'),
     'GET /api/logs?tail=2000': {
       body: {
@@ -52,13 +81,34 @@ describe('DashboardPage', () => {
     expect(await screen.findByRole('heading', { name: 'Office' })).toBeInTheDocument();
     expect(screen.getByText('Disconnected')).toBeInTheDocument();
     expect(within(screen.getByLabelText('Traffic')).getAllByText('–')).toHaveLength(4);
-    expect(screen.getByText('1 port open: TCP 5001')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage host access' })).toHaveAttribute(
+    expect(await screen.findByText('1 inbound rule, 0 outbound rules')).toBeInTheDocument();
+    expect(screen.queryByText(/IP forwarding is off/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage firewall' })).toHaveAttribute(
       'href',
-      '/host-access',
+      '/firewall',
     );
     expect(await screen.findByText('TunnelDeck started')).toBeInTheDocument();
     expect(FakeEventSource.latest().url).toBe('/api/events');
+  });
+
+  it('warns when IP forwarding is off and a rule needs it', async () => {
+    renderApp(
+      routes({
+        'GET /api/firewall': { body: firewall({ rules: [dsm, lancomOut], ipForward: false }) },
+      }),
+    );
+    expect(await screen.findByText('1 inbound rule, 1 outbound rule')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'IP forwarding is off on the host: port forwards and outbound rules do not work.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('does not warn about IP forwarding when only rules to this device exist', async () => {
+    renderApp(routes({ 'GET /api/firewall': { body: firewall({ ipForward: false }) } }));
+    expect(await screen.findByText('1 inbound rule, 0 outbound rules')).toBeInTheDocument();
+    expect(screen.queryByText(/IP forwarding is off/)).not.toBeInTheDocument();
   });
 
   it('connects the chosen profile', async () => {

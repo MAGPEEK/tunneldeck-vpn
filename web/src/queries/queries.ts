@@ -7,7 +7,7 @@ import {
   reconnect,
   type ConnectionStatus,
 } from '../api/connection';
-import { getHostAccess } from '../api/hostAccess';
+import { getFirewall } from '../api/firewall';
 import { getDrivers, getProfile, getProfiles } from '../api/profiles';
 import { queryKeys } from '../api/queryKeys';
 import { getRemoteAccess } from '../api/remoteAccess';
@@ -37,8 +37,8 @@ export function useDrivers() {
   return useQuery({ queryKey: queryKeys.drivers, queryFn: getDrivers, staleTime: Infinity });
 }
 
-export function useHostAccess() {
-  return useQuery({ queryKey: queryKeys.hostAccess, queryFn: getHostAccess });
+export function useFirewall() {
+  return useQuery({ queryKey: queryKeys.firewall, queryFn: getFirewall });
 }
 
 export function useSystem() {

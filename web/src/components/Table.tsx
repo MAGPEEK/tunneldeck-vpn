@@ -16,6 +16,8 @@ export interface TableProps<Row> {
   caption?: ReactNode;
   /** Content of an extra full-width row under a row, such as an inline confirmation. */
   rowDetail?: (row: Row) => ReactNode;
+  /** Marks a row, such as `highlighted` for an unsaved insert (styled in Table.module.css). */
+  rowState?: (row: Row) => 'highlighted' | undefined;
 }
 
 export function Table<Row>({
@@ -25,6 +27,7 @@ export function Table<Row>({
   emptyMessage,
   caption,
   rowDetail,
+  rowState,
 }: TableProps<Row>) {
   const alignClass = (column: Column<Row>) => (column.align === 'end' ? styles.end : undefined);
   return (
@@ -52,7 +55,7 @@ export function Table<Row>({
               const detail = rowDetail?.(row);
               return (
                 <Fragment key={rowKey(row)}>
-                  <tr>
+                  <tr data-state={rowState?.(row)}>
                     {columns.map((column) => (
                       <td key={column.key} className={alignClass(column)}>
                         {column.render(row)}

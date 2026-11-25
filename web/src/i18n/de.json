@@ -6,7 +6,7 @@
     "label": "Hauptnavigation",
     "dashboard": "Übersicht",
     "profiles": "Profile",
-    "hostAccess": "Host-Zugriff",
+    "firewall": "Firewall",
     "system": "System"
   },
   "pages": {
@@ -16,8 +16,8 @@
     "profiles": {
       "title": "Profile"
     },
-    "hostAccess": {
-      "title": "Host-Zugriff"
+    "firewall": {
+      "title": "Firewall"
     },
     "system": {
       "title": "System"
@@ -123,11 +123,13 @@
   },
   "hostProtection": {
     "title": "NAS vom Tunnel abgeschirmt",
-    "noPorts": "Keine Ports offen",
-    "openPorts_one": "{{count}} Port offen: {{list}}",
-    "openPorts_other": "{{count}} Ports offen: {{list}}",
-    "remoteAccess": "Weboberfläche per HTTPS auf Port {{port}} erreichbar",
-    "manage": "Host-Zugriff verwalten"
+    "inboundRules_one": "{{count}} eingehende Regel",
+    "inboundRules_other": "{{count}} eingehende Regeln",
+    "outboundRules_one": "{{count}} ausgehende Regel",
+    "outboundRules_other": "{{count}} ausgehende Regeln",
+    "ipForwardOff": "Die IP-Weiterleitung ist auf dem Host aus: Weiterleitungen und ausgehende Regeln funktionieren nicht.",
+    "manage": "Firewall verwalten",
+    "remoteAccess": "Weboberfläche per HTTPS auf Port {{port}} erreichbar"
   },
   "log": {
     "title": "Protokoll",
@@ -222,7 +224,8 @@
     "replace": "Ersetzen",
     "remove": "Entfernen",
     "undo": "Rückgängig",
-    "keepStored": "Gespeicherten Wert behalten"
+    "keepStored": "Gespeicherten Wert behalten",
+    "loadFile": "Aus einer Datei laden"
   },
   "importWarnings": {
     "group": {
@@ -257,26 +260,139 @@
       "compression_receive_only": "Komprimierung wird vom Server angenommen, aber beim Senden nicht verwendet.",
       "compression_kept": "Komprimierung bleibt aktiv, weil der Server sie verlangt.",
       "ns_cert_type_mapped": "wurde durch die Prüfung des Serverzertifikats ersetzt.",
-      "server_cert_usage_added": "Die Prüfung des Serverzertifikats wurde eingeschaltet."
+      "server_cert_usage_added": "Die Prüfung des Serverzertifikats wurde eingeschaltet.",
+      "static_key_unsupported": "nutzt den Static-Key-Modus, der unsicher und veraltet ist; verwenden Sie stattdessen Zertifikate oder Benutzername und Passwort."
     }
   },
-  "hostAccess": {
-    "explanation": "Alles, was aus dem Tunnel ankommt, wird blockiert – außer den Ports, die Sie hier öffnen.",
-    "protocol": "Protokoll",
-    "port": "Port",
-    "source": "Quelle (optional)",
-    "enabled": "Aktiv",
-    "comment": "Kommentar",
-    "actions": "Aktionen",
-    "cellLabel": "{{name}}, Regel {{number}}",
-    "removeRule": "Regel {{number}} entfernen",
-    "addRule": "Regel hinzufügen",
+  "firewall": {
+    "explanation": "Alles ist gesperrt, außer eine Regel erlaubt es.",
     "save": "Änderungen speichern",
-    "saved": "Regeln gespeichert und angewendet.",
+    "discard": "Verwerfen",
+    "saved": "Firewall gespeichert.",
     "invalid": "Einige Regeln müssen korrigiert werden.",
-    "empty": "Keine Ports offen",
-    "firewallFailedTitle": "Die Firewall-Regeln konnten nicht angewendet werden",
-    "firewallFailed": "Die bisherigen Regeln bleiben aktiv. Prüfen Sie den Selbsttest auf der Seite System und versuchen Sie es erneut."
+    "failedTitle": "Die Firewall konnte nicht angewendet werden",
+    "failed": "Die bisherige Konfiguration ist wieder aktiv.",
+    "context": {
+      "thisDevice": "Dieses Gerät: {{address}}",
+      "lan": "LAN: {{subnets}}",
+      "ipForward": "IP-Weiterleitung: {{state}}",
+      "on": "an",
+      "off": "aus",
+      "notDetected": "nicht erkannt",
+      "ipForwardOff": "Weiterleitungen an andere Geräte und ausgehende Regeln brauchen die IP-Weiterleitung auf dem Host.",
+      "docsLink": "So schalten Sie sie ein",
+      "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.de.md#ip-weiterleitung"
+    },
+    "tabs": {
+      "label": "Richtung der Regeln",
+      "inbound": "Eingehend vom VPN",
+      "outbound": "Ausgehend ins VPN"
+    },
+    "outboundHint": "Die Geräte müssen diesen Verkehr an diesen Host schicken: Tragen Sie ihn als Gateway ein oder legen Sie eine Route in Ihrem Router an.",
+    "column": {
+      "order": "Reihenfolge",
+      "enabled": "Aktiv",
+      "name": "Name",
+      "action": "Aktion",
+      "protocol": "Protokoll",
+      "route": "Quelle → Ziel",
+      "keepSource": "Quelle behalten",
+      "actions": "Aktionen"
+    },
+    "action": {
+      "accept": "Erlauben",
+      "drop": "Verwerfen",
+      "reject": "Ablehnen"
+    },
+    "protocol": {
+      "tcp": "TCP",
+      "udp": "UDP",
+      "tcp+udp": "TCP+UDP",
+      "icmp": "ICMP",
+      "esp": "ESP",
+      "gre": "GRE",
+      "any": "Alle"
+    },
+    "any": "beliebig",
+    "thisDevice": "Dieses Gerät",
+    "publicPort": "(öffentlich {{port}})",
+    "keepSourceOn": "Quelladresse bleibt erhalten",
+    "unsaved": "Nicht gespeichert",
+    "needsAttention": "Korrektur nötig",
+    "unnamed": "Regel ohne Namen",
+    "copyName": "{{name}} (Kopie)",
+    "moveUp": "{{name}} nach oben verschieben",
+    "moveDown": "{{name}} nach unten verschieben",
+    "enabledNamed": "Aktiv: {{name}}",
+    "edit": "Bearbeiten",
+    "editNamed": "{{name}} bearbeiten",
+    "duplicate": "Duplizieren",
+    "duplicateNamed": "{{name}} duplizieren",
+    "delete": "Löschen",
+    "deleteNamed": "{{name}} löschen",
+    "confirmLabel": "Löschen bestätigen",
+    "confirmDelete": "Regel „{{name}}“ löschen?",
+    "confirmDeleteButton": "Regel löschen",
+    "cancel": "Abbrechen",
+    "addRule": "Regel hinzufügen",
+    "emptyInbound": "Keine eingehenden Regeln: Aus dem VPN kommt nichts herein.",
+    "emptyOutbound": "Keine ausgehenden Regeln: Kein LAN-Gerät schickt Verkehr durch das VPN.",
+    "editor": {
+      "title": "Regel bearbeiten",
+      "name": "Name",
+      "action": "Aktion",
+      "actionForwardHint": "Weiterleitungen an andere Geräte erlauben immer.",
+      "protocol": "Protokoll",
+      "icmpType": "ICMP-Typ (optional)",
+      "icmpTypeHint": "Zum Beispiel echo-request. Leer lassen für alle Typen.",
+      "source": "Quelle (optional)",
+      "sourcePlaceholder": "Beliebig",
+      "sourceOutbound": "Quelle (LAN-Gerät oder Subnetz)",
+      "sourceOutboundPlaceholder": "192.168.2.20 oder 192.168.2.0/24",
+      "sourcePort": "Quellport (optional)",
+      "destination": "Ziel",
+      "thisDevice": "Dieses Gerät ({{address}})",
+      "address": "Adresse",
+      "destinationAddress": "Zieladresse",
+      "lanHint": "Muss im LAN liegen: {{subnets}}",
+      "destinationOutbound": "Ziel (Adresse oder Netz hinter dem VPN)",
+      "destinationOutboundPlaceholder": "10.0.0.0/8 oder 0.0.0.0/0",
+      "destinationPort": "Zielport",
+      "portPlaceholder": "443 oder 8000-8010",
+      "publicPort": "Öffentlicher Port",
+      "publicPortHint": "Der Port auf der VPN-Adresse. Leer bedeutet: wie der Zielport.",
+      "publicPortHostHint": "Regeln an dieses Gerät nutzen den Zielport.",
+      "keepSource": "Quelladresse behalten",
+      "keepSourceHint": "Das Gerät muss Antworten über diesen Host leiten.",
+      "comment": "Kommentar (optional)",
+      "done": "Fertig",
+      "portFormat": "Geben Sie einen Port oder einen Bereich wie 8000-8010 ein."
+    },
+    "ipsec": {
+      "open": "IPsec-Gerät hinzufügen",
+      "title": "IPsec-Gerät",
+      "intro": "Leitet IKE (UDP 500 und 4500) und ESP an ein LAN-Gerät weiter, behält die Adressen der Gegenstellen bei und leitet den IPsec-Verkehr des Geräts durch das VPN.",
+      "name": "Name",
+      "namePlaceholder": "LANCOM",
+      "device": "Adresse des Geräts",
+      "devicePlaceholder": "192.168.2.2",
+      "peers": "Adressen der Gegenstellen (optional)",
+      "submit": "Regeln hinzufügen",
+      "cancel": "Abbrechen",
+      "added_one": "{{count}} Regel hinzugefügt. Speichern Sie die Änderungen, um sie anzuwenden.",
+      "added_other": "{{count}} Regeln hinzugefügt. Speichern Sie die Änderungen, um sie anzuwenden."
+    },
+    "protection": {
+      "title": "Schutz",
+      "dropInvalid": "Ungültige Pakete verwerfen",
+      "dropInvalidHint": "Verwirft Pakete aus dem Tunnel, die zu keiner gültigen Verbindung gehören.",
+      "mssClamp": "TCP-MSS anpassen",
+      "mssClampHint": "Passt TCP-Segmente an die MTU des Tunnels an, damit große Übertragungen nicht hängen.",
+      "synFloodProtection": "Schutz vor SYN-Flut",
+      "synFloodProtectionHint": "Begrenzt neue TCP-Verbindungen aus dem Tunnel auf 25 pro Sekunde und Quelle.",
+      "pingLimit": "Ping-Begrenzung",
+      "pingLimitHint": "Begrenzt Pings aus dem Tunnel auf 5 pro Sekunde."
+    }
   },
   "system": {
     "versionTitle": "Version",
@@ -291,13 +407,17 @@
       "tun-device": "TUN-Gerät",
       "iptables": "iptables",
       "ip": "ip-Werkzeug",
-      "net-admin": "NET_ADMIN-Berechtigung"
+      "net-admin": "NET_ADMIN-Berechtigung",
+      "ip-forward": "IP-Weiterleitung",
+      "lan-subnets": "LAN-Subnetze"
     },
     "hint": {
       "tun-device": "Reichen Sie das TUN-Gerät in den Container durch (devices: /dev/net/tun).",
       "iptables": "Installieren Sie iptables im Image und stellen Sie sicher, dass der Host-Kernel die iptables-Filtertabelle bereitstellt.",
       "ip": "Installieren Sie iproute2 im Image.",
-      "net-admin": "Geben Sie dem Container die Berechtigung NET_ADMIN (cap_add: NET_ADMIN)."
+      "net-admin": "Geben Sie dem Container die Berechtigung NET_ADMIN (cap_add: NET_ADMIN).",
+      "ip-forward": "Schalten Sie die IPv4-Weiterleitung auf dem Host ein (sysctl net.ipv4.ip_forward=1, dauerhaft in /etc/sysctl.conf); auf Docker-Hosts ist sie meist schon an. Ohne sie leiten Regeln an andere Geräte und ausgehende Regeln nichts weiter.",
+      "lan-subnets": "Starten Sie den Container mit network_mode: host auf einem Host, der eine IPv4-Adresse an seiner LAN-Schnittstelle hat."
     }
   },
   "remoteAccess": {

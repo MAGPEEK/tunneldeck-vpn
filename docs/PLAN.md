@@ -72,7 +72,7 @@ SPEC §16.1, §16.3: `domain.FirewallRule` with validation; store schema v1 → 
 
 `GET/PUT /api/firewall`, 410 on `/api/host-access`, validation errors per rule field, rollback on apply failure, connection manager re-applies routing rules on every connect.
 
-## [ ] 18. Firewall UI — medium — after: 17
+## [x] 18. Firewall UI — medium — after: 17
 
 SPEC §16.4: Firewall page with inbound/outbound tabs, reordering, "This device" picker, gateway hints, "IPsec device" template; i18n de/en; tests. Orchestrator reviews the page visually.
 

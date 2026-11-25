@@ -28,7 +28,7 @@ func Describe() vpn.FormSchema {
 			// three is required on its own, Validate checks the pair.
 			field(KeyClientCert, vpn.FieldTextarea, visibleFor(certificateModes), placeholder(pemPlaceholder)),
 			field(SecretClientKey, vpn.FieldSecret, multiline, visibleFor(certificateModes)),
-			field(SecretPKCS12, vpn.FieldSecret, multiline, visibleFor(certificateModes)),
+			field(SecretPKCS12, vpn.FieldSecret, multiline, base64Encoded, visibleFor(certificateModes)),
 			field(SecretKeyPassphrase, vpn.FieldSecret, visibleFor(certificateModes)),
 		),
 		section("encryption",
@@ -56,6 +56,9 @@ type fieldOption func(*vpn.Field)
 
 func required(f *vpn.Field)  { f.Required = true }
 func multiline(f *vpn.Field) { f.Multiline = true }
+
+// base64Encoded marks a secret that holds a binary file as base64.
+func base64Encoded(f *vpn.Field) { f.Encoding = vpn.EncodingBase64 }
 
 func placeholder(text string) fieldOption {
 	return func(f *vpn.Field) { f.Placeholder = text }

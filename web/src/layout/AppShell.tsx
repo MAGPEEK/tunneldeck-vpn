@@ -1,4 +1,4 @@
-import { LayoutDashboard, List, LockOpen, LogOut, Settings, ShieldCheck } from 'lucide-react';
+import { BrickWall, LayoutDashboard, List, LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 import { Button } from '../components/Button';
@@ -10,7 +10,7 @@ import styles from './AppShell.module.css';
 const NAV_ITEMS = [
   { to: '/', label: 'nav.dashboard', Icon: LayoutDashboard },
   { to: '/profiles', label: 'nav.profiles', Icon: List },
-  { to: '/host-access', label: 'nav.hostAccess', Icon: LockOpen },
+  { to: '/firewall', label: 'nav.firewall', Icon: BrickWall },
   { to: '/system', label: 'nav.system', Icon: Settings },
 ] as const;
 

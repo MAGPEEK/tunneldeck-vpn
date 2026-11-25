@@ -6,7 +6,7 @@ import { AuthLayout } from '../layout/AuthLayout';
 import styles from '../layout/AuthLayout.module.css';
 import { LiveEvents } from '../live/LiveEvents';
 import { DashboardPage } from '../pages/dashboard/DashboardPage';
-import { HostAccessPage } from '../pages/host-access/HostAccessPage';
+import { FirewallPage } from '../pages/firewall/FirewallPage';
 import { LoginPage } from '../pages/login/LoginPage';
 import { ProfileFormPage } from '../pages/profiles/form/ProfileFormPage';
 import { ProfilesPage } from '../pages/profiles/ProfilesPage';
@@ -23,7 +23,8 @@ function AppRoutes() {
           <Route path="profiles" element={<ProfilesPage />} />
           <Route path="profiles/new" element={<ProfileFormPage />} />
           <Route path="profiles/:id" element={<ProfileFormPage />} />
-          <Route path="host-access" element={<HostAccessPage />} />
+          <Route path="firewall" element={<FirewallPage />} />
+          <Route path="host-access" element={<Navigate to="/firewall" replace />} />
           <Route path="system" element={<SystemPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

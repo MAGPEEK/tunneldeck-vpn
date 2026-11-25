@@ -163,18 +163,18 @@ Tone: calm, technical, uncluttered. Sentence case, no exclamation marks, verbs o
 
 **Tokens** (CSS custom properties in `web/src/styles/tokens.css`): neutral gray scale for surfaces/text, one accent (blue) for links, focus and primary action, semantic green/amber/red for connection state only. Radius 8 px (controls) / 12 px (cards). Spacing scale 4/8/12/16/24/32. Font: system UI stack; monospace for IPs and log. Two weights (400/500). One primary button per view.
 
-**Layout:** fixed left sidebar (240 px; collapses to a top bar below 800 px) with product name, nav — Dashboard, Profiles, Host access, System — and at the bottom language, theme and sign-out. Content column max 960 px.
+**Layout:** fixed left sidebar (240 px; collapses to a top bar below 800 px) with product name, nav — Dashboard, Profiles, Firewall, System — and at the bottom language, theme and sign-out. Content column max 960 px.
 
 **Dashboard**
 - Connection card: state pill (gray disconnected, amber connecting/reconnecting, green connected, red error), profile name, protocol badge, remote host:port, VPN IP, connected-since duration. Actions: `Connect` (primary when disconnected) / `Disconnect` + `Reconnect`. A profile select sits next to `Connect` when more than one profile exists. Error state shows the last error line and `Try again`.
 - Metric row: received, sent (totals), download rate, upload rate.
-- Host protection card: "NAS shielded from tunnel", count of open ports, link to Host access.
+- Host protection card: "NAS shielded from tunnel", count of open ports, link to Firewall (§16.4).
 - Live log card: monospace, auto-scroll with pause-on-scroll, level filter, text filter, `Copy`.
 - Empty state (no profile): headline "Add your first VPN profile", one line of body, button `Create profile`.
 
 **Profiles:** list rows (name, protocol, remote, active marker) with `Edit`, `Duplicate`, `Delete`. `New profile` → choose protocol (only OpenVPN enabled; WireGuard and IPsec shown as "planned", disabled) → form generated from `FormSchema`, sections: Server, Authentication, Encryption, Advanced (extra options as an add/remove list like on the RUT240). `Import .ovpn` fills the form and lists warnings. Secret fields show "Stored" with `Replace`.
 
-**Host access:** explanation line, table of rules (protocol, port, source, enabled) with add/remove, `Save changes`.
+**Firewall:** see §16.4 (replaced the former "Host access" page in 0.2.0).
 
 **System:** version, self-check list with pass/fail and fix hints, listen address.
 

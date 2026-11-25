@@ -102,8 +102,17 @@ function SecretInput({ field, label, value, error, onValue, onKeep }: SecretInpu
     </Button>
   );
   if (field.multiline) {
+    const hint =
+      field.encoding === 'base64' ? (
+        <span className={styles.stored}>
+          <BinaryFileInput label={t('schemaForm.loadFile')} onValue={onValue} />
+          {keep}
+        </span>
+      ) : (
+        keep
+      );
     return (
-      <Field label={label} error={error} hint={keep}>
+      <Field label={label} error={error} hint={hint}>
         {(control) => (
           <textarea
             {...control}
@@ -132,5 +141,33 @@ function SecretInput({ field, label, value, error, onValue, onKeep }: SecretInpu
       placeholder={field.placeholder}
       onChange={(event) => onValue(event.currentTarget.value)}
     />
+  );
+}
+
+/** Standard base64 (RFC 4648 §4) of bytes, encoded in chunks to stay within argument limits. */
+function toBase64(bytes: Uint8Array): string {
+  const chunk = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/** A file picker for fields with encoding `base64`: the chosen file is sent as base64. */
+function BinaryFileInput({ label, onValue }: { label: string; onValue: (value: string) => void }) {
+  return (
+    <label className={styles.fileLabel}>
+      {label}
+      <input
+        type="file"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) {
+            void file.arrayBuffer().then((buffer) => onValue(toBase64(new Uint8Array(buffer))));
+          }
+        }}
+      />
+    </label>
   );
 }

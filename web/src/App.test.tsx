@@ -32,10 +32,16 @@ describe('session routing', () => {
     renderApp({ 'GET /api/session': { body: SIGNED_IN } });
     await screen.findByRole('heading', { level: 1, name: 'Dashboard' });
 
-    fireEvent.click(screen.getByRole('link', { name: 'Host access' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Firewall' }));
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Host access' })).toBeInTheDocument();
-    expect(window.location.pathname).toBe('/host-access');
+    expect(screen.getByRole('heading', { level: 1, name: 'Firewall' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/firewall');
+  });
+
+  it('redirects the old host-access path to the firewall', async () => {
+    renderApp({ 'GET /api/session': { body: SIGNED_IN } }, '/host-access');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Firewall' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/firewall');
   });
 
   it('redirects unknown paths to the dashboard', async () => {

@@ -6,7 +6,7 @@
     "label": "Main navigation",
     "dashboard": "Dashboard",
     "profiles": "Profiles",
-    "hostAccess": "Host access",
+    "firewall": "Firewall",
     "system": "System"
   },
   "pages": {
@@ -16,8 +16,8 @@
     "profiles": {
       "title": "Profiles"
     },
-    "hostAccess": {
-      "title": "Host access"
+    "firewall": {
+      "title": "Firewall"
     },
     "system": {
       "title": "System"
@@ -123,11 +123,13 @@
   },
   "hostProtection": {
     "title": "NAS shielded from tunnel",
-    "noPorts": "No ports open",
-    "openPorts_one": "{{count}} port open: {{list}}",
-    "openPorts_other": "{{count}} ports open: {{list}}",
-    "remoteAccess": "Web UI reachable over HTTPS on port {{port}}",
-    "manage": "Manage host access"
+    "inboundRules_one": "{{count}} inbound rule",
+    "inboundRules_other": "{{count}} inbound rules",
+    "outboundRules_one": "{{count}} outbound rule",
+    "outboundRules_other": "{{count}} outbound rules",
+    "ipForwardOff": "IP forwarding is off on the host: port forwards and outbound rules do not work.",
+    "manage": "Manage firewall",
+    "remoteAccess": "Web UI reachable over HTTPS on port {{port}}"
   },
   "log": {
     "title": "Log",
@@ -222,7 +224,8 @@
     "replace": "Replace",
     "remove": "Remove",
     "undo": "Undo",
-    "keepStored": "Keep stored value"
+    "keepStored": "Keep stored value",
+    "loadFile": "Load from a file"
   },
   "importWarnings": {
     "group": {
@@ -257,26 +260,139 @@
       "compression_receive_only": "compression is accepted from the server but not used for sending.",
       "compression_kept": "compression stays on because the server requires it.",
       "ns_cert_type_mapped": "was replaced by the server certificate check.",
-      "server_cert_usage_added": "The server certificate check was switched on."
+      "server_cert_usage_added": "The server certificate check was switched on.",
+      "static_key_unsupported": "uses static-key mode, which is insecure and deprecated; use certificates or username and password instead."
     }
   },
-  "hostAccess": {
-    "explanation": "Everything arriving from the tunnel is blocked except the ports you open here.",
-    "protocol": "Protocol",
-    "port": "Port",
-    "source": "Source (optional)",
-    "enabled": "Enabled",
-    "comment": "Comment",
-    "actions": "Actions",
-    "cellLabel": "{{name}}, rule {{number}}",
-    "removeRule": "Remove rule {{number}}",
-    "addRule": "Add rule",
+  "firewall": {
+    "explanation": "Everything is blocked unless a rule allows it.",
     "save": "Save changes",
-    "saved": "Rules saved and applied.",
+    "discard": "Discard",
+    "saved": "Firewall saved.",
     "invalid": "Some rules need attention.",
-    "empty": "No ports open",
-    "firewallFailedTitle": "The firewall rules could not be applied",
-    "firewallFailed": "The previous rules stay in place. Check the self-check on the System page, then try again."
+    "failedTitle": "The firewall could not be applied",
+    "failed": "The previous configuration is back in place.",
+    "context": {
+      "thisDevice": "This device: {{address}}",
+      "lan": "LAN: {{subnets}}",
+      "ipForward": "IP forwarding: {{state}}",
+      "on": "on",
+      "off": "off",
+      "notDetected": "not detected",
+      "ipForwardOff": "Port forwards to other devices and outbound rules need IP forwarding on the host.",
+      "docsLink": "How to turn it on",
+      "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.md#ip-forwarding"
+    },
+    "tabs": {
+      "label": "Rule direction",
+      "inbound": "Inbound from VPN",
+      "outbound": "Outbound to VPN"
+    },
+    "outboundHint": "Devices must send this traffic to this host: set it as their gateway or add a route in your router.",
+    "column": {
+      "order": "Order",
+      "enabled": "Enabled",
+      "name": "Name",
+      "action": "Action",
+      "protocol": "Protocol",
+      "route": "Source → Destination",
+      "keepSource": "Keep source",
+      "actions": "Actions"
+    },
+    "action": {
+      "accept": "Allow",
+      "drop": "Drop",
+      "reject": "Reject"
+    },
+    "protocol": {
+      "tcp": "TCP",
+      "udp": "UDP",
+      "tcp+udp": "TCP+UDP",
+      "icmp": "ICMP",
+      "esp": "ESP",
+      "gre": "GRE",
+      "any": "Any"
+    },
+    "any": "any",
+    "thisDevice": "This device",
+    "publicPort": "(public {{port}})",
+    "keepSourceOn": "Source address kept",
+    "unsaved": "Not saved",
+    "needsAttention": "Needs attention",
+    "unnamed": "Unnamed rule",
+    "copyName": "{{name}} (copy)",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "enabledNamed": "Enabled: {{name}}",
+    "edit": "Edit",
+    "editNamed": "Edit {{name}}",
+    "duplicate": "Duplicate",
+    "duplicateNamed": "Duplicate {{name}}",
+    "delete": "Delete",
+    "deleteNamed": "Delete {{name}}",
+    "confirmLabel": "Confirm deletion",
+    "confirmDelete": "Delete the rule \"{{name}}\"?",
+    "confirmDeleteButton": "Delete rule",
+    "cancel": "Cancel",
+    "addRule": "Add rule",
+    "emptyInbound": "No inbound rules: nothing from the VPN gets in.",
+    "emptyOutbound": "No outbound rules: no LAN device sends traffic through the VPN.",
+    "editor": {
+      "title": "Edit rule",
+      "name": "Name",
+      "action": "Action",
+      "actionForwardHint": "Forwards to other devices always allow.",
+      "protocol": "Protocol",
+      "icmpType": "ICMP type (optional)",
+      "icmpTypeHint": "For example echo-request. Leave empty for every type.",
+      "source": "Source (optional)",
+      "sourcePlaceholder": "Any",
+      "sourceOutbound": "Source (LAN device or subnet)",
+      "sourceOutboundPlaceholder": "192.168.2.20 or 192.168.2.0/24",
+      "sourcePort": "Source port (optional)",
+      "destination": "Destination",
+      "thisDevice": "This device ({{address}})",
+      "address": "Address",
+      "destinationAddress": "Destination address",
+      "lanHint": "Must be inside the LAN: {{subnets}}",
+      "destinationOutbound": "Destination (address or network behind the VPN)",
+      "destinationOutboundPlaceholder": "10.0.0.0/8 or 0.0.0.0/0",
+      "destinationPort": "Destination port",
+      "portPlaceholder": "443 or 8000-8010",
+      "publicPort": "Public port",
+      "publicPortHint": "The port on the VPN address. Empty means the destination port.",
+      "publicPortHostHint": "Rules to this device use the destination port.",
+      "keepSource": "Keep source address",
+      "keepSourceHint": "The device must route replies through this host.",
+      "comment": "Comment (optional)",
+      "done": "Done",
+      "portFormat": "Enter a port or a range such as 8000-8010."
+    },
+    "ipsec": {
+      "open": "Add IPsec device",
+      "title": "IPsec device",
+      "intro": "Forwards IKE (UDP 500 and 4500) and ESP to a LAN device, keeps the peer addresses and routes the device’s IPsec traffic through the VPN.",
+      "name": "Name",
+      "namePlaceholder": "LANCOM",
+      "device": "Device address",
+      "devicePlaceholder": "192.168.2.2",
+      "peers": "Peer addresses (optional)",
+      "submit": "Add rules",
+      "cancel": "Cancel",
+      "added_one": "{{count}} rule added. Save changes to apply it.",
+      "added_other": "{{count}} rules added. Save changes to apply them."
+    },
+    "protection": {
+      "title": "Protection",
+      "dropInvalid": "Drop invalid packets",
+      "dropInvalidHint": "Discards packets from the tunnel that belong to no valid connection.",
+      "mssClamp": "Clamp TCP MSS",
+      "mssClampHint": "Fits TCP segments to the tunnel’s MTU so large transfers do not stall.",
+      "synFloodProtection": "SYN flood protection",
+      "synFloodProtectionHint": "Limits new TCP connections from the tunnel to 25 per second per source.",
+      "pingLimit": "Ping limit",
+      "pingLimitHint": "Limits pings from the tunnel to 5 per second."
+    }
   },
   "system": {
     "versionTitle": "Version",
@@ -291,13 +407,17 @@
       "tun-device": "TUN device",
       "iptables": "iptables",
       "ip": "ip tool",
-      "net-admin": "NET_ADMIN capability"
+      "net-admin": "NET_ADMIN capability",
+      "ip-forward": "IP forwarding",
+      "lan-subnets": "LAN subnets"
     },
     "hint": {
       "tun-device": "Pass the TUN device into the container (devices: /dev/net/tun).",
       "iptables": "Install iptables in the image and make sure the host kernel provides the iptables filter table.",
       "ip": "Install iproute2 in the image.",
-      "net-admin": "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN)."
+      "net-admin": "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN).",
+      "ip-forward": "Enable IPv4 forwarding on the host (sysctl net.ipv4.ip_forward=1, persisted in /etc/sysctl.conf); Docker hosts normally have it on. Without it, rules to other devices and outbound rules forward nothing.",
+      "lan-subnets": "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface."
     }
   },
   "remoteAccess": {

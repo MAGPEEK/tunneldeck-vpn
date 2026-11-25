@@ -9,7 +9,7 @@ import { Page } from '../../layout/Page';
 import {
   useConnection,
   useConnectionControl,
-  useHostAccess,
+  useFirewall,
   useLogs,
   useProfiles,
   useRemoteAccess,
@@ -45,7 +45,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const profiles = useProfiles();
   const connection = useConnection();
-  const hostAccess = useHostAccess();
+  const firewall = useFirewall();
   const remoteAccess = useRemoteAccess();
   const logs = useLogs();
   const { control, pending, failed, reset } = useControls();
@@ -98,7 +98,7 @@ export function DashboardPage() {
             <MetricRow status={connection.data} />
           </>
         )}
-        <HostProtectionCard rules={hostAccess.data} remoteAccess={remoteAccess.data} />
+        <HostProtectionCard firewall={firewall.data} remoteAccess={remoteAccess.data} />
         <LogCard lines={logs.data} />
       </div>
     </Page>
