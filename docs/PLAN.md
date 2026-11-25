@@ -61,3 +61,21 @@ Finalise Dockerfile (pin the `openvpn` package to `~2.7`, non-root not possible 
 ## [x] 12. End-to-end test — careful — after: 11
 
 `test/e2e/`: compose file with a throwaway OpenVPN server (user/pass + cert variants, one `cipher none` variant) and TunnelDeck; script that drives the API: setup, create profile, connect, assert state/VPN IP/bytes, assert main routing table unchanged, assert host port closed then open after adding a rule, restart container and assert auto-reconnect. Document how to run it; run it if Docker is available. The stack runs on a generic Linux Docker host (not Synology-specific) and must pass with both the `iptables-nft` and `iptables-legacy` backends. Also write `docs/linux.md` + `docs/linux.de.md` (generic Linux host guide: `/dev/net/tun`, interplay with ufw/firewalld/Docker's own chains, reverse proxy for HTTPS, backup, update), linked first from the READMEs.
+
+# Stage 2 — Firewall (0.2.0), after the 0.1.0 field test
+
+## [ ] 16. Firewall model, migration and netguard — careful — after: 0.1.0 field test
+
+SPEC §16.1, §16.3: `domain.FirewallRule` with validation; store schema v1 → v2 migration (host-access rules → inbound rules to "This device"); netguard: inbound accept for the host, DNAT + forward + optional masquerade for other LAN targets, ESP/GRE forwarding, outbound policy routing with LAN exclusion, masquerade on `tdvpn0`, kill switch; `ip_forward` and LAN-subnet detection in the self-check. Unit tests with the fake runner for every rule shape; integration test.
+
+## [ ] 17. Firewall API — medium — after: 16
+
+`GET/PUT /api/firewall`, 410 on `/api/host-access`, validation errors per rule field, rollback on apply failure, connection manager re-applies routing rules on every connect.
+
+## [ ] 18. Firewall UI — medium — after: 17
+
+SPEC §16.4: Firewall page with inbound/outbound tabs, reordering, "This device" picker, gateway hints, "IPsec device" template; i18n de/en; tests. Orchestrator reviews the page visually.
+
+## [ ] 19. Firewall end-to-end — careful — after: 18
+
+Extend `test/e2e`: inbound port forward to a LAN container (with and without keepSourceAddress), ESP + UDP 500/4500 forwarding to a strongSwan "LANCOM stand-in" that establishes IPsec with a peer on the VPN side, outbound policy routing from one LAN container, kill switch when the tunnel drops, migration from a v1 settings file. Docs: firewall section in `docs/linux*.md`, `docs/synology*.md`, LANCOM IPsec example.

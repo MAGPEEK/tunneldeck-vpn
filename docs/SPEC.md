@@ -231,6 +231,40 @@ Where an RFC covers something, follow it instead of inventing a format:
 
 Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning, Conventional Commits. OpenVPN and WireGuard have no RFC; their official documentation is the reference.
 
+## 16. Firewall (0.2.0, replaces "Host access")
+
+Planned after the 0.1.0 field test. Owner's decisions of 2026-11-25. The single "Host access" list becomes a two-direction firewall that can target the host or any LAN device.
+
+### 16.1 Rule model
+
+`FirewallRule { id, direction: inbound | outbound, protocol: tcp | udp | esp | gre | any, source: CIDR (optional = any), destination: IPv4 address or CIDR, destinationPort: port or range (tcp/udp only), publicPort: port or range (inbound tcp/udp only, default = destinationPort), keepSourceAddress: bool (inbound to other devices, default false), enabled, comment }`. Default policy: everything not allowed by a rule is dropped in both directions. Rules are evaluated in list order; the UI allows reordering.
+
+- **Inbound** (VPN side → LAN): `source` = allowed remote addresses (default any).
+  - Destination = the host's own LAN address (shown as "This device") → accept in `TUNNELDECK-INPUT`; `publicPort` must equal `destinationPort`. This is today's host-access rule.
+  - Destination = another LAN address → DNAT `tdvpn0:publicPort → destination:destinationPort` in a `TUNNELDECK-PREROUTING` nat chain, accept in `TUNNELDECK-FORWARD`, and unless `keepSourceAddress` is set, MASQUERADE on the LAN interface so the target answers the host without route changes. With `keepSourceAddress` the target needs a route back via the host (typically an outbound rule for the same device, see below); the UI says so.
+  - `esp`/`gre` have no ports: they forward the whole protocol to one destination (only one such rule per protocol, since the public address is shared).
+- **Outbound** (LAN → VPN side): `source` = LAN device or subnet (required), `destination` = remote address or network behind the VPN (CIDR, `0.0.0.0/0` = everything). Matching traffic is policy-routed into table 7194 (`ip rule from <source> to <destination> lookup 7194`, with a higher-priority rule that keeps LAN-to-LAN traffic in the main table), accepted in `TUNNELDECK-FORWARD`, and MASQUERADEd on `tdvpn0`. LAN devices must send this traffic to the host (host as gateway, or a static route in the LAN router for the destination network); the UI shows that hint. When the tunnel is down, matching traffic is dropped, never sent out via the normal internet connection (kill switch).
+- Replies to established connections are always allowed in both directions (conntrack).
+- Validation: one inbound rule per (protocol, publicPort) on the shared public address; the HTTP UI port can never be a public port; the remote-access HTTPS port is reserved; `destination` of inbound rules must be inside a LAN subnet of the host; ranges ≤ 1000 ports.
+- Requires `net.ipv4.ip_forward=1` on the host; the self-check reports it (Docker hosts normally have it on) and the docs explain how to enable it. Coexists with Docker's own `FORWARD`/`DOCKER-USER` chains by inserting the jump at position 1.
+
+### 16.2 Reference use case: IPsec from a LANCOM router via the mdex public address
+
+A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels using the mdex public address:
+- Inbound: UDP 500 → `192.168.2.2:500`, UDP 4500 → `192.168.2.2:4500`, ESP → `192.168.2.2`, each with `keepSourceAddress` on (IKE identifies peers by address).
+- Outbound: source `192.168.2.2/32` → destination `0.0.0.0/0` (or the peers' addresses), so the LANCOM's own IKE/ESP traffic and its replies leave through the tunnel with the public address. The LANCOM's default gateway (or a route for the peers) points to the host.
+- The UI offers this as a template ("IPsec device") that creates the five rules.
+
+### 16.3 Migration and API
+
+- `settings.json` schemaVersion 1 → 2: every host-access rule becomes an inbound rule with destination "This device". 
+- `GET/PUT /api/firewall` replaces `/api/host-access` (the old endpoint answers 410 Gone with a pointer).
+- Breaking change → release 0.2.0.
+
+### 16.4 UI
+
+Page "Firewall" replaces "Host access": two tabs "Inbound from VPN" and "Outbound to VPN"; table columns Source → Destination, Protocol, Public port (inbound), Destination port, Keep source address (inbound), Enabled, Comment; drag handle for order; destination picker with "This device" plus free IPv4; template button "IPsec device"; live hit counters per rule (from `iptables -L -v`) as a later addition.
+
 ## 15. Roadmap and release
 
 1. Stage 1 (this spec). Public from the start (owner's decision, 2026-11-25): code at `github.com/MAGPEEK/tunneldeck-vpn`, image at `magpeek/tunneldeck-vpn` on Docker Hub. Development builds are tagged `0.1.0-dev`; `latest` and plain version tags only for releases. Field test on the DS723+ pulls the image from Docker Hub (or imports a `docker save` export).
