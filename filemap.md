@@ -14,9 +14,11 @@
 - `scripts/build-image.sh` — builds `magpeek/tunneldeck:<tag>` with version build args; no push
 - `scripts/export-image.sh` — `docker save` to `tunneldeck-<tag>.tar` for Synology import
 - `docs/synology.md`, `docs/synology.de.md` — DS723+ / DSM 7.2 guide: TUN module, project, first sign-in, firewall, reverse proxy, remote access, backup, update, reset-admin
+- `docs/linux.md`, `docs/linux.de.md` — generic Linux Docker host guide: requirements, compose, first sign-in, iptables backends next to Docker/ufw/firewalld, reverse proxy, remote access, backup, update, reset-admin
+- `test/e2e/` — end-to-end test (build tag `e2e`, `go test -tags e2e ./test/e2e/`): `compose.yml` (three OpenVPN servers, TunnelDeck on iptables-legacy and iptables-nft), Go driver (`e2e_test.go` scenario, `matrix_test.go` variants and backends, `tunneldeck_test.go` API steps, `client_test.go` HTTP client, `stack_test.go` docker compose), `server/` test-server image (configs per variant, throwaway PKI, verify script); topology in `README.md`
 - `docs/migrate-from-rut240.md`, `docs/migrate-from-rut240.de.md` — RUT240 field and extra-option mapping, mdex example, level 30 recommendation
 - `docs/RELEASING.md` — release steps: changelog, tag, build, smoke test, image tags
-- `.github/workflows/ci.yml` — CI: frontend lint/test/build, Go build/test/lint, Docker build (no push)
+- `.github/workflows/ci.yml` — CI: frontend lint/test/build, Go build/test/lint, e2e matrix, Docker build (no push)
 - `docs/SPEC.md` — specification; change only with the orchestrator
 - `docs/PLAN.md` — task list and status
 - `docs/openvpn-notes.md` — lab-verified OpenVPN 2.7 facts: directives, management dialogue, reference config; binding for the driver

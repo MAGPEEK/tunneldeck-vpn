@@ -1,0 +1,58 @@
+# End-to-end test stack, driven by e2e_test.go:
+#
+#   go test -tags e2e -v -timeout 30m ./test/e2e/
+#
+# Topology and assertions: README.md. Nothing here is published or reaches
+# the internet apart from the image builds.
+name: tunneldeck-e2e
+
+x-server: &server
+  image: tunneldeck-e2e-server:local
+  cap_add: [NET_ADMIN]
+  devices: ["/dev/net/tun:/dev/net/tun"]
+  networks: [e2e]
+
+# TunnelDeck runs in its own network namespace on the test network. That
+# namespace plays the "host": SPEC §6 network_mode: host means exactly this
+# namespace, so the routing and firewall assertions run inside it.
+x-tunneldeck: &tunneldeck
+  image: tunneldeck-e2e:local
+  cap_add: [NET_ADMIN]
+  devices: ["/dev/net/tun:/dev/net/tun"]
+  networks: [e2e]
+  # The API is published on a random loopback port for the test driver.
+  ports: ["127.0.0.1::8194"]
+  environment:
+    TUNNELDECK_LOG_LEVEL: debug
+
+services:
+  server-a:
+    <<: *server
+    build: server
+    command: [a-userpass]
+
+  server-b:
+    <<: *server
+    command: [b-cipher-none]
+
+  server-c:
+    <<: *server
+    command: [c-certificate]
+
+  # Each TunnelDeck sees only one working iptables backend, emulating the
+  # two kinds of hosts: the binaries of the other backend are removed
+  # before the server starts (README.md, "iptables backends").
+  tunneldeck-legacy:
+    <<: *tunneldeck
+    build:
+      context: ../..
+      args:
+        VERSION: 0.1.0-e2e
+    entrypoint: ["/bin/sh", "-c", "rm -f /usr/sbin/xtables-nft-multi && exec /usr/local/bin/tunneldeck"]
+
+  tunneldeck-nft:
+    <<: *tunneldeck
+    entrypoint: ["/bin/sh", "-c", "rm -f /usr/sbin/xtables-legacy-multi && exec /usr/local/bin/tunneldeck"]
+
+networks:
+  e2e: {}
