@@ -14,7 +14,7 @@ Research only, output `docs/openvpn-notes.md`. Determine for the OpenVPN version
 
 Implement `internal/domain` (types and errors from SPEC §4, §5 fields, §6 `HostAccessRule`, validation helpers), `internal/secret` (AES-256-GCM, `enc:v1:` format, key file creation 0600, env override) and `internal/store` (SPEC §7: `settings.json`, `profiles.json`, atomic write, mutex, secrets encrypted at rest, `schemaVersion` with a migration hook (SPEC §13), never-return-secret read model with `hasValue`, empty-secret-keeps-value update rule). Table-driven tests incl. corrupted files, wrong key, concurrent writes.
 
-## [ ] 4. Auth and sessions — careful — after: 3
+## [x] 4. Auth and sessions — careful — after: 3
 
 Implement `internal/auth` per SPEC §8: setup-once admin creation, argon2id hashing with stored parameters, in-memory sessions (hashed tokens, idle timeout, logout), login rate limiter with injected clock, admin reset (function used by the `reset-admin` subcommand and `TUNNELDECK_RESET_ADMIN`; the CLI/env wiring itself lands in task 8). No HTTP here except small helpers for cookie read/write. Tests for every rule in §8.
 
@@ -32,7 +32,7 @@ Implement `internal/netguard` per SPEC §6: backend detection, idempotent chain 
 
 ## [ ] 8. HTTP API and SSE — medium — after: 4, 6, 7
 
-Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. Handler tests with `httptest` and fakes for every endpoint and auth rule.
+Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. `tunneldeck reset-admin` runs in a second process (`docker exec`), so it must ask the running server to call `auth.Service.ResetAdmin` over a root-only unix control socket (`/run/tunneldeck/control.sock`); if no server is running it edits the store directly. `TUNNELDECK_RESET_ADMIN=1` resets at start. The API also enforces that a host-access rule never opens the UI port. Handler tests with `httptest` and fakes for every endpoint and auth rule.
 
 ## [x] 9. Frontend shell and login — medium — after: 1
 

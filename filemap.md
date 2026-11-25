@@ -20,7 +20,7 @@
 - `internal/netguard/` — iptables chains and policy routing via `CommandRunner` (doc only)
 - `internal/store/` — settings.json and profiles.json with atomic writes, a mutex, schemaVersion migrations (`document.go`) and a file-system seam (`atomic.go`)
 - `internal/secret/` — AES-256-GCM `enc:v1:` Cipher; `secret.key` load/create and `TUNNELDECK_SECRET_KEY` override
-- `internal/auth/` — admin account, sessions, login rate limit (doc only)
+- `internal/auth/` — admin setup/reset, argon2id hashing (`password.go`), in-memory sessions (`session.go`), login rate limit (`ratelimit.go`), session cookie helpers (`cookie.go`); `service.go` is the entry point
 - `internal/api/` — REST handlers, SSE, middleware (doc only)
 - `internal/web/` — `go:embed all:dist` of the SPA with fallback to `index.html`
 - `internal/web/dist/` — Vite build output (git-ignored); only the committed `.gitkeep` is tracked, so `go build` works without a frontend build, and a Vite plugin re-creates it after each build

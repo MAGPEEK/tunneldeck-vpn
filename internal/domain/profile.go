@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -98,14 +99,23 @@ func (p Profile) Validate() error {
 	return v.OrNil()
 }
 
-// ValidateProfileName checks the length of a profile name after trimming.
-// It reports the field "name".
+// ValidateProfileName checks the length of a profile name after trimming and
+// rejects control and format characters (Unicode Cc and Cf). It reports the
+// field "name".
 func ValidateProfileName(name string) error {
-	length := utf8.RuneCountInString(strings.TrimSpace(name))
+	trimmed := strings.TrimSpace(name)
+	length := utf8.RuneCountInString(trimmed)
 	if length < ProfileNameMinLength || length > ProfileNameMaxLength {
 		return NewValidationError("name", "must be between 1 and 64 characters")
 	}
+	if strings.ContainsFunc(trimmed, isControlOrFormat) {
+		return NewValidationError("name", "must not contain control characters")
+	}
 	return nil
+}
+
+func isControlOrFormat(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf)
 }
 
 // DailyReconnect schedules one reconnect per day at Time ("HH:MM", local

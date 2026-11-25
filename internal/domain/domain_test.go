@@ -101,6 +101,10 @@ func TestValidateProfileName(t *testing.T) {
 		{"empty", "", true},
 		{"only spaces", "   ", true},
 		{"65 chars", strings.Repeat("a", 65), true},
+		{"newline inside", "office\nvpn", true},
+		{"escape character", "office\x1b[31m", true},
+		{"zero width space (Cf)", "office" + string(rune(0x200b)) + "vpn", true},
+		{"right-to-left override (Cf)", "office" + string(rune(0x202e)) + "vpn", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
