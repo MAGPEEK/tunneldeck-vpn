@@ -10,22 +10,17 @@
     "system": "System"
   },
   "pages": {
-    "placeholderTitle": "Not available yet",
     "dashboard": {
-      "title": "Dashboard",
-      "body": "Connection status, traffic and the live log will appear here."
+      "title": "Dashboard"
     },
     "profiles": {
-      "title": "Profiles",
-      "body": "Your VPN profiles will be listed here."
+      "title": "Profiles"
     },
     "hostAccess": {
-      "title": "Host access",
-      "body": "Rules for reaching this host will be managed here."
+      "title": "Host access"
     },
     "system": {
-      "title": "System",
-      "body": "Version and self-check results will appear here."
+      "title": "System"
     }
   },
   "language": {
@@ -71,5 +66,267 @@
   "errors": {
     "network": "Can't reach the server. Check your connection and try again.",
     "unexpected": "Something went wrong. Try again."
+  },
+  "protocols": {
+    "openvpn": "OpenVPN",
+    "wireguard": "WireGuard",
+    "ipsec": "IPsec/IKEv2"
+  },
+  "duration": {
+    "daysHours": "{{d}} d {{h}} h",
+    "hoursMinutes": "{{h}} h {{m}} min",
+    "minutesSeconds": "{{m}} min {{s}} s",
+    "seconds": "{{s}} s"
+  },
+  "dashboard": {
+    "emptyTitle": "Add your first VPN profile",
+    "emptyBody": "A profile holds the server address, sign-in details and encryption settings of one VPN connection.",
+    "createProfile": "Create profile"
+  },
+  "connection": {
+    "label": "Connection",
+    "state": {
+      "disconnected": "Disconnected",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "reconnecting": "Reconnecting",
+      "disconnecting": "Disconnecting",
+      "error": "Error"
+    },
+    "server": "Server",
+    "vpnAddress": "VPN address",
+    "since": "Connected since",
+    "profile": "Profile",
+    "connect": "Connect",
+    "tryAgain": "Try again",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
+    "errorUnknown": "The connection failed.",
+    "errorCode": {
+      "auth_failed": "The server rejected the credentials",
+      "server_rejected": "The server refused the connection",
+      "process_failed": "The VPN process stopped",
+      "firewall_failed": "The firewall rules could not be applied",
+      "routing_failed": "Routing through the tunnel failed",
+      "profile_invalid": "The profile is incomplete or invalid",
+      "start_failed": "The VPN process could not be started"
+    },
+    "conflict": "The connection cannot do that right now. Wait a moment and try again.",
+    "profileMissing": "This profile no longer exists."
+  },
+  "metrics": {
+    "label": "Traffic",
+    "received": "Received",
+    "sent": "Sent",
+    "download": "Download",
+    "upload": "Upload"
+  },
+  "hostProtection": {
+    "title": "NAS shielded from tunnel",
+    "noPorts": "No ports open",
+    "openPorts_one": "{{count}} port open: {{list}}",
+    "openPorts_other": "{{count}} ports open: {{list}}",
+    "remoteAccess": "Web UI reachable over HTTPS on port {{port}}",
+    "manage": "Manage host access"
+  },
+  "log": {
+    "title": "Log",
+    "level": "Level",
+    "filter": {
+      "all": "All",
+      "warnings": "Warnings and errors",
+      "errors": "Errors"
+    },
+    "textFilter": "Filter log text",
+    "textFilterPlaceholder": "Filter",
+    "copy": "Copy",
+    "copied": "Copied",
+    "loading": "Loading the log",
+    "empty": "No log lines",
+    "jumpToLatest": "Jump to latest"
+  },
+  "advisory": {
+    "listLabel": "Advisories",
+    "unknown": "Advisory {{code}}",
+    "dangerTitle": "Security risk",
+    "noticeTitle": "Recommendations",
+    "title": {
+      "unencrypted_data_channel": "Traffic is not encrypted"
+    },
+    "unencrypted_data_channel": "The data channel uses no cipher: everything sent through the tunnel can be read and changed on the way. Use this only if the provider gives no other option.",
+    "weak_cipher": "The cipher is outdated. Prefer AES-256-GCM or CHACHA20-POLY1305 if the server supports them.",
+    "weak_digest": "The authentication digest is weak. Prefer SHA256 or an AEAD cipher.",
+    "compression_enabled": "Compression is enabled. It is deprecated and can leak data (VORACLE).",
+    "tls_below_1_2": "TLS versions below 1.2 are allowed.",
+    "tls_auth_instead_of_crypt": "tls-auth is used; tls-crypt also hides the handshake.",
+    "server_usage_check_disabled": "The check that the server certificate is issued for a server is off.",
+    "fragment_in_use": "fragment is set: a legacy workaround for MTU problems that slows the tunnel.",
+    "no_dco": "This host's kernel has no data channel offload; expect lower throughput."
+  },
+  "profiles": {
+    "import": "Import .ovpn",
+    "new": "New profile",
+    "deleteFailed": "The profile could not be deleted. Disconnect it first and try again.",
+    "column": {
+      "name": "Name",
+      "protocol": "Protocol",
+      "server": "Server",
+      "dailyReconnect": "Daily reconnect",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "off": "Off",
+    "active": "Active",
+    "deleteWhileConnected": "Disconnect to delete",
+    "edit": "Edit",
+    "editNamed": "Edit {{name}}",
+    "duplicate": "Duplicate",
+    "duplicateNamed": "Duplicate {{name}}",
+    "delete": "Delete",
+    "deleteNamed": "Delete {{name}}",
+    "confirmLabel": "Confirm deletion",
+    "confirmDelete": "Delete the profile \"{{name}}\"? This cannot be undone.",
+    "confirmDeleteButton": "Delete profile",
+    "cancel": "Cancel",
+    "empty": "No profiles yet",
+    "importTitle": "Import an .ovpn file",
+    "importFile": "Configuration file",
+    "importPaste": "Or paste the configuration",
+    "importInvalid": "The configuration cannot be read.",
+    "importSubmit": "Import"
+  },
+  "profileForm": {
+    "newTitle": "New profile",
+    "editTitle": "Edit profile",
+    "name": "Name",
+    "protocol": "Protocol",
+    "planned": "Planned",
+    "schedule": "Schedule",
+    "dailyReconnect": "Reconnect once a day",
+    "dailyReconnectTime": "Time",
+    "timeZoneHint": "Server time zone: {{timeZone}}",
+    "save": "Save",
+    "saved": "Profile saved.",
+    "invalid": "Some fields need attention.",
+    "appliesOnNextConnect": "Changes apply on the next connect.",
+    "reconnectNow": "Reconnect now",
+    "copyName": "{{name}} (copy)",
+    "duplicateNotice": "Secrets such as passwords and keys are not copied. Enter them again."
+  },
+  "schemaForm": {
+    "line": "{{label}}, line {{number}}",
+    "addLine": "Add line",
+    "removeLine": "Remove line {{number}}",
+    "secretStored": "Stored",
+    "secretRemoved": "Will be removed on save",
+    "replace": "Replace",
+    "remove": "Remove",
+    "undo": "Undo",
+    "keepStored": "Keep stored value"
+  },
+  "importWarnings": {
+    "group": {
+      "rejected_one": "{{count}} directive not imported",
+      "rejected_other": "{{count}} directives not imported",
+      "warning_one": "{{count}} directive dropped or changed",
+      "warning_other": "{{count}} directives dropped or changed",
+      "info_one": "{{count}} note",
+      "info_other": "{{count}} notes"
+    },
+    "line": "Line {{line}}:",
+    "notImported": "Not imported",
+    "code": {
+      "runs_code": "runs programs or scripts, which TunnelDeck does not allow.",
+      "escapes_sandbox": "would change files or the process, which TunnelDeck does not allow.",
+      "routing_handled": "is handled by TunnelDeck.",
+      "duplicate_directive": "appears more than once; only one is kept.",
+      "managed_by_field": "is set through a profile field.",
+      "deprecated_ignored": "is deprecated and ignored by OpenVPN.",
+      "ignored_for_tcp": "has no effect over TCP.",
+      "compression_conflict": "conflicts with the compression setting.",
+      "invalid_line": "cannot be read.",
+      "invalid_directive": "is not a valid OpenVPN directive.",
+      "inline_block": "inline blocks are only allowed for keys and certificates.",
+      "line_too_long": "is too long.",
+      "invalid_value": "has a value TunnelDeck cannot use.",
+      "file_reference": "refers to a file; paste its content into the profile instead.",
+      "additional_remote": "is an additional server; only the first one is used.",
+      "unsupported_device": "sets a device type TunnelDeck does not support.",
+      "inline_block_unsupported": "is an inline block TunnelDeck does not support.",
+      "cipher_mapped": "was converted to the current cipher setting.",
+      "compression_receive_only": "compression is accepted from the server but not used for sending.",
+      "compression_kept": "compression stays on because the server requires it.",
+      "ns_cert_type_mapped": "was replaced by the server certificate check.",
+      "server_cert_usage_added": "The server certificate check was switched on."
+    }
+  },
+  "hostAccess": {
+    "explanation": "Everything arriving from the tunnel is blocked except the ports you open here.",
+    "protocol": "Protocol",
+    "port": "Port",
+    "source": "Source (optional)",
+    "enabled": "Enabled",
+    "comment": "Comment",
+    "actions": "Actions",
+    "cellLabel": "{{name}}, rule {{number}}",
+    "removeRule": "Remove rule {{number}}",
+    "addRule": "Add rule",
+    "save": "Save changes",
+    "saved": "Rules saved and applied.",
+    "invalid": "Some rules need attention.",
+    "empty": "No ports open",
+    "firewallFailedTitle": "The firewall rules could not be applied",
+    "firewallFailed": "The previous rules stay in place. Check the self-check on the System page, then try again."
+  },
+  "system": {
+    "versionTitle": "Version",
+    "version": "Version",
+    "listenAddress": "Listen address",
+    "serverTime": "Server time",
+    "selfCheckTitle": "Self-check",
+    "noChecks": "No checks ran.",
+    "checkPassed": "Passed",
+    "checkFailed": "Failed",
+    "check": {
+      "tun-device": "TUN device",
+      "iptables": "iptables",
+      "ip": "ip tool",
+      "net-admin": "NET_ADMIN capability"
+    },
+    "hint": {
+      "tun-device": "Pass the TUN device into the container (devices: /dev/net/tun).",
+      "iptables": "Install iptables in the image and make sure the host kernel provides the iptables filter table.",
+      "ip": "Install iproute2 in the image.",
+      "net-admin": "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN)."
+    }
+  },
+  "remoteAccess": {
+    "title": "Remote access",
+    "unavailable": "Not available in this build.",
+    "warningTitle": "The sign-in page becomes reachable from the internet.",
+    "warning": "When enabled, anyone who can reach the VPN address can open the sign-in page over HTTPS. Use a strong password.",
+    "enable": "Enable remote access over HTTPS",
+    "port": "HTTPS port",
+    "source": "Certificate",
+    "sources": {
+      "selfSigned": "Self-signed",
+      "uploaded": "Uploaded"
+    },
+    "save": "Save changes",
+    "saved": "Remote access settings saved.",
+    "off": "Remote access is off.",
+    "listening": "Listening on port {{port}}.",
+    "notListening": "Not listening yet.",
+    "lastError": "Last error: {{error}}",
+    "certificate": "Certificate",
+    "subject": "Subject",
+    "selfSignedNote": "self-signed",
+    "validUntil": "Valid until",
+    "fingerprint": "SHA-256 fingerprint",
+    "uploadTitle": "Upload a certificate",
+    "certificatePem": "Certificate chain (PEM)",
+    "keyPem": "Private key (PEM)",
+    "upload": "Upload certificate",
+    "uploaded": "Certificate uploaded."
   }
 }

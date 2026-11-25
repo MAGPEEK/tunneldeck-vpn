@@ -46,7 +46,7 @@ export function AppShell() {
           <ul className={styles.navList}>
             {NAV_ITEMS.map(({ to, label, Icon }) => (
               <li key={to}>
-                <NavLink to={to} end className={navLinkClass}>
+                <NavLink to={to} end={to === '/'} className={navLinkClass}>
                   <Icon size={16} aria-hidden="true" />
                   {t(label)}
                 </NavLink>

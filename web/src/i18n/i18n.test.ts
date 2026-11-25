@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import de from './de.json';
 import en from './en.json';
+import driversDe from './drivers.de.json';
+import driversEn from './drivers.en.json';
+import { driverText } from './dynamic';
+import { OPENVPN_SCHEMA } from '../test/fixtures';
 import { LANGUAGE_STORAGE_KEY, detectLanguage } from './index';
 
 function keyPaths(value: unknown, prefix = ''): string[] {
@@ -48,5 +52,27 @@ describe('detectLanguage', () => {
   it('falls back to English for unsupported languages', () => {
     vi.spyOn(navigator, 'language', 'get').mockReturnValue('fr-FR');
     expect(detectLanguage()).toBe('en');
+  });
+});
+
+describe('driver texts', () => {
+  it('have identical key sets in de and en', () => {
+    expect(Object.keys(driversDe).sort()).toEqual(Object.keys(driversEn).sort());
+  });
+
+  it('cover every label of the OpenVPN form schema', () => {
+    const keys = OPENVPN_SCHEMA.sections.flatMap((section) => [
+      section.labelKey,
+      ...section.fields.flatMap((field) => [
+        field.labelKey,
+        ...(field.options ?? []).map((option) => option.labelKey),
+      ]),
+    ]);
+    expect(keys.filter((key) => !(key in driversEn))).toEqual([]);
+  });
+
+  it('fall back to the key for unknown labels', () => {
+    expect(driverText('de', 'openvpn.authMode.password')).toBe('Benutzername und Passwort');
+    expect(driverText('de', 'nope.key')).toBe('nope.key');
   });
 });

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import styles from './Table.module.css';
 
 export interface Column<Row> {
@@ -14,9 +14,18 @@ export interface TableProps<Row> {
   rowKey: (row: Row) => string;
   emptyMessage: ReactNode;
   caption?: ReactNode;
+  /** Content of an extra full-width row under a row, such as an inline confirmation. */
+  rowDetail?: (row: Row) => ReactNode;
 }
 
-export function Table<Row>({ columns, rows, rowKey, emptyMessage, caption }: TableProps<Row>) {
+export function Table<Row>({
+  columns,
+  rows,
+  rowKey,
+  emptyMessage,
+  caption,
+  rowDetail,
+}: TableProps<Row>) {
   const alignClass = (column: Column<Row>) => (column.align === 'end' ? styles.end : undefined);
   return (
     <div className={styles.wrapper}>
@@ -39,15 +48,25 @@ export function Table<Row>({ columns, rows, rowKey, emptyMessage, caption }: Tab
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
-              <tr key={rowKey(row)}>
-                {columns.map((column) => (
-                  <td key={column.key} className={alignClass(column)}>
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))
+            rows.map((row) => {
+              const detail = rowDetail?.(row);
+              return (
+                <Fragment key={rowKey(row)}>
+                  <tr>
+                    {columns.map((column) => (
+                      <td key={column.key} className={alignClass(column)}>
+                        {column.render(row)}
+                      </td>
+                    ))}
+                  </tr>
+                  {detail !== undefined && detail !== null && (
+                    <tr className={styles.detail}>
+                      <td colSpan={columns.length}>{detail}</td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })
           )}
         </tbody>
       </table>

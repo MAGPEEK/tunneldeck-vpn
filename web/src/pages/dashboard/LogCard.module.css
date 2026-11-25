@@ -1,0 +1,61 @@
+.control {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-card);
+}
+
+input.control {
+  width: 180px;
+}
+
+.frame {
+  position: relative;
+}
+
+.body {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.line {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.time {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.warn {
+  color: var(--state-warning-text);
+}
+
+.error {
+  color: var(--state-danger-text);
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.jump {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-3);
+  min-height: 28px;
+  font-size: var(--font-size-sm);
+}

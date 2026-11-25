@@ -10,22 +10,17 @@
     "system": "System"
   },
   "pages": {
-    "placeholderTitle": "Noch nicht verfügbar",
     "dashboard": {
-      "title": "Übersicht",
-      "body": "Verbindungsstatus, Datenverkehr und das Live-Protokoll erscheinen hier."
+      "title": "Übersicht"
     },
     "profiles": {
-      "title": "Profile",
-      "body": "Ihre VPN-Profile werden hier aufgelistet."
+      "title": "Profile"
     },
     "hostAccess": {
-      "title": "Host-Zugriff",
-      "body": "Regeln für den Zugriff auf diesen Host werden hier verwaltet."
+      "title": "Host-Zugriff"
     },
     "system": {
-      "title": "System",
-      "body": "Version und Ergebnisse des Selbsttests erscheinen hier."
+      "title": "System"
     }
   },
   "language": {
@@ -71,5 +66,267 @@
   "errors": {
     "network": "Server nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
     "unexpected": "Etwas ist schiefgelaufen. Versuchen Sie es erneut."
+  },
+  "protocols": {
+    "openvpn": "OpenVPN",
+    "wireguard": "WireGuard",
+    "ipsec": "IPsec/IKEv2"
+  },
+  "duration": {
+    "daysHours": "{{d}} T {{h}} Std.",
+    "hoursMinutes": "{{h}} Std. {{m}} Min.",
+    "minutesSeconds": "{{m}} Min. {{s}} Sek.",
+    "seconds": "{{s}} Sek."
+  },
+  "dashboard": {
+    "emptyTitle": "Legen Sie Ihr erstes VPN-Profil an",
+    "emptyBody": "Ein Profil enthält Serveradresse, Anmeldedaten und Verschlüsselungseinstellungen einer VPN-Verbindung.",
+    "createProfile": "Profil anlegen"
+  },
+  "connection": {
+    "label": "Verbindung",
+    "state": {
+      "disconnected": "Getrennt",
+      "connecting": "Verbindet",
+      "connected": "Verbunden",
+      "reconnecting": "Verbindet neu",
+      "disconnecting": "Trennt",
+      "error": "Fehler"
+    },
+    "server": "Server",
+    "vpnAddress": "VPN-Adresse",
+    "since": "Verbunden seit",
+    "profile": "Profil",
+    "connect": "Verbinden",
+    "tryAgain": "Erneut versuchen",
+    "reconnect": "Neu verbinden",
+    "disconnect": "Trennen",
+    "errorUnknown": "Die Verbindung ist fehlgeschlagen.",
+    "errorCode": {
+      "auth_failed": "Der Server hat die Anmeldedaten abgelehnt",
+      "server_rejected": "Der Server hat die Verbindung abgelehnt",
+      "process_failed": "Der VPN-Prozess wurde beendet",
+      "firewall_failed": "Die Firewall-Regeln konnten nicht angewendet werden",
+      "routing_failed": "Das Routing durch den Tunnel ist fehlgeschlagen",
+      "profile_invalid": "Das Profil ist unvollständig oder ungültig",
+      "start_failed": "Der VPN-Prozess konnte nicht gestartet werden"
+    },
+    "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
+    "profileMissing": "Dieses Profil existiert nicht mehr."
+  },
+  "metrics": {
+    "label": "Datenverkehr",
+    "received": "Empfangen",
+    "sent": "Gesendet",
+    "download": "Download",
+    "upload": "Upload"
+  },
+  "hostProtection": {
+    "title": "NAS vom Tunnel abgeschirmt",
+    "noPorts": "Keine Ports offen",
+    "openPorts_one": "{{count}} Port offen: {{list}}",
+    "openPorts_other": "{{count}} Ports offen: {{list}}",
+    "remoteAccess": "Weboberfläche per HTTPS auf Port {{port}} erreichbar",
+    "manage": "Host-Zugriff verwalten"
+  },
+  "log": {
+    "title": "Protokoll",
+    "level": "Stufe",
+    "filter": {
+      "all": "Alle",
+      "warnings": "Warnungen und Fehler",
+      "errors": "Fehler"
+    },
+    "textFilter": "Protokolltext filtern",
+    "textFilterPlaceholder": "Filtern",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "loading": "Protokoll wird geladen",
+    "empty": "Keine Protokollzeilen",
+    "jumpToLatest": "Zum Neuesten"
+  },
+  "advisory": {
+    "listLabel": "Hinweise",
+    "unknown": "Hinweis {{code}}",
+    "dangerTitle": "Sicherheitsrisiko",
+    "noticeTitle": "Empfehlungen",
+    "title": {
+      "unencrypted_data_channel": "Der Datenverkehr ist nicht verschlüsselt"
+    },
+    "unencrypted_data_channel": "Der Datenkanal verwendet keine Verschlüsselung: Alles, was durch den Tunnel geht, kann unterwegs gelesen und verändert werden. Nutzen Sie das nur, wenn der Anbieter keine andere Wahl lässt.",
+    "weak_cipher": "Das Verschlüsselungsverfahren ist veraltet. Verwenden Sie AES-256-GCM oder CHACHA20-POLY1305, wenn der Server sie unterstützt.",
+    "weak_digest": "Der Authentifizierungs-Digest ist schwach. Verwenden Sie SHA256 oder ein AEAD-Verfahren.",
+    "compression_enabled": "Komprimierung ist aktiv. Sie ist veraltet und kann Daten preisgeben (VORACLE).",
+    "tls_below_1_2": "TLS-Versionen unter 1.2 sind erlaubt.",
+    "tls_auth_instead_of_crypt": "tls-auth wird verwendet; tls-crypt verbirgt zusätzlich den Verbindungsaufbau.",
+    "server_usage_check_disabled": "Die Prüfung, ob das Serverzertifikat für einen Server ausgestellt ist, ist aus.",
+    "fragment_in_use": "fragment ist gesetzt: eine veraltete Notlösung für MTU-Probleme, die den Tunnel bremst.",
+    "no_dco": "Der Kernel dieses Hosts hat kein Data Channel Offload; rechnen Sie mit geringerem Durchsatz."
+  },
+  "profiles": {
+    "import": ".ovpn importieren",
+    "new": "Neues Profil",
+    "deleteFailed": "Das Profil konnte nicht gelöscht werden. Trennen Sie es zuerst und versuchen Sie es erneut.",
+    "column": {
+      "name": "Name",
+      "protocol": "Protokoll",
+      "server": "Server",
+      "dailyReconnect": "Tägliche Neuverbindung",
+      "status": "Status",
+      "actions": "Aktionen"
+    },
+    "off": "Aus",
+    "active": "Aktiv",
+    "deleteWhileConnected": "Zum Löschen trennen",
+    "edit": "Bearbeiten",
+    "editNamed": "{{name}} bearbeiten",
+    "duplicate": "Duplizieren",
+    "duplicateNamed": "{{name}} duplizieren",
+    "delete": "Löschen",
+    "deleteNamed": "{{name}} löschen",
+    "confirmLabel": "Löschen bestätigen",
+    "confirmDelete": "Profil „{{name}}“ löschen? Das lässt sich nicht rückgängig machen.",
+    "confirmDeleteButton": "Profil löschen",
+    "cancel": "Abbrechen",
+    "empty": "Noch keine Profile",
+    "importTitle": "Eine .ovpn-Datei importieren",
+    "importFile": "Konfigurationsdatei",
+    "importPaste": "Oder die Konfiguration einfügen",
+    "importInvalid": "Die Konfiguration kann nicht gelesen werden.",
+    "importSubmit": "Importieren"
+  },
+  "profileForm": {
+    "newTitle": "Neues Profil",
+    "editTitle": "Profil bearbeiten",
+    "name": "Name",
+    "protocol": "Protokoll",
+    "planned": "Geplant",
+    "schedule": "Zeitplan",
+    "dailyReconnect": "Einmal täglich neu verbinden",
+    "dailyReconnectTime": "Uhrzeit",
+    "timeZoneHint": "Zeitzone des Servers: {{timeZone}}",
+    "save": "Speichern",
+    "saved": "Profil gespeichert.",
+    "invalid": "Einige Felder müssen korrigiert werden.",
+    "appliesOnNextConnect": "Änderungen gelten ab der nächsten Verbindung.",
+    "reconnectNow": "Jetzt neu verbinden",
+    "copyName": "{{name}} (Kopie)",
+    "duplicateNotice": "Geheimnisse wie Passwörter und Schlüssel werden nicht kopiert. Geben Sie sie erneut ein."
+  },
+  "schemaForm": {
+    "line": "{{label}}, Zeile {{number}}",
+    "addLine": "Zeile hinzufügen",
+    "removeLine": "Zeile {{number}} entfernen",
+    "secretStored": "Gespeichert",
+    "secretRemoved": "Wird beim Speichern entfernt",
+    "replace": "Ersetzen",
+    "remove": "Entfernen",
+    "undo": "Rückgängig",
+    "keepStored": "Gespeicherten Wert behalten"
+  },
+  "importWarnings": {
+    "group": {
+      "rejected_one": "{{count}} Direktive nicht importiert",
+      "rejected_other": "{{count}} Direktiven nicht importiert",
+      "warning_one": "{{count}} Direktive entfernt oder geändert",
+      "warning_other": "{{count}} Direktiven entfernt oder geändert",
+      "info_one": "{{count}} Hinweis",
+      "info_other": "{{count}} Hinweise"
+    },
+    "line": "Zeile {{line}}:",
+    "notImported": "Nicht importiert",
+    "code": {
+      "runs_code": "startet Programme oder Skripte; das lässt TunnelDeck nicht zu.",
+      "escapes_sandbox": "würde Dateien oder den Prozess verändern; das lässt TunnelDeck nicht zu.",
+      "routing_handled": "übernimmt TunnelDeck selbst.",
+      "duplicate_directive": "kommt mehrfach vor; nur eine wird übernommen.",
+      "managed_by_field": "wird über ein Profilfeld gesetzt.",
+      "deprecated_ignored": "ist veraltet und wird von OpenVPN ignoriert.",
+      "ignored_for_tcp": "hat über TCP keine Wirkung.",
+      "compression_conflict": "widerspricht der Komprimierungseinstellung.",
+      "invalid_line": "kann nicht gelesen werden.",
+      "invalid_directive": "ist keine gültige OpenVPN-Direktive.",
+      "inline_block": "Inline-Blöcke sind nur für Schlüssel und Zertifikate erlaubt.",
+      "line_too_long": "ist zu lang.",
+      "invalid_value": "hat einen Wert, den TunnelDeck nicht verwenden kann.",
+      "file_reference": "verweist auf eine Datei; fügen Sie stattdessen deren Inhalt ins Profil ein.",
+      "additional_remote": "ist ein weiterer Server; nur der erste wird verwendet.",
+      "unsupported_device": "setzt einen Gerätetyp, den TunnelDeck nicht unterstützt.",
+      "inline_block_unsupported": "ist ein Inline-Block, den TunnelDeck nicht unterstützt.",
+      "cipher_mapped": "wurde in die aktuelle Verschlüsselungseinstellung übertragen.",
+      "compression_receive_only": "Komprimierung wird vom Server angenommen, aber beim Senden nicht verwendet.",
+      "compression_kept": "Komprimierung bleibt aktiv, weil der Server sie verlangt.",
+      "ns_cert_type_mapped": "wurde durch die Prüfung des Serverzertifikats ersetzt.",
+      "server_cert_usage_added": "Die Prüfung des Serverzertifikats wurde eingeschaltet."
+    }
+  },
+  "hostAccess": {
+    "explanation": "Alles, was aus dem Tunnel ankommt, wird blockiert – außer den Ports, die Sie hier öffnen.",
+    "protocol": "Protokoll",
+    "port": "Port",
+    "source": "Quelle (optional)",
+    "enabled": "Aktiv",
+    "comment": "Kommentar",
+    "actions": "Aktionen",
+    "cellLabel": "{{name}}, Regel {{number}}",
+    "removeRule": "Regel {{number}} entfernen",
+    "addRule": "Regel hinzufügen",
+    "save": "Änderungen speichern",
+    "saved": "Regeln gespeichert und angewendet.",
+    "invalid": "Einige Regeln müssen korrigiert werden.",
+    "empty": "Keine Ports offen",
+    "firewallFailedTitle": "Die Firewall-Regeln konnten nicht angewendet werden",
+    "firewallFailed": "Die bisherigen Regeln bleiben aktiv. Prüfen Sie den Selbsttest auf der Seite System und versuchen Sie es erneut."
+  },
+  "system": {
+    "versionTitle": "Version",
+    "version": "Version",
+    "listenAddress": "Adresse der Weboberfläche",
+    "serverTime": "Serverzeit",
+    "selfCheckTitle": "Selbsttest",
+    "noChecks": "Es wurden keine Prüfungen ausgeführt.",
+    "checkPassed": "Bestanden",
+    "checkFailed": "Fehlgeschlagen",
+    "check": {
+      "tun-device": "TUN-Gerät",
+      "iptables": "iptables",
+      "ip": "ip-Werkzeug",
+      "net-admin": "NET_ADMIN-Berechtigung"
+    },
+    "hint": {
+      "tun-device": "Reichen Sie das TUN-Gerät in den Container durch (devices: /dev/net/tun).",
+      "iptables": "Installieren Sie iptables im Image und stellen Sie sicher, dass der Host-Kernel die iptables-Filtertabelle bereitstellt.",
+      "ip": "Installieren Sie iproute2 im Image.",
+      "net-admin": "Geben Sie dem Container die Berechtigung NET_ADMIN (cap_add: NET_ADMIN)."
+    }
+  },
+  "remoteAccess": {
+    "title": "Fernzugriff",
+    "unavailable": "In dieser Version nicht verfügbar.",
+    "warningTitle": "Die Anmeldeseite wird aus dem Internet erreichbar.",
+    "warning": "Wenn aktiviert, kann jeder, der die VPN-Adresse erreicht, die Anmeldeseite per HTTPS öffnen. Verwenden Sie ein starkes Passwort.",
+    "enable": "Fernzugriff per HTTPS aktivieren",
+    "port": "HTTPS-Port",
+    "source": "Zertifikat",
+    "sources": {
+      "selfSigned": "Selbst signiert",
+      "uploaded": "Hochgeladen"
+    },
+    "save": "Änderungen speichern",
+    "saved": "Einstellungen für den Fernzugriff gespeichert.",
+    "off": "Fernzugriff ist aus.",
+    "listening": "Lauscht auf Port {{port}}.",
+    "notListening": "Lauscht noch nicht.",
+    "lastError": "Letzter Fehler: {{error}}",
+    "certificate": "Zertifikat",
+    "subject": "Inhaber",
+    "selfSignedNote": "selbst signiert",
+    "validUntil": "Gültig bis",
+    "fingerprint": "SHA-256-Fingerabdruck",
+    "uploadTitle": "Zertifikat hochladen",
+    "certificatePem": "Zertifikatskette (PEM)",
+    "keyPem": "Privater Schlüssel (PEM)",
+    "upload": "Zertifikat hochladen",
+    "uploaded": "Zertifikat hochgeladen."
   }
 }

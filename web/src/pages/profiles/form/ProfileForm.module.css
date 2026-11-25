@@ -1,0 +1,76 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.protocols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.legend {
+  width: 100%;
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.protocol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.protocol[data-disabled] {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.protocol input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.timeField {
+  max-width: 200px;
+}
+
+.warningList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+.warningLine {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.directive {
+  font-size: var(--font-size-sm);
+}
+
+.buttons {
+  display: flex;
+  gap: var(--space-2);
+}

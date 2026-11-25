@@ -1,7 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { i18n } from '../i18n';
+import { FakeEventSource } from './fakeEventSource';
+
+beforeEach(() => {
+  FakeEventSource.reset();
+  vi.stubGlobal('EventSource', FakeEventSource);
+});
 
 afterEach(async () => {
   cleanup();

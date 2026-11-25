@@ -46,7 +46,7 @@ Implement SPEC §8.1: settings + store fields (schema stays v1 if additive with 
 
 Implement in `web/`: design tokens and base styles, light/dark theme, app shell with sidebar (SPEC §11), routing, typed API client (CSRF header, error mapping), session handling, setup and login pages, i18n (de/en) scaffolding, shared components (Button, Card, Field, StatePill, EmptyState, Table). Component tests. Works against the API contract in SPEC §9 with mocked fetch.
 
-## [ ] 10. Frontend dashboard and profiles — medium — after: 8, 9, 13, 14
+## [x] 10. Frontend dashboard and profiles — medium — after: 8, 9, 13, 14
 
 Implement Dashboard, Profiles (schema-driven form, import, secret fields), Host access and System pages per SPEC §11, the "Remote access" section (SPEC §8.1) on the System page, profile advisories (SPEC §5) in the form and on the dashboard, live updates via SSE. Tests for the schema form renderer, connection card states and log filter. Verify in a browser against the running backend.
 
