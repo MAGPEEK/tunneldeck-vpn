@@ -15,7 +15,7 @@ Go 1.27 backend + React 19/TypeScript/Vite frontend (`web/`), shipped as one Doc
 - Dependency direction: `internal/domain` imports no internal package; only `cmd/tunneldeck` wires concrete types. Interfaces are declared by the consumer.
 - Nothing outside `internal/vpn/openvpn` may know OpenVPN. Other code uses `vpn.Driver`.
 - All `iptables`/`ip` calls go through `netguard.CommandRunner`; never `exec.Command` elsewhere. The host's main routing table is never modified.
-- Secrets never appear in API responses, logs, errors or files outside `/data` (encrypted) — use `hasValue`.
+- Secrets never appear in API responses, logs, errors or files outside `/data` (encrypted) — use `hasValue`. Sole exception: key material inside the rendered OpenVPN config in the tmpfs runtime dir (SPEC §5).
 - Clean code: small functions, intention-revealing names, no dead code, no commented-out code, errors wrapped with context (`fmt.Errorf("...: %w", err)`), table-driven tests next to the code.
 - Dev machine is Windows: Linux-only code needs build tags or interfaces so `go build ./...` and `go test ./...` pass on Windows.
 - Versioning: SemVer from git tags, Conventional Commits, `CHANGELOG.md` (`Unreleased`) updated with every user-visible change, `schemaVersion` in data files — see SPEC §13.

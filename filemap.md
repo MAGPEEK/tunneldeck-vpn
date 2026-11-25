@@ -11,6 +11,7 @@
 - `.github/workflows/ci.yml` — CI: frontend lint/test/build, Go build/test/lint, Docker build (no push)
 - `docs/SPEC.md` — specification; change only with the orchestrator
 - `docs/PLAN.md` — task list and status
+- `docs/openvpn-notes.md` — lab-verified OpenVPN 2.7 facts: directives, management dialogue, reference config; binding for the driver
 - `docs/reference/original-compose.yml` — original Alpine/OpenVPN compose this project replaces
 - `cmd/tunneldeck/` — entry point: listen address, `/api/system`, embedded SPA, graceful shutdown
 - `internal/config/` — environment → typed config (doc only)
