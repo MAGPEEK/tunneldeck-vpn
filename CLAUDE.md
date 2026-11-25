@@ -18,4 +18,6 @@ Go 1.27 backend + React 19/TypeScript/Vite frontend (`web/`), shipped as one Doc
 - Secrets never appear in API responses, logs, errors or files outside `/data` (encrypted) — use `hasValue`.
 - Clean code: small functions, intention-revealing names, no dead code, no commented-out code, errors wrapped with context (`fmt.Errorf("...: %w", err)`), table-driven tests next to the code.
 - Dev machine is Windows: Linux-only code needs build tags or interfaces so `go build ./...` and `go test ./...` pass on Windows.
+- Versioning: SemVer from git tags, Conventional Commits, `CHANGELOG.md` (`Unreleased`) updated with every user-visible change, `schemaVersion` in data files — see SPEC §13.
+- Every change ships with tests; `go test -race ./...` must pass where the race detector is available.
 - Update `filemap.md` when adding or moving files. Do not commit; the orchestrator commits.

@@ -1,6 +1,30 @@
 # File map
 
 - `CLAUDE.md` — commands and rules for every agent
+- `LICENSE` — MIT licence
+- `CHANGELOG.md` — Keep a Changelog; add user-visible changes under `Unreleased`
+- `go.mod` — Go module `tunneldeck`; `ignore ./web/node_modules` keeps npm packages out of `./...`
+- `.golangci.yml` — golangci-lint v2 config (govet, staticcheck, errcheck, ineffassign, unused, revive, misspell, gofmt, goimports)
+- `Dockerfile` — multi-stage build: Node (frontend) → Go (static binary) → Alpine runtime with openvpn and iptables
+- `.dockerignore` — keeps docs, VCS data, node_modules and local build output out of the image context
+- `docker-compose.yml` — run the image with host network, `NET_ADMIN`, `/dev/net/tun`, `./data:/data`
+- `.github/workflows/ci.yml` — CI: frontend lint/test/build, Go build/test/lint, Docker build (no push)
 - `docs/SPEC.md` — specification; change only with the orchestrator
 - `docs/PLAN.md` — task list and status
-- `docker-compose.yml` — original Alpine/OpenVPN compose (moves to `docs/reference/` in task 1)
+- `docs/reference/original-compose.yml` — original Alpine/OpenVPN compose this project replaces
+- `cmd/tunneldeck/` — entry point: listen address, `/api/system`, embedded SPA, graceful shutdown
+- `internal/config/` — environment → typed config (doc only)
+- `internal/domain/` — core types and sentinel errors (doc only)
+- `internal/vpn/` — `Driver` interface, registry, `ConnectionManager` (doc only)
+- `internal/vpn/openvpn/` — OpenVPN driver (doc only)
+- `internal/netguard/` — iptables chains and policy routing via `CommandRunner` (doc only)
+- `internal/store/` — JSON persistence with atomic writes (doc only)
+- `internal/secret/` — AES-256-GCM secret fields and key file (doc only)
+- `internal/auth/` — admin account, sessions, login rate limit (doc only)
+- `internal/api/` — REST handlers, SSE, middleware (doc only)
+- `internal/web/` — `go:embed all:dist` of the SPA with fallback to `index.html`
+- `internal/web/dist/` — Vite build output (git-ignored); only the committed `.gitkeep` is tracked, so `go build` works without a frontend build, and a Vite plugin re-creates it after each build
+- `web/` — React 19 + TypeScript + Vite app; `npm run build` writes to `internal/web/dist`
+- `web/src/` — app sources (`main.tsx`, `App.tsx`) and tests; `web/src/test/setup.ts` wires jest-dom into Vitest
+- `web/vite.config.ts` — build output, `/api` dev proxy to `127.0.0.1:8194`, Vitest config
+- `web/eslint.config.js` — ESLint flat config (typescript-eslint strict, react-hooks, prettier)

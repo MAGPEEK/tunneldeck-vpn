@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` open, `[x]` accepted. Spec: `docs/SPEC.md`. Every task: update `filemap.md` for added/moved files, keep all checks in CLAUDE.md green, do not commit (the orchestrator commits after review).
 
-## [ ] 1. Scaffold project — medium — after: –
+## [x] 1. Scaffold project — medium — after: –
 
 Create the repository skeleton per SPEC §3–4: Go module `tunneldeck` (Go 1.27) with `cmd/tunneldeck/main.go` serving `/api/system` (version only) and the embedded SPA; empty packages with `doc.go` for every package in SPEC §4; `web/` Vite + React 19 + TypeScript strict app with a placeholder page, ESLint, Prettier, Vitest; `internal/web` embedding `web/dist` with SPA fallback (build must work when `web/dist` holds only a placeholder); `.golangci.yml`; multi-stage `Dockerfile` (node build → go build → Alpine runtime with openvpn, iptables, iptables-legacy, iproute2); `docker-compose.yml` (host network, NET_ADMIN, /dev/net/tun, `./data:/data`); move the existing root `docker-compose.yml` to `docs/reference/original-compose.yml` first; `LICENSE` (MIT); GitHub Actions workflow running all checks; `.dockerignore`. Verify: every command in CLAUDE.md passes locally (Docker build only if the daemon is running — report if not).
 
@@ -12,11 +12,11 @@ Research only, output `docs/openvpn-notes.md`. Determine for the OpenVPN version
 
 ## [ ] 3. Domain, store, secret — careful — after: 1
 
-Implement `internal/domain` (types and errors from SPEC §4, §5 fields, §6 `HostAccessRule`, validation helpers), `internal/secret` (AES-256-GCM, `enc:v1:` format, key file creation 0600, env override) and `internal/store` (SPEC §7: `settings.json`, `profiles.json`, atomic write, mutex, secrets encrypted at rest, never-return-secret read model with `hasValue`, empty-secret-keeps-value update rule). Table-driven tests incl. corrupted files, wrong key, concurrent writes.
+Implement `internal/domain` (types and errors from SPEC §4, §5 fields, §6 `HostAccessRule`, validation helpers), `internal/secret` (AES-256-GCM, `enc:v1:` format, key file creation 0600, env override) and `internal/store` (SPEC §7: `settings.json`, `profiles.json`, atomic write, mutex, secrets encrypted at rest, `schemaVersion` with a migration hook (SPEC §13), never-return-secret read model with `hasValue`, empty-secret-keeps-value update rule). Table-driven tests incl. corrupted files, wrong key, concurrent writes.
 
 ## [ ] 4. Auth and sessions — careful — after: 3
 
-Implement `internal/auth` per SPEC §8: setup-once admin creation, argon2id hashing with stored parameters, in-memory sessions (hashed tokens, idle timeout, logout), login rate limiter with injected clock. No HTTP here except small helpers for cookie read/write. Tests for every rule in §8.
+Implement `internal/auth` per SPEC §8: setup-once admin creation, argon2id hashing with stored parameters, in-memory sessions (hashed tokens, idle timeout, logout), login rate limiter with injected clock, admin reset (function used by the `reset-admin` subcommand and `TUNNELDECK_RESET_ADMIN`; the CLI/env wiring itself lands in task 8). No HTTP here except small helpers for cookie read/write. Tests for every rule in §8.
 
 ## [ ] 5. Driver interface and OpenVPN config — careful — after: 2, 3
 
@@ -24,7 +24,7 @@ Implement `internal/vpn` `Driver`, `FormSchema`, registry (SPEC §4.1) and in `i
 
 ## [ ] 6. OpenVPN supervisor and management — heavy — after: 5
 
-Implement process supervision and the management client in `internal/vpn/openvpn` (`Start`, `Stop`, `Events`) and `vpn.ConnectionManager` (SPEC §4.1–4.2): state machine, credentials over management, byte counts → rates, log ring buffer feed, backoff retry, persisted desired state and reconnect on start, calls into a `netguard`-shaped interface on connect/disconnect. Process and socket behind interfaces; tests with a fake management server and fake process covering races (stop during connect, process crash, double connect, shutdown).
+Implement process supervision and the management client in `internal/vpn/openvpn` (`Start`, `Stop`, `Events`) and `vpn.ConnectionManager` (SPEC §4.1–4.2): state machine, credentials over management, byte counts → rates, log ring buffer feed, backoff retry with stop-on-auth-failure, scheduled daily reconnect (SPEC §4.3, injected clock), persisted desired state and reconnect on start, calls into a `netguard`-shaped interface on connect/disconnect. Process and socket behind interfaces; tests with a fake management server and fake process covering races (stop during connect, process crash, double connect, shutdown).
 
 ## [ ] 7. Netguard host protection — careful — after: 3
 
@@ -44,7 +44,7 @@ Implement Dashboard, Profiles (schema-driven form, import, secret fields), Host 
 
 ## [ ] 11. Image, compose, README — medium — after: 10
 
-Finalise Dockerfile (non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example, security model, roadmap (stage 2, WireGuard, IPsec).
+Finalise Dockerfile (non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example, security model, roadmap (SPEC §14), versioning per SPEC §13 (version from `git describe` via build arg, OCI labels, release tagging steps in `docs/RELEASING.md`). Add a documented way to export the image as a `.tar` (`docker save`) for import in Synology Container Manager.
 
 ## [ ] 12. End-to-end test — careful — after: 11
 

@@ -62,7 +62,11 @@ type Driver interface {
 
 ### 4.2 Connection states
 
-`disconnected → connecting → connected → (reconnecting ↔ connected) → disconnecting → disconnected`, plus `error` (with message; user action or auto-retry leaves it). Auto-retry uses exponential backoff 2 s … 60 s.
+`disconnected → connecting → connected → (reconnecting ↔ connected) → disconnecting → disconnected`, plus `error` (with message; user action or auto-retry leaves it). Auto-retry uses exponential backoff 2 s … 60 s and never gives up on network errors. An authentication failure (credentials rejected by the server) stops retrying immediately and enters `error` until the user reconnects or edits the profile, so the account is not locked by the provider.
+
+### 4.3 Scheduled daily reconnect
+
+Every profile (driver-independent, part of `domain.Profile`) has `dailyReconnect { enabled bool, time "HH:MM" }`, default off, default time `04:00`. While that profile is connected, `ConnectionManager` disconnects and immediately reconnects once per day at that local time (container time zone from `TZ`, image ships `tzdata`). It is skipped when the tunnel is not connected at that moment, never fires twice for the same day, and is rescheduled when the profile or the time changes. The clock is injected for tests. The log gets a line naming the reason ("scheduled daily reconnect"). The profile form shows a switch "Reconnect once a day" with a time field in a "Schedule" section; the System page shows the server's current time and time zone.
 
 ## 5. OpenVPN driver
 
@@ -71,6 +75,7 @@ type Driver interface {
 - Fixed tunnel device name `tdvpn0`, `dev-type tun`.
 - Routes: OpenVPN must not touch the main routing table (`route-noexec`; pushed and configured `redirect-gateway` is neutralised). See 6.
 - Profile fields (OpenVPN settings): `remoteHost`, `port`, `proto` (udp|tcp), `compression` (none|lzo), `authMode` (password | certificate | certificate+password), `username`, `password`*, `caCert`, `clientCert`, `clientKey`*, `tlsAuthKey`* / `tlsCryptKey`* + `keyDirection`, `cipher` (free text incl. `none`), `authDigest`, `resolveRetry`, `keepalive`, `extraOptions` (list of raw lines). `*` = secret.
+- `caCert` is required for every `authMode`, including `password` (the server must always be verified; mdex issues a CA certificate).
 - `extraOptions` are validated: one directive per line, and a denylist rejects anything that runs code or fights the app: `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `auth-user-pass-verify`, `client-connect`, `client-disconnect`, `learn-address`, `plugin`, `script-security`, `management*`, `daemon`, `log`, `log-append`, `status`, `writepid`, `config`, `cd`, `chroot`, `dev`, `dev-type`, `dev-node`, `iproute`, `route-noexec`, `auth-user-pass`. `redirect-gateway` is accepted but dropped with a visible warning ("handled by TunnelDeck").
 - `.ovpn` import maps known directives to fields, inline blocks (`<ca>`, `<cert>`, `<key>`, `<tls-auth>`, `<tls-crypt>`) to cert/secret fields, everything else to `extraOptions` (subject to the denylist; rejected lines are reported, not silently dropped).
 
@@ -100,6 +105,7 @@ Writes are atomic (temp file + rename) and serialised by a mutex. The API never 
 - First start: no admin exists → UI shows setup (username, password ≥ 12 chars). `POST /api/setup` works only while no admin exists.
 - Login → random 256-bit session token in an `HttpOnly`, `SameSite=Strict` cookie; sessions kept in memory (hashed), 12 h idle timeout.
 - All `/api/*` except `setup`, `login`, `session` require a session. Mutating requests also require header `X-TunnelDeck-Request: 1` and a matching `Origin`/`Host` (CSRF).
+- Lost password: `tunneldeck reset-admin` (run via `docker exec`) removes the admin account and all sessions; alternatively env `TUNNELDECK_RESET_ADMIN=1` does the same at start and logs a warning on every start until it is removed. Profiles and settings are kept; the UI shows setup again.
 - Login rate limit: 5 failures per IP per minute, then lockout with backoff. Constant-time comparison.
 
 ## 9. HTTP API
@@ -129,6 +135,10 @@ JSON; errors as `{ "error": { "code": "...", "message": "...", "fields": {…} }
 | `TUNNELDECK_DATA_DIR` | `/data` | Data directory |
 | `TUNNELDECK_SECRET_KEY` | – | Base64 key instead of `secret.key` |
 | `TUNNELDECK_LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
+| `TUNNELDECK_RESET_ADMIN` | – | `1` removes the admin account at start (see §8) |
+| `TZ` | `UTC` | Time zone for the daily reconnect and log timestamps |
+
+Backup in stage 1 = copying `/data` including `secret.key`; an export/import UI is not part of stage 1.
 
 ## 11. UI design
 
@@ -161,3 +171,33 @@ Tone: calm, technical, uncluttered. Sentence case, no exclamation marks, verbs o
 - Container restart reconnects the previously connected profile without user action.
 - `go test ./...`, `golangci-lint run`, `npm run lint`, `npm test`, `npm run build` all pass.
 - README (de/en) with Synology DS723+ instructions.
+- Docker `HEALTHCHECK` reflects process health (UI reachable), not tunnel state.
+
+## 13. Versioning, review and testing
+
+**Versioning**
+- Semantic Versioning 2.0.0. Stage 1 ships as `0.1.0`; stage 2 as `0.2.0`; WireGuard as `0.3.0`; `1.0.0` once the data format and API are declared stable. While `0.y.z`, breaking changes bump the minor version and are called out in the changelog.
+- The single source of truth is the git tag `vX.Y.Z`. The binary gets its version through `-ldflags -X` from `git describe --tags --always --dirty` (untagged builds look like `0.1.0-dev+<sha>`); `GET /api/system` and the System page show it. The frontend `package.json` version mirrors the release version.
+- Docker image tags: `X.Y.Z`, `X.Y` and `latest` for releases only; OCI labels `org.opencontainers.image.version`, `.revision`, `.source`, `.licenses`.
+- `settings.json` and `profiles.json` carry `schemaVersion` (integer). On start the store migrates older versions step by step and refuses to start on a newer one with a clear message.
+- Commits follow Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `build:`, `ci:`, `chore:`; `!` for breaking). `CHANGELOG.md` follows Keep a Changelog with an `Unreleased` section updated in the same commit as the change.
+
+**Review**
+- Every task is reviewed by the orchestrator against its brief and this spec before it is committed: read the diff, check scope, edge cases, error paths and security rules (§5 denylist, §7 secrets, §8 auth), re-run the checks. Defects go back to the worker; nothing unreviewed is committed.
+- Before a release: a full code review and a security review of the whole diff since the last tag.
+
+**Testing**
+- Unit tests next to the code for every package; table-driven; fakes instead of real processes, sockets, clocks and `iptables`. Race detector in CI (`go test -race ./...`).
+- Target line coverage ≥ 80 % for `domain`, `store`, `secret`, `auth`, `vpn`, `vpn/openvpn`, `netguard`, `api`; coverage is reported in CI.
+- Frontend: component tests for shared components, the schema form renderer, connection card states and the log filter.
+- Integration: `netguard` against real `iptables`/`ip` in a privileged Linux container (build tag `integration`).
+- End-to-end: compose stack with a throwaway OpenVPN server (task 12).
+- Field test on the DS723+ with the real mdex profile is the release gate for `0.1.0`.
+
+## 14. Roadmap and release
+
+1. Stage 1 (this spec). Developed locally; nothing is pushed. Field test on the DS723+ with an image exported via `docker save` and imported in Container Manager.
+2. After a successful field test: public GitHub repository, image on GitHub Container Registry.
+3. Stage 2: gateway functions (LAN allow-list, kill switch, port forwards, traffic chart).
+4. WireGuard driver (userspace `wireguard-go`, because the DS723+ kernel has no WireGuard module), then IPsec/IKEv2.
+5. Notifications (webhook) — not before stage 2.

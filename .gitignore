@@ -1,8 +1,8 @@
 # Build output
 /bin/
 /dist/
-web/dist/*
-!web/dist/.gitkeep
+internal/web/dist/*
+!internal/web/dist/.gitkeep
 web/node_modules/
 *.exe
 *.test

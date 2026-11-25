@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.vscode
+.claude
+data
+docs
+*.md
+web/node_modules
+web/coverage
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+Dockerfile
+docker-compose.yml
