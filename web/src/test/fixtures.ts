@@ -120,6 +120,7 @@ export const OPENVPN_SCHEMA: FormSchema = {
           labelKey: 'openvpn.keyDirection',
           required: true,
           default: '1',
+          visibleWhen: { secret: 'tlsAuthKey' },
           options: [
             option('keyDirection', '1'),
             option('keyDirection', '0'),

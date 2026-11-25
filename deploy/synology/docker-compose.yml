@@ -1,0 +1,21 @@
+# TunnelDeck on a Synology NAS (DSM 7.2 Container Manager), see
+# docs/synology.md. Create /volume1/docker/tunneldeck before the first start.
+services:
+  tunneldeck:
+    image: magpeek/tunneldeck:0.1.0-dev
+    container_name: tunneldeck
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - /volume1/docker/tunneldeck:/data
+    environment:
+      TZ: Europe/Berlin
+      # Optional, see docs/SPEC.md §10:
+      # TUNNELDECK_LISTEN: "192.168.1.10:8194"  # default: default-route interface, port 8194
+      # TUNNELDECK_LOG_LEVEL: info              # debug | info | warn | error
+      # TUNNELDECK_SECRET_KEY: ""               # base64 key instead of /data/secret.key
+      # TUNNELDECK_RESET_ADMIN: "1"             # removes the admin account at every start; remove again
+    restart: unless-stopped

@@ -24,8 +24,8 @@ func main() {
 	}
 }
 
-// run executes the subcommand in args: "serve" (the default) or
-// "reset-admin".
+// run executes the subcommand in args: "serve" (the default),
+// "reset-admin" or "healthcheck".
 func run(ctx context.Context, args []string, getenv func(string) string) error {
 	command := "serve"
 	if len(args) > 0 {
@@ -44,6 +44,8 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 		return serveCommand(ctx, cfg)
 	case "reset-admin":
 		return resetAdminCommand(ctx, cfg, controlSocketPath())
+	case "healthcheck":
+		return healthcheckCommand(ctx, cfg)
 	}
-	return fmt.Errorf("unknown command %q: use serve or reset-admin", command)
+	return fmt.Errorf("unknown command %q: use serve, reset-admin or healthcheck", command)
 }

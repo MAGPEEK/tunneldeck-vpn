@@ -34,7 +34,7 @@ func Describe() vpn.FormSchema {
 			selectField(KeyCompression, compressions, DefaultCompression),
 			field(KeyVerifyServerCertUsage, vpn.FieldBool, defaultValue(true)),
 			field(SecretTLSAuthKey, vpn.FieldSecret, multiline),
-			selectField(KeyKeyDirection, keyDirections, DefaultKeyDirection),
+			selectField(KeyKeyDirection, keyDirections, DefaultKeyDirection, visibleWithSecret(SecretTLSAuthKey)),
 			field(SecretTLSCryptKey, vpn.FieldSecret, multiline),
 		),
 		section("advanced",
@@ -67,6 +67,12 @@ func visibleFor(authModes []string) fieldOption {
 	}
 }
 
+// visibleWithSecret shows a field only while the secret field key has a
+// value.
+func visibleWithSecret(key string) fieldOption {
+	return func(f *vpn.Field) { f.VisibleWhen = &vpn.Condition{Secret: key} }
+}
+
 func section(key string, fields ...vpn.Field) vpn.Section {
 	return vpn.Section{Key: key, LabelKey: labelPrefix + "section." + key, Fields: fields}
 }
@@ -81,8 +87,8 @@ func field(key string, fieldType vpn.FieldType, options ...fieldOption) vpn.Fiel
 
 // selectField builds a required select whose option labels are
 // "openvpn.<key>.<value>".
-func selectField(key string, values []string, fallback string) vpn.Field {
-	f := field(key, vpn.FieldSelect, required, defaultValue(fallback))
+func selectField(key string, values []string, fallback string, options ...fieldOption) vpn.Field {
+	f := field(key, vpn.FieldSelect, append([]fieldOption{required, defaultValue(fallback)}, options...)...)
 	for _, value := range values {
 		f.Options = append(f.Options, vpn.Option{Value: value, LabelKey: labelPrefix + key + "." + value})
 	}

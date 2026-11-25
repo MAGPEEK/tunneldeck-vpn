@@ -1,7 +1,9 @@
+# Local use on a Linux Docker host. For a Synology NAS use
+# deploy/synology/docker-compose.yml and docs/synology.md.
 services:
   tunneldeck:
     build: .
-    image: tunneldeck:latest
+    image: magpeek/tunneldeck:0.1.0-dev
     container_name: tunneldeck
     network_mode: host
     cap_add:
@@ -10,4 +12,11 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - ./data:/data
+    environment:
+      TZ: Europe/Berlin
+      # Optional, see docs/SPEC.md §10:
+      # TUNNELDECK_LISTEN: "192.168.1.10:8194"  # default: default-route interface, port 8194
+      # TUNNELDECK_LOG_LEVEL: info              # debug | info | warn | error
+      # TUNNELDECK_SECRET_KEY: ""               # base64 key instead of /data/secret.key
+      # TUNNELDECK_RESET_ADMIN: "1"             # removes the admin account at every start; remove again
     restart: unless-stopped

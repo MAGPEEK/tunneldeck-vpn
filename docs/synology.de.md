@@ -1,0 +1,112 @@
+# TunnelDeck auf einer Synology DS723+ (DSM 7.2)
+
+[English](synology.md)
+
+Diese Anleitung betreibt TunnelDeck mit dem Container Manager unter DSM 7.2. Die DS723+ ist ein x86-64-Modell und nutzt das Image für `linux/amd64`. Mit *auf der NAS prüfen* markierte Schritte sind auf echter DSM-Hardware noch nicht geprüft.
+
+## 1. Voraussetzungen
+
+- DSM 7.2 mit **Container Manager** aus dem Paket-Zentrum.
+- SSH für die erste Prüfung (Systemsteuerung > Terminal & SNMP), oder stattdessen eine geplante Aufgabe.
+- Zwei Ordner in der Freigabe `docker`:
+  - `docker/tunneldeck`: die Daten von TunnelDeck (`/data` im Container),
+  - `docker/tunneldeck-project`: die Compose-Datei für den Container Manager.
+
+### TUN-Gerät
+
+OpenVPN braucht `/dev/net/tun`. Per SSH prüfen:
+
+```sh
+ls -l /dev/net/tun
+```
+
+Eine Zeile, die mit `crw` beginnt, heißt: Das Gerät ist da. Fehlt die Datei, das Kernelmodul einmal von Hand laden:
+
+```sh
+sudo insmod /lib/modules/tun.ko
+```
+
+Damit es bei jedem Start geladen wird, eine Aufgabe anlegen (Systemsteuerung > Aufgabenplaner > Erstellen > Ausgelöste Aufgabe > Benutzerdefiniertes Skript):
+
+- Allgemein: Benutzer `root`, Ereignis `Hochfahren`, aktiviert.
+- Aufgabeneinstellungen > Befehl ausführen:
+
+  ```sh
+  lsmod | grep -q '^tun ' || insmod /lib/modules/tun.ko
+  ```
+
+Die Aufgabe einmal ausführen (auswählen, `Ausführen`) und `ls -l /dev/net/tun` erneut prüfen. Pakete wie der VPN Server laden das Modul unter Umständen schon; die Aufgabe schadet dann nicht.
+
+## 2. Projekt anlegen
+
+1. [`deploy/synology/docker-compose.yml`](../deploy/synology/docker-compose.yml) nach `docker/tunneldeck-project` kopieren (File Station) oder im nächsten Schritt einfügen.
+2. Container Manager > Projekt > Erstellen:
+   - Projektname: `tunneldeck`
+   - Pfad: `/volume1/docker/tunneldeck-project`
+   - Quelle: vorhandene `docker-compose.yml` verwenden, oder „docker-compose.yml erstellen“ und die Datei einfügen.
+3. `TZ` bei Bedarf anpassen, die Webportal-Einstellungen überspringen und abschließen. Der Container Manager lädt `magpeek/tunneldeck` und startet den Container.
+
+Die Compose-Datei gibt dem Container das Host-Netzwerk, `NET_ADMIN` und `/dev/net/tun` und bindet `/volume1/docker/tunneldeck` als `/data` ein. Optionale Variablen (Listen-Adresse, Log-Level, Geheimschlüssel, Admin-Reset) stehen dort als Kommentare.
+
+**Ohne Internetzugang zu Docker Hub:** Das Image auf einem anderen Rechner mit `scripts/build-image.sh` bauen und mit `scripts/export-image.sh` exportieren, dann `tunneldeck-<version>.tar` im Container Manager unter Image > Hinzufügen > Aus Datei hinzufügen importieren. Die Zeile `image:` in der Compose-Datei auf das importierte Tag setzen.
+
+## 3. Erste Anmeldung
+
+1. `http://<NAS-IP>:8194` öffnen. TunnelDeck lauscht auf der Adresse der Schnittstelle mit der Standardroute; eine andere Adresse setzt `TUNNELDECK_LISTEN`.
+2. Das Admin-Konto anlegen (Passwort mit mindestens 12 Zeichen).
+3. **System** öffnen und prüfen, ob alle Selbsttests bestanden sind: TUN-Gerät, iptables, `ip`, `NET_ADMIN`. Jeder fehlgeschlagene Test zeigt einen Hinweis.
+
+Der Integritätsstatus im Container Manager zeigt, ob der Webserver antwortet. Ob der Tunnel steht, zeigt er nicht; das zeigt das Dashboard.
+
+## 4. DSM-Firewall
+
+- Ist die DSM-Firewall an (Systemsteuerung > Sicherheit > Firewall), TCP `8194` nur aus dem eigenen LAN-Subnetz erlauben.
+- Mit Fernzugriff (Abschnitt 6) kommt dessen Port (Standard TCP `8443`) über das Tunnelgerät herein. TunnelDeck setzt seine eigene Kette beim Start an die erste Stelle von `INPUT`. DSM baut seine Regeln neu auf, wenn sich Firewall-Einstellungen ändern; danach den Container neu starten, damit die Kette von TunnelDeck wieder vorne steht. *Auf der NAS prüfen* mit `sudo iptables -S INPUT | head -3`.
+- `8194` nicht am Internet-Router weiterleiten. Die Oberfläche über HTTP ist nur fürs LAN gedacht.
+
+## 5. HTTPS im LAN über den DSM-Reverse-Proxy
+
+Systemsteuerung > Anmeldeportal > Erweitert > Reverse Proxy > Erstellen:
+
+- Quelle: Protokoll `HTTPS`, frei gewählter Hostname (zum Beispiel `tunneldeck.home.arpa`), Port `8195`.
+- Ziel: Protokoll `HTTP`, Hostname `<NAS-IP>` (nicht `localhost`, weil TunnelDeck auf der LAN-Adresse lauscht), Port `8194`.
+- Ein Zertifikat für den Hostnamen unter Systemsteuerung > Sicherheit > Zertifikat > Einstellungen zuordnen.
+
+Die Live-Ansicht nutzt Server-Sent Events; TunnelDeck sendet `X-Accel-Buffering: no`, damit der Proxy sie ungepuffert durchreicht. Die Anmeldung prüft, ob der `Origin` des Browsers zum `Host`-Header passt. Scheitert die Anmeldung hinter dem Proxy, der Regel einen benutzerdefinierten Header `Host` = `$http_host` hinzufügen (*auf der NAS prüfen*). Hinter dem Proxy teilen sich alle Browser die NAS-Adresse für die Begrenzung der Anmeldeversuche.
+
+## 6. Fernzugriff über den Tunnel
+
+Um TunnelDeck aus dem Internet über seine VPN-Adresse zu erreichen (SPEC §8.1), **System > Fernzugriff** öffnen:
+
+1. Einschalten und Port `8443` lassen oder einen freien Port wählen.
+2. Das selbst signierte Zertifikat behalten oder ein eigenes Zertifikat mit Schlüssel (PEM) hochladen.
+3. Den dort angezeigten SHA-256-Fingerabdruck notieren und beim ersten Aufruf von `https://<VPN-Adresse>:8443` mit der Zertifikatswarnung des Browsers vergleichen.
+
+Die Anmeldeseite ist danach aus dem Internet erreichbar. Ein langes Admin-Passwort verwenden. Im Tunnel wird nur dieser HTTPS-Port geöffnet; der HTTP-Port 8194 bleibt dort zu.
+
+## 7. Sicherung
+
+Den ganzen Ordner `docker/tunneldeck` sichern (Hyper Backup oder Kopie):
+
+- `settings.json`: Admin-Konto, Host-Zugriffsregeln, Fernzugriff, gewünschte Verbindung,
+- `profiles.json`: Profile; geheime Felder verschlüsselt,
+- `secret.key`: der Schlüssel zu diesen Geheimnissen.
+
+Ohne `secret.key` lassen sich die gespeicherten Passwörter und Schlüssel nicht entschlüsseln. Die Sicherung so gut schützen wie die NAS selbst. Wer `TUNNELDECK_SECRET_KEY` setzt, bewahrt stattdessen diesen Wert mit der Sicherung auf.
+
+## 8. Aktualisieren
+
+1. `docker/tunneldeck` sichern (Abschnitt 7). Eine neuere Version kann die Datendateien migrieren, und eine ältere Version startet mit migrierten Dateien nicht.
+2. Das Tag in der Zeile `image:` der Compose-Datei auf die neue Version ändern (Container Manager > Projekt > tunneldeck > YAML-Konfigurationen) oder vorher das neue `.tar` importieren.
+3. Projekt > Aktion > Erstellen. Der Container Manager lädt das Image und erstellt den Container neu. Ein vorher verbundener Tunnel verbindet sich von selbst wieder.
+4. Die Version auf der Seite **System** prüfen.
+
+## 9. Admin-Passwort vergessen
+
+`tunneldeck reset-admin` im Container ausführen: Container Manager > Container > tunneldeck > Terminal > Erstellen > `tunneldeck reset-admin`, oder per SSH:
+
+```sh
+sudo docker exec tunneldeck tunneldeck reset-admin
+```
+
+Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleiben. Danach die Oberfläche öffnen und das Konto neu anlegen. Alternativ `TUNNELDECK_RESET_ADMIN: "1"` setzen, neu starten, Konto anlegen und die Variable wieder entfernen; solange sie gesetzt ist, wird bei jedem Start zurückgesetzt.

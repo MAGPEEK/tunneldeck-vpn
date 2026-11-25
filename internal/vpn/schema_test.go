@@ -1,0 +1,65 @@
+package vpn
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestConditionValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		c       Condition
+		wantErr bool
+	}{
+		{name: "key and equals", c: Condition{Key: "authMode", Equals: []string{"password"}}},
+		{name: "secret", c: Condition{Secret: "tlsAuthKey"}},
+		{name: "empty", c: Condition{}, wantErr: true},
+		{name: "key without equals", c: Condition{Key: "authMode"}, wantErr: true},
+		{name: "equals without key", c: Condition{Equals: []string{"x"}}, wantErr: true},
+		{name: "secret and key", c: Condition{Secret: "s", Key: "k", Equals: []string{"x"}}, wantErr: true},
+		{name: "secret and equals", c: Condition{Secret: "s", Equals: []string{"x"}}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.c.Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFormSchemaValidate(t *testing.T) {
+	schema := func(condition Condition) FormSchema {
+		return FormSchema{Sections: []Section{{Key: "s", Fields: []Field{
+			{Key: "authMode", Type: FieldSelect},
+			{Key: "tlsAuthKey", Type: FieldSecret},
+			{Key: "dependent", Type: FieldSelect, VisibleWhen: &condition},
+		}}}}
+	}
+	tests := []struct {
+		name      string
+		condition Condition
+		wantErr   bool
+	}{
+		{name: "setting condition", condition: Condition{Key: "authMode", Equals: []string{"password"}}},
+		{name: "secret condition", condition: Condition{Secret: "tlsAuthKey"}},
+		{name: "key names a secret", condition: Condition{Key: "tlsAuthKey", Equals: []string{"x"}}, wantErr: true},
+		{name: "key names no field", condition: Condition{Key: "missing", Equals: []string{"x"}}, wantErr: true},
+		{name: "secret names a setting", condition: Condition{Secret: "authMode"}, wantErr: true},
+		{name: "invalid form", condition: Condition{Secret: "tlsAuthKey", Key: "authMode"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := schema(tt.condition).Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSecretConditionJSON(t *testing.T) {
+	b, err := json.Marshal(Condition{Secret: "tlsAuthKey"})
+	if err != nil || string(b) != `{"secret":"tlsAuthKey"}` {
+		t.Errorf("Marshal = %s, %v", b, err)
+	}
+}

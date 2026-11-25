@@ -15,10 +15,8 @@ export interface SchemaOption {
   labelKey: string;
 }
 
-export interface VisibleWhen {
-  key: string;
-  equals: string[];
-}
+/** A setting holds one of `equals`, or the secret field `secret` has a value. */
+export type VisibleWhen = { key: string; equals: string[] } | { secret: string };
 
 export interface SchemaField {
   key: string;

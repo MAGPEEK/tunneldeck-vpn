@@ -72,12 +72,33 @@ export function initialSecrets(
   return states;
 }
 
-export function isVisible(field: SchemaField, values: FormValues): boolean {
-  if (!field.visibleWhen) {
+/** A secret has a value while it is stored, being replaced, or typed in. */
+function secretHasValue(state: SecretState | undefined): boolean {
+  switch (state?.mode) {
+    case 'stored':
+    case 'replace':
+      return true;
+    case 'new':
+      return state.value.trim() !== '';
+    default:
+      return false;
+  }
+}
+
+/**
+ * Evaluates `visibleWhen`: either a setting holds one of the listed values,
+ * or a secret field has a value.
+ */
+export function isVisible(field: SchemaField, values: FormValues, secrets: SecretStates): boolean {
+  const condition = field.visibleWhen;
+  if (!condition) {
     return true;
   }
-  const current = values[field.visibleWhen.key];
-  return typeof current === 'string' && field.visibleWhen.equals.includes(current);
+  if ('secret' in condition) {
+    return secretHasValue(secrets[condition.secret]);
+  }
+  const current = values[condition.key];
+  return typeof current === 'string' && condition.equals.includes(current);
 }
 
 function toSetting(
@@ -121,13 +142,13 @@ export function toRequestPart(
       } else if (
         (state?.mode === 'replace' || state?.mode === 'new') &&
         state.value !== '' &&
-        isVisible(field, values)
+        isVisible(field, values, secrets)
       ) {
         part.secrets[field.key] = state.value;
       }
       continue;
     }
-    if (!isVisible(field, values)) {
+    if (!isVisible(field, values, secrets)) {
       continue;
     }
     const setting = toSetting(field, values[field.key] ?? '');

@@ -19,12 +19,12 @@ export interface SchemaFormProps {
 
 /** Renders a driver's FormSchema: one card per section, fields shown per `visibleWhen`. */
 export function SchemaForm(props: SchemaFormProps) {
-  const { schema, values } = props;
+  const { schema, values, secrets } = props;
   const text = useDriverText();
   return (
     <>
       {schema.sections.map((section) => {
-        const fields = section.fields.filter((field) => isVisible(field, values));
+        const fields = section.fields.filter((field) => isVisible(field, values, secrets));
         if (fields.length === 0) {
           return null;
         }

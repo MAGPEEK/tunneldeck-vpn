@@ -4,7 +4,7 @@ Working name: **TunnelDeck** (binary `tunneldeck`). A self-hosted VPN client gat
 
 ## 1. Goals
 
-- Run a VPN client on a Docker host (reference host: Synology DS723+, x86-64, DSM 7.2, Linux 4.4) and manage it entirely from a web UI: profiles, connect/disconnect, status, live log.
+- Run a VPN client on **any Linux Docker host** (amd64 and arm64: servers, mini PCs, Raspberry Pi, NAS) and manage it entirely from a web UI: profiles, connect/disconnect, status, live log. Nothing may depend on a particular distribution or vendor; vendor-specific steps live only in `docs/` guides. The oldest supported environment is the first test device, a Synology DS723+ (DSM 7.2, Linux 4.4, iptables-legacy, no DCO), so every feature must also work on an old kernel without nftables.
 - Act as a gateway between the LAN and the VPN (stage 2) while never breaking the host's own connectivity.
 - Support several VPN methods through one driver interface. **OpenVPN is the first and, for now, only driver.** WireGuard and IPsec/IKEv2 must be addable without touching API, store or UI pages.
 - Reference use case: mdex public.IP (`publicipNN.mdex.de`, UDP 1194, username/password, `cipher none`, extra options as on a Teltonika RUT240).

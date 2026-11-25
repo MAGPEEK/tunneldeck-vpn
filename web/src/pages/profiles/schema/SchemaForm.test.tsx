@@ -105,9 +105,56 @@ describe('SchemaForm', () => {
       authMode: 'password',
       compression: 'none',
       verifyServerCertUsage: true,
-      keyDirection: '1',
       resolveRetry: 'infinite',
     });
+  });
+
+  it('shows the key direction only while a TLS auth key is set', () => {
+    const { submit } = renderHarness();
+    expect(screen.queryByLabelText('Key direction')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('TLS auth key'), { target: { value: 'KEY' } });
+
+    expect(screen.getByLabelText('Key direction')).toHaveValue('1');
+    expect(submit().settings.keyDirection).toBe('1');
+
+    fireEvent.change(screen.getByLabelText('TLS auth key'), { target: { value: '' } });
+    expect(screen.queryByLabelText('Key direction')).not.toBeInTheDocument();
+  });
+
+  it('shows a field with a secret condition while the stored secret is kept', () => {
+    const schema: FormSchema = {
+      sections: [
+        {
+          key: 's',
+          labelKey: 'openvpn.section.encryption',
+          fields: [
+            { key: 'tlsAuthKey', type: 'secret', labelKey: 'openvpn.tlsAuthKey', multiline: true },
+            {
+              key: 'dependent',
+              type: 'text',
+              labelKey: 'openvpn.keyDirection',
+              visibleWhen: { secret: 'tlsAuthKey' },
+            },
+          ],
+        },
+      ],
+    };
+    const { submit } = renderHarness({
+      schema,
+      settings: { dependent: 'x' },
+      stored: { tlsAuthKey: { hasValue: true } },
+    });
+    expect(screen.getByLabelText('Key direction')).toHaveValue('x');
+    expect(submit().settings).toEqual({ dependent: 'x' });
+
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'TLS auth key' })).getByRole('button', {
+        name: 'Remove',
+      }),
+    );
+
+    expect(screen.queryByLabelText('Key direction')).not.toBeInTheDocument();
   });
 
   it('sends text, number, select, textarea and bool values with their JSON types', () => {

@@ -1,6 +1,6 @@
 # TunnelDeck
 
-**Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Gebaut für NAS-Geräte wie die Synology DS723+, läuft auf jedem Linux-Docker-Host.
+**Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Läuft auf jedem Linux-Docker-Host mit amd64 oder arm64: Server, Mini-PC, Raspberry Pi oder NAS.
 
 [English](README.md) · Lizenz: MIT · Status: **in Entwicklung (0.1.0-dev)**, noch kein Release
 
@@ -39,6 +39,14 @@ services:
 ```
 
 `http://<host-ip>:8194` öffnen und das Admin-Konto anlegen. Passwort vergessen: `docker exec tunneldeck tunneldeck reset-admin`.
+
+## Dokumentation
+
+- [Einrichtung auf einem Linux-Docker-Host](docs/linux.de.md): TUN-Gerät, Firewall-Werkzeuge (ufw, firewalld), HTTPS, Sicherung, Aktualisierung
+- [Einrichtung auf einer Synology](docs/synology.de.md): TUN-Modul, Container Manager, Firewall, HTTPS, Sicherung, Aktualisierung
+- [Umzug vom Teltonika RUT240](docs/migrate-from-rut240.de.md): Felder und zusätzliche Optionen, Beispiel mdex
+- [Releases](docs/RELEASING.md) (englisch): Versions-Tags, Image bauen und veröffentlichen
+- [Spezifikation](docs/SPEC.md) und [OpenVPN-Notizen](docs/openvpn-notes.md) (englisch)
 
 ## Fahrplan
 

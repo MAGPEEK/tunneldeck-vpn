@@ -106,7 +106,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
 
   const visibleKeys = schema
     ? schemaFields(schema)
-        .filter((field) => isVisible(field, draft.values))
+        .filter((field) => isVisible(field, draft.values, draft.secrets))
         .map((field) => field.key)
     : [];
   const fieldErrors =

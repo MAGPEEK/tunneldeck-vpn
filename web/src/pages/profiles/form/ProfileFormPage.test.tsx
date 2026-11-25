@@ -111,7 +111,6 @@ describe('new profile', () => {
         authDigest: 'none',
         compression: 'none',
         verifyServerCertUsage: true,
-        keyDirection: '1',
         resolveRetry: 'infinite',
         extraOptions: [
           'tun-mtu 1500',

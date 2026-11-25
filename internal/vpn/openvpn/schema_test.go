@@ -57,7 +57,7 @@ func TestDescribeFieldsAreConsistent(t *testing.T) {
 	}
 	for _, section := range schema.Sections {
 		for _, f := range section.Fields {
-			if f.VisibleWhen == nil {
+			if f.VisibleWhen == nil || f.VisibleWhen.Secret != "" {
 				continue
 			}
 			for _, value := range f.VisibleWhen.Equals {
@@ -77,6 +77,28 @@ func TestDescribeFieldsAreConsistent(t *testing.T) {
 	}
 }
 
+func TestDescribeConditionsAreValid(t *testing.T) {
+	if err := Describe().Validate(); err != nil {
+		t.Errorf("Validate: %v", err)
+	}
+}
+
+func TestKeyDirectionIsVisibleWithTheTLSAuthKey(t *testing.T) {
+	for _, section := range Describe().Sections {
+		for _, f := range section.Fields {
+			if f.Key != KeyKeyDirection {
+				continue
+			}
+			c := f.VisibleWhen
+			if c == nil || c.Secret != SecretTLSAuthKey || c.Key != "" || c.Equals != nil {
+				t.Errorf("key direction visibleWhen = %+v, want secret %q", f.VisibleWhen, SecretTLSAuthKey)
+			}
+			return
+		}
+	}
+	t.Fatal("key direction field missing")
+}
+
 func TestDescribeMarshalsToJSON(t *testing.T) {
 	b, err := json.Marshal(Describe())
 	if err != nil {
@@ -86,6 +108,7 @@ func TestDescribeMarshalsToJSON(t *testing.T) {
 		`"key":"remoteHost","type":"text","labelKey":"openvpn.remoteHost","required":true`,
 		`"key":"port","type":"number","labelKey":"openvpn.port","required":true,"default":1194`,
 		`"visibleWhen":{"key":"authMode","equals":["certificate","certificate+password"]}`,
+		`"visibleWhen":{"secret":"tlsAuthKey"}`,
 		`"key":"verifyServerCertUsage","type":"bool","labelKey":"openvpn.verifyServerCertUsage","default":true`,
 		`"key":"extraOptions","type":"stringList"`,
 	} {

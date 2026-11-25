@@ -5,19 +5,27 @@
 - `CHANGELOG.md` — Keep a Changelog; add user-visible changes under `Unreleased`
 - `go.mod` — Go module `tunneldeck`; `ignore ./web/node_modules` keeps npm packages out of `./...`
 - `.golangci.yml` — golangci-lint v2 config (govet, staticcheck, errcheck, ineffassign, unused, revive, misspell, gofmt, goimports)
-- `Dockerfile` — multi-stage build: Node (frontend) → Go (static binary) → Alpine runtime with openvpn and iptables
+- `Dockerfile` — multi-stage build: Node (frontend) → Go (static binary, `VERSION`/`REVISION` build args) → Alpine runtime with openvpn 2.7, iptables, tzdata; OCI labels, `HEALTHCHECK`, root rationale
 - `.dockerignore` — keeps docs, VCS data, node_modules and local build output out of the image context
-- `docker-compose.yml` — run the image with host network, `NET_ADMIN`, `/dev/net/tun`, `./data:/data`
+- `.gitattributes` — LF endings for shell scripts
+- `docker-compose.yml` — local use: host network, `NET_ADMIN`, `/dev/net/tun`, `./data:/data`, optional env vars as comments
+- `deploy/synology/docker-compose.yml` — Synology Container Manager project, data in `/volume1/docker/tunneldeck`
+- `scripts/version.sh` — derives `VERSION`, `REVISION`, image `TAG` from `git describe` (sourced by the two scripts below)
+- `scripts/build-image.sh` — builds `magpeek/tunneldeck:<tag>` with version build args; no push
+- `scripts/export-image.sh` — `docker save` to `tunneldeck-<tag>.tar` for Synology import
+- `docs/synology.md`, `docs/synology.de.md` — DS723+ / DSM 7.2 guide: TUN module, project, first sign-in, firewall, reverse proxy, remote access, backup, update, reset-admin
+- `docs/migrate-from-rut240.md`, `docs/migrate-from-rut240.de.md` — RUT240 field and extra-option mapping, mdex example, level 30 recommendation
+- `docs/RELEASING.md` — release steps: changelog, tag, build, smoke test, image tags
 - `.github/workflows/ci.yml` — CI: frontend lint/test/build, Go build/test/lint, Docker build (no push)
 - `docs/SPEC.md` — specification; change only with the orchestrator
 - `docs/PLAN.md` — task list and status
 - `docs/openvpn-notes.md` — lab-verified OpenVPN 2.7 facts: directives, management dialogue, reference config; binding for the driver
 - `docs/reference/original-compose.yml` — original Alpine/OpenVPN compose this project replaces
-- `cmd/tunneldeck/` — entry point: subcommands `serve`/`reset-admin` (`main.go`), wiring, startup order and graceful shutdown (`serve.go`), listen-address detection (`listen.go`), auth/cookie/import adapters for the API (`adapters.go`), `reset-admin` via control socket or store (`reset.go`)
+- `cmd/tunneldeck/` — entry point: subcommands `serve`/`reset-admin`/`healthcheck` (`main.go`), health probe of the UI listener (`healthcheck.go`), wiring, startup order and graceful shutdown (`serve.go`), listen-address detection (`listen.go`), auth/cookie/import adapters for the API (`adapters.go`), `reset-admin` via control socket or store (`reset.go`)
 - `internal/config/` — SPEC §10 environment → validated `Config` (`config.go`)
 - `internal/control/` — root-only unix control socket (`control.sock`, one-line protocol) for `reset-admin`; SO_PEERCRED check in `peer_linux.go`, fallback in `peer_other.go`
 - `internal/domain/` — core types: Profile (generic Settings plus Secrets), PublicProfile/hasValue, DailyReconnect, HostAccessRule, RemoteAccess/KeyPair, events, DesiredConnection, AdminAccount, sentinel errors and ValidationError, NewID
-- `internal/vpn/` — `Driver` and `Secrets` (`driver.go`), `Advisory` (`advisory.go`), `FormSchema` (`schema.go`), driver `Registry` (`registry.go`), Clock (`clock.go`), ConnectionManager and its interfaces (`manager.go`), its state machine (`loop.go`, `loop_events.go`), Status (`status.go`), backoff and daily schedule (`schedule.go`), log ring (`logring.go`)
+- `internal/vpn/` — `Driver` and `Secrets` (`driver.go`), `Advisory` (`advisory.go`), `FormSchema` with `Condition` (setting or secret) and its validation (`schema.go`), driver `Registry` (`registry.go`), Clock (`clock.go`), ConnectionManager and its interfaces (`manager.go`), its state machine (`loop.go`, `loop_events.go`), Status (`status.go`), backoff and daily schedule (`schedule.go`), log ring (`logring.go`)
 - `internal/vpn/vpntest/` — FakeClock, test-only
 - `internal/vpn/openvpn/` (runtime) — Driver (`driver.go`), process supervision (`supervisor.go`), management dialogue (`session.go`), line parser (`management.go`), log levels (`logline.go`), seams (`system.go`), `Pdeathsig` (`process_linux.go`, no-op `process_other.go`)
 - `internal/vpn/openvpn/` (config) — keys and `Validate` (`settings.go`), `Render` (`render.go`), `ImportOVPN` (`importer.go`), `Advise` (`advisory.go`), `Describe` (`schema.go`), `Warning` (`warning.go`), tokenizer (`directive.go`), denylist (`classify.go`, `extra.go`), PEM/static-key checks (`pem.go`); golden files in `testdata/`
@@ -43,7 +51,7 @@
 - `web/src/live/` — `LiveEvents` (one EventSource on `/api/events` feeding the query cache, reconnect with backoff), log line append/filter helpers
 - `web/src/queries/` — TanStack Query hooks per resource and connection control mutations
 - `web/src/hooks/` — `useNow` ticking clock
-- `web/src/pages/` — setup and login; `dashboard/` (connection card, metrics, host protection, log); `profiles/` (list, import panel, `form/` profile editor with protocol chooser, schedule and import warnings, `schema/` generic `SchemaForm` renderer); `host-access/` (rule editor); `system/` (version, self-check, remote access)
+- `web/src/pages/` — setup and login; `dashboard/` (connection card, metrics, host protection, log); `profiles/` (list, import panel, `form/` profile editor with protocol chooser, schedule and import warnings, `schema/` generic `SchemaForm` renderer; `schemaValues.ts` evaluates `visibleWhen` for setting and secret conditions); `host-access/` (rule editor); `system/` (version, self-check, remote access)
 - `web/src/test/` — Vitest setup, fetch mock, fake EventSource, fixtures (OpenVPN schema, profiles, status), `renderApp`/`renderWithProviders` helpers
 - `web/vite.config.ts` — build output, `/api` dev proxy to `127.0.0.1:8194`, Vitest config
 - `web/eslint.config.js` — ESLint flat config (typescript-eslint strict, react-hooks, prettier)
