@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-11-25
+
 ### Added
 
 - Project skeleton: Go backend serving `/api/system` and the embedded React app, Docker image definition, CI workflow.

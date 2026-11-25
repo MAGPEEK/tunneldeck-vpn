@@ -2,7 +2,7 @@
 
 **Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Läuft auf jedem Linux-Docker-Host mit amd64 oder arm64: Server, Mini-PC, Raspberry Pi oder NAS.
 
-[English](README.md) · Lizenz: MIT · Status: **in Entwicklung (0.1.0-dev)**, noch kein Release
+[English](README.md) · Lizenz: MIT · Status: **Vorab-Version 0.1.0-alpha.1**, noch nicht im Praxistest bestätigt
 
 ## Was es kann
 
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.1.0-dev
+    image: magpeek/tunneldeck-vpn:0.1.0-alpha.1
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
