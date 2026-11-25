@@ -39,9 +39,9 @@ services:
     <<: *server
     command: [c-certificate]
 
-  # Each TunnelDeck sees only one working iptables backend, emulating the
-  # two kinds of hosts: the binaries of the other backend are removed
-  # before the server starts (README.md, "iptables backends").
+  # All three detect the iptables backend automatically (README.md,
+  # "iptables backends"). The first two see only one working backend: the
+  # other backend's binaries are removed before the server starts.
   tunneldeck-legacy:
     <<: *tunneldeck
     build:
@@ -53,6 +53,19 @@ services:
   tunneldeck-nft:
     <<: *tunneldeck
     entrypoint: ["/bin/sh", "-c", "rm -f /usr/sbin/xtables-legacy-multi && exec /usr/local/bin/tunneldeck"]
+
+  # Both backends work; a host firewall on nf_tables already drops TCP from
+  # the tunnel, like ufw's "deny incoming". TunnelDeck must share that
+  # backend, otherwise its host-access rules could not open a port.
+  tunneldeck-shared:
+    <<: *tunneldeck
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        { iptables-nft -w -C INPUT -i tdvpn0 -p tcp -j DROP 2>/dev/null ||
+        iptables-nft -w -A INPUT -i tdvpn0 -p tcp -j DROP; } &&
+        exec /usr/local/bin/tunneldeck
 
 networks:
   e2e: {}

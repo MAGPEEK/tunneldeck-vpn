@@ -61,8 +61,8 @@ func checkSelfChecks(t *testing.T, td *tunnelDeck) {
 		if !check.OK {
 			t.Errorf("self-check %s failed: %s", check.ID, check.Detail)
 		}
-		if check.ID == "iptables" && check.Detail != td.backend.selfCheck {
-			t.Errorf("iptables self-check = %q, want %q", check.Detail, td.backend.selfCheck)
+		if check.ID == "iptables" && !strings.HasPrefix(check.Detail, td.backend.selfCheckPrefix) {
+			t.Errorf("iptables self-check = %q, want it to start with %q", check.Detail, td.backend.selfCheckPrefix)
 		}
 	}
 }
@@ -155,9 +155,9 @@ func (sc *scenario) checkRejectedPasswordIsNotRetried(t *testing.T) {
 	if got := sc.authAttempts(t); got != 1 {
 		t.Errorf("server saw %d login attempts within %s, want 1 (no retry)", got, noRetryWindow)
 	}
-	// A profile in state error still counts as active: disconnect first.
-	sc.td.disconnect(t)
+	// The active profile in state error is disconnected by the delete.
 	sc.td.deleteProfile(t, id)
+	sc.td.waitForState(t, "disconnected", 30*time.Second)
 }
 
 func (sc *scenario) authAttempts(t *testing.T) int {
@@ -228,7 +228,8 @@ func (sc *scenario) checkRoutingRestored(t *testing.T) {
 }
 
 // checkFirewallInstalled: INPUT jumps to TUNNELDECK-INPUT first, and that
-// chain ends with DROP, in the backend's own tables.
+// chain ends with DROP, in the chosen backend's tables; the other backend
+// holds none of TunnelDeck's rules.
 func (sc *scenario) checkFirewallInstalled(t *testing.T) {
 	t.Helper()
 	iptables := sc.td.backend.iptables
@@ -239,6 +240,11 @@ func (sc *scenario) checkFirewallInstalled(t *testing.T) {
 	chain := appendRules(sc.td.exec(t, iptables, "-w", "-S", "TUNNELDECK-INPUT"))
 	if len(chain) == 0 || chain[len(chain)-1] != "-A TUNNELDECK-INPUT -j DROP" {
 		t.Errorf("%s TUNNELDECK-INPUT = %q, want DROP last", iptables, chain)
+	}
+	if unused := sc.td.backend.unusedIptables; unused != "" {
+		if listing := sc.td.exec(t, unused, "-w", "-S"); strings.Contains(listing, "TUNNELDECK-") {
+			t.Errorf("%s holds TunnelDeck's rules:\n%s", unused, listing)
+		}
 	}
 }
 

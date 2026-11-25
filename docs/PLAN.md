@@ -1,5 +1,9 @@
 # TunnelDeck — Plan (stage 1)
 
+## [ ] 15. Rename to TunnelDeck-VPN — light — after: backend fix
+
+Display name becomes **TunnelDeck-VPN** (owner's decision, 2026-11-25). Change it in every user-visible place: README(s), `docs/*.md` prose, UI (`web/index.html` title, product name in the shell, i18n strings), Dockerfile OCI title/description/source, user-visible OpenVPN warning messages and the rendered-config header comment (regenerate golden files), LICENSE holder line. GitHub repo is now `MAGPEEK/tunneldeck-vpn`: update every repo URL. Image name becomes `magpeek/tunneldeck-vpn` in compose files, scripts and docs. Keep technical identifiers unchanged: Go module `tunneldeck`, binary `tunneldeck`, `TUNNELDECK_*` env vars, `TUNNELDECK-*` chains, `tdvpn0`, cookie and header names, container name `tunneldeck`. Code comments may keep "TunnelDeck".
+
 Status legend: `[ ]` open, `[x]` accepted. Spec: `docs/SPEC.md`. Every task: update `filemap.md` for added/moved files, keep all checks in CLAUDE.md green, do not commit (the orchestrator commits after review).
 
 ## [x] 1. Scaffold project — medium — after: –

@@ -20,23 +20,26 @@ func TestLoad(t *testing.T) {
 		{
 			name: "defaults",
 			env:  map[string]string{},
-			want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelInfo, TimeZone: DefaultTimeZone},
+			want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelInfo, TimeZone: DefaultTimeZone, Iptables: IptablesAuto},
 		},
 		{
 			name: "all set",
 			env: map[string]string{
 				EnvListen: "192.168.1.10:9000", EnvDataDir: "/srv/td", EnvSecretKey: " a2V5 ",
-				EnvLogLevel: "DEBUG", EnvResetAdmin: "1", EnvTimeZone: "Europe/Berlin",
+				EnvLogLevel: "DEBUG", EnvResetAdmin: "1", EnvTimeZone: "Europe/Berlin", EnvIptables: " Legacy ",
 			},
 			want: Config{
 				Listen: "192.168.1.10:9000", DataDir: "/srv/td", SecretKey: "a2V5",
-				LogLevel: slog.LevelDebug, ResetAdmin: true, TimeZone: "Europe/Berlin",
+				LogLevel: slog.LevelDebug, ResetAdmin: true, TimeZone: "Europe/Berlin", Iptables: IptablesLegacy,
 			},
 		},
-		{name: "all interfaces", env: map[string]string{EnvListen: ":8194"}, want: Config{Listen: ":8194", DataDir: DefaultDataDir, TimeZone: DefaultTimeZone}},
-		{name: "warn level", env: map[string]string{EnvLogLevel: "warn"}, want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelWarn, TimeZone: DefaultTimeZone}},
-		{name: "error level", env: map[string]string{EnvLogLevel: "error"}, want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelError, TimeZone: DefaultTimeZone}},
-		{name: "reset 0", env: map[string]string{EnvResetAdmin: "0"}, want: Config{DataDir: DefaultDataDir, TimeZone: DefaultTimeZone}},
+		{name: "all interfaces", env: map[string]string{EnvListen: ":8194"}, want: Config{Listen: ":8194", DataDir: DefaultDataDir, TimeZone: DefaultTimeZone, Iptables: IptablesAuto}},
+		{name: "warn level", env: map[string]string{EnvLogLevel: "warn"}, want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelWarn, TimeZone: DefaultTimeZone, Iptables: IptablesAuto}},
+		{name: "error level", env: map[string]string{EnvLogLevel: "error"}, want: Config{DataDir: DefaultDataDir, LogLevel: slog.LevelError, TimeZone: DefaultTimeZone, Iptables: IptablesAuto}},
+		{name: "reset 0", env: map[string]string{EnvResetAdmin: "0"}, want: Config{DataDir: DefaultDataDir, TimeZone: DefaultTimeZone, Iptables: IptablesAuto}},
+		{name: "iptables auto", env: map[string]string{EnvIptables: "auto"}, want: Config{DataDir: DefaultDataDir, TimeZone: DefaultTimeZone, Iptables: IptablesAuto}},
+		{name: "iptables nft", env: map[string]string{EnvIptables: "nft"}, want: Config{DataDir: DefaultDataDir, TimeZone: DefaultTimeZone, Iptables: IptablesNft}},
+		{name: "iptables binary name", env: map[string]string{EnvIptables: "iptables-nft"}, wantErr: []string{EnvIptables}},
 		{name: "listen without port", env: map[string]string{EnvListen: "192.168.1.10"}, wantErr: []string{EnvListen}},
 		{name: "listen host name", env: map[string]string{EnvListen: "nas.local:8194"}, wantErr: []string{EnvListen}},
 		{name: "listen ipv6", env: map[string]string{EnvListen: "[::1]:8194"}, wantErr: []string{EnvListen}},
@@ -44,8 +47,8 @@ func TestLoad(t *testing.T) {
 		{name: "listen port text", env: map[string]string{EnvListen: "127.0.0.1:http"}, wantErr: []string{EnvListen}},
 		{
 			name:    "several problems",
-			env:     map[string]string{EnvLogLevel: "verbose", EnvResetAdmin: "yes", EnvTimeZone: "Mars/Olympus"},
-			wantErr: []string{EnvLogLevel, EnvResetAdmin, EnvTimeZone},
+			env:     map[string]string{EnvLogLevel: "verbose", EnvResetAdmin: "yes", EnvTimeZone: "Mars/Olympus", EnvIptables: "xtables"},
+			wantErr: []string{EnvLogLevel, EnvResetAdmin, EnvTimeZone, EnvIptables},
 		},
 	}
 	for _, tt := range tests {

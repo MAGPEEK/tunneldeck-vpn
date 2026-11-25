@@ -3,7 +3,6 @@ package netguard
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -56,8 +55,6 @@ func scriptInstalled(f *fakeRunner) {
 		on(legacy+"-S TUNNELDECK-FORWARD", ok(installedForwardChain)).
 		on(legacy+"-S FORWARD", ok(installedForward))
 }
-
-var detectLegacy = []string{"iptables-legacy -w -L -n"}
 
 var freshInputCalls = prefixed(legacy,
 	"-S TUNNELDECK-INPUT",
@@ -202,7 +199,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
 			tt.script(f)
-			if err := New(f).InstallFirewall(context.Background(), tt.rules, uiPort); err != nil {
+			if err := newLegacyGuard(f).InstallFirewall(context.Background(), tt.rules, uiPort); err != nil {
 				t.Fatalf("InstallFirewall: %v", err)
 			}
 			assertCalls(t, f.calls, tt.want)
@@ -213,7 +210,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 func TestInstallFirewallIsIdempotent(t *testing.T) {
 	f := newFakeRunner()
 	scriptFresh(f)
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
@@ -274,7 +271,7 @@ func TestInstallFirewallRejectsInvalidRulesBeforeAnyCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
-			err := New(f).InstallFirewall(context.Background(), tt.rules, uiPort)
+			err := newLegacyGuard(f).InstallFirewall(context.Background(), tt.rules, uiPort)
 			var v *domain.ValidationError
 			if !errors.As(err, &v) || !errors.Is(err, domain.ErrValidation) {
 				t.Fatalf("err = %v, want *domain.ValidationError", err)
@@ -289,64 +286,19 @@ func TestInstallFirewallRejectsInvalidRulesBeforeAnyCommand(t *testing.T) {
 	}
 }
 
-func TestBackendFallsBackToNftIptables(t *testing.T) {
-	f := newFakeRunner()
-	notFound := &CommandError{Name: "iptables-legacy", ExitCode: -1, Err: exec.ErrNotFound}
-	f.on("iptables-legacy -w -L -n", fakeResult{err: notFound}).
-		on("iptables -w -S TUNNELDECK-INPUT", ok(installedInputChain), ok(installedInputChain)).
-		on("iptables -w -S INPUT", ok(installedInput), ok(installedInput)).
-		on("iptables -w -S TUNNELDECK-FORWARD", ok(installedForwardChain), ok(installedForwardChain)).
-		on("iptables -w -S FORWARD", ok(installedForward), ok(installedForward))
-	g := New(f)
-	for range 2 {
-		if err := g.InstallFirewall(context.Background(), nil, uiPort); err != nil {
-			t.Fatalf("InstallFirewall: %v", err)
-		}
-	}
-	assertCalls(t, f.calls[:3], []string{"iptables-legacy -w -L -n", "iptables -w -L -n", "iptables -w -S TUNNELDECK-INPUT"})
-	for _, call := range f.calls[2:] {
-		if !strings.HasPrefix(call, "iptables -w ") || strings.Contains(call, "-L -n") {
-			t.Errorf("call %q: want the detected backend without new detection", call)
-		}
-	}
-}
-
-func TestBackendUnavailable(t *testing.T) {
-	f := newFakeRunner()
-	f.on("iptables-legacy -w -L -n", fail(noPermission), fail(noPermission)).
-		on("iptables -w -L -n", fail(noPermission), fail(noPermission))
-	g := New(f)
-	for _, op := range []func() error{
-		func() error { return g.InstallFirewall(context.Background(), testRules, uiPort) },
-		func() error { return g.RemoveFirewall(context.Background()) },
-	} {
-		err := op()
-		var noBackend *NoBackendError
-		if !errors.As(err, &noBackend) || len(noBackend.Attempts) != 2 {
-			t.Fatalf("err = %v, want *NoBackendError with two attempts", err)
-		}
-		if !strings.Contains(err.Error(), "Permission denied") {
-			t.Errorf("err = %q, want the stderr of the attempts", err)
-		}
-	}
-	assertCalls(t, f.calls, []string{
-		"iptables-legacy -w -L -n", "iptables -w -L -n",
-		"iptables-legacy -w -L -n", "iptables -w -L -n",
-	})
-}
-
 func TestConntrackFallsBackToStateMatch(t *testing.T) {
 	const conntrackRule = legacy + "-A TUNNELDECK-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
 	const stateRule = legacy + "-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
 	f := newFakeRunner()
 	scriptInstalled(f)
 	f.on(conntrackRule, fail("iptables v1.8.7 (legacy): Couldn't load match `conntrack':No such file or directory"))
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.InstallFirewall(context.Background(), nil, uiPort); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 	calls := f.takeCalls()
-	assertCalls(t, calls[3:6], []string{conntrackRule, stateRule, legacy + "-A TUNNELDECK-INPUT -j DROP"})
+	afterListings := len(detectLegacy) + 2
+	assertCalls(t, calls[afterListings:afterListings+3], []string{conntrackRule, stateRule, legacy + "-A TUNNELDECK-INPUT -j DROP"})
 
 	scriptInstalled(f)
 	if err := g.InstallFirewall(context.Background(), nil, uiPort); err != nil {
@@ -363,7 +315,7 @@ func TestConntrackAndStateBothFail(t *testing.T) {
 	scriptInstalled(f)
 	f.on(legacy+"-A TUNNELDECK-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT", fail("no conntrack")).
 		on(legacy+"-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT", fail("no state"))
-	err := New(f).InstallFirewall(context.Background(), nil, uiPort)
+	err := newLegacyGuard(f).InstallFirewall(context.Background(), nil, uiPort)
 	if err == nil || !strings.Contains(err.Error(), "no conntrack") || !strings.Contains(err.Error(), "no state") {
 		t.Fatalf("err = %v, want both match failures", err)
 	}
@@ -378,7 +330,7 @@ func TestInstallFirewallFailureLeavesDropInPlace(t *testing.T) {
 	scriptFresh(f)
 	f.on(failing, fail("iptables: Resource temporarily unavailable."))
 
-	err := New(f).InstallFirewall(context.Background(), testRules, uiPort)
+	err := newLegacyGuard(f).InstallFirewall(context.Background(), testRules, uiPort)
 	if err == nil {
 		t.Fatal("InstallFirewall succeeded despite a failing command")
 	}
@@ -425,7 +377,7 @@ func TestInstallFirewallEarlyFailures(t *testing.T) {
 			f := newFakeRunner()
 			scriptFresh(f)
 			f.scripts[tt.failing] = []fakeResult{fail(tt.stderr)}
-			err := New(f).InstallFirewall(context.Background(), testRules, uiPort)
+			err := newLegacyGuard(f).InstallFirewall(context.Background(), testRules, uiPort)
 			if err == nil || !strings.Contains(err.Error(), tt.stderr) {
 				t.Fatalf("err = %v, want the stderr %q", err, tt.stderr)
 			}
@@ -492,7 +444,7 @@ func TestRemoveFirewall(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
 			tt.script(f)
-			if err := New(f).RemoveFirewall(context.Background()); err != nil {
+			if err := newLegacyGuard(f).RemoveFirewall(context.Background()); err != nil {
 				t.Fatalf("RemoveFirewall: %v", err)
 			}
 			assertCalls(t, f.calls, tt.want)
@@ -544,7 +496,7 @@ func TestRemoveFirewallFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
 			tt.script(f)
-			err := New(f).RemoveFirewall(context.Background())
+			err := newLegacyGuard(f).RemoveFirewall(context.Background())
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
 			}

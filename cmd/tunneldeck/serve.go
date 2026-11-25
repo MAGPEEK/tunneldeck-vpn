@@ -149,7 +149,7 @@ func (a *app) resetAdminFromEnv(context.Context) error {
 // logged and shown on the System page; the server keeps running, and the
 // connection manager refuses to connect without the firewall.
 func (a *app) protectHost(ctx context.Context) error {
-	a.guard = netguard.New(a.host.runner)
+	a.guard = netguard.New(a.host.runner, netguard.WithBackend(netguard.BackendPreference(a.cfg.Iptables)))
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	results := a.guard.SelfCheck(ctx)
@@ -159,10 +159,25 @@ func (a *app) protectHost(ctx context.Context) error {
 		}
 	}
 	a.checks = toCheckResults(results)
+	logBackend(a.guard)
 	if err := a.guard.InstallFirewall(ctx, a.store.HostAccessRules(), a.uiPort); err != nil {
 		slog.Error("install firewall; connecting is refused until it works", "error", err)
 	}
 	return nil
+}
+
+// logBackend logs the detected iptables backend and why it was chosen; a
+// host whose firewall uses both backends gets a warning.
+func logBackend(guard *netguard.Guard) {
+	backend, ok := guard.Backend()
+	if !ok {
+		return
+	}
+	if backend.Mixed {
+		slog.Warn("iptables backend: the host has rules in both backends", "binary", backend.Binary, "reason", backend.Reason)
+		return
+	}
+	slog.Info("iptables backend", "binary", backend.Binary, "reason", backend.Reason)
 }
 
 func (a *app) startManager(ctx context.Context) error {

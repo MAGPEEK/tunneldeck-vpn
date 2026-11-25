@@ -206,12 +206,20 @@ func mergeValidation(v *domain.ValidationError, err error) {
 	}
 }
 
+// deleteProfile refuses to delete the active profile while its tunnel is
+// up or changing state (SPEC §9). An active profile in state error or
+// disconnected is disconnected first, which clears the desired connection.
 func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	status := s.deps.Connection.Status()
-	if status.ProfileID == id && status.State != domain.StateDisconnected {
-		writeError(w, r, conflictError{detail: "Disconnect the profile before deleting it."})
-		return
+	if status := s.deps.Connection.Status(); status.ProfileID == id {
+		if tunnelInUse(status.State) {
+			writeError(w, r, conflictError{detail: "Disconnect the profile before deleting it."})
+			return
+		}
+		if err := s.deps.Connection.Disconnect(r.Context()); err != nil {
+			writeError(w, r, err)
+			return
+		}
 	}
 	if err := s.deps.Profiles.DeleteProfile(id); err != nil {
 		writeError(w, r, err)
@@ -219,6 +227,15 @@ func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deps.Connection.ProfileChanged(id)
 	writeNoContent(w)
+}
+
+// tunnelInUse reports whether a tunnel in state is up or changing state.
+func tunnelInUse(state domain.ConnectionState) bool {
+	switch state {
+	case domain.StateConnecting, domain.StateConnected, domain.StateReconnecting, domain.StateDisconnecting:
+		return true
+	}
+	return false
 }
 
 func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {

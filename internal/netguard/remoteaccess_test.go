@@ -30,7 +30,7 @@ func reinstallInputCalls(extra ...string) []string {
 func TestSetRemoteAccessPortReinstallsAnInstalledFirewall(t *testing.T) {
 	f := newFakeRunner()
 	scriptFresh(f)
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestSetRemoteAccessPortReinstallsAnInstalledFirewall(t *testing.T) {
 
 func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {
 	f := newFakeRunner()
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.SetRemoteAccessPort(context.Background(), remotePort); err != nil {
 		t.Fatalf("SetRemoteAccessPort: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {
 func TestSetRemoteAccessPortValidation(t *testing.T) {
 	f := newFakeRunner()
 	scriptFresh(f)
-	g := New(f)
+	g := newLegacyGuard(f)
 	for _, port := range []int{-1, 65536} {
 		if err := g.SetRemoteAccessPort(context.Background(), port); !errors.Is(err, domain.ErrValidation) {
 			t.Errorf("port %d: err = %v, want ErrValidation", port, err)
@@ -93,7 +93,7 @@ func TestSetRemoteAccessPortValidation(t *testing.T) {
 
 func TestInstallFirewallRejectsRemoteAccessOnTheUIPort(t *testing.T) {
 	f := newFakeRunner()
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.SetRemoteAccessPort(context.Background(), uiPort); err != nil {
 		t.Fatalf("SetRemoteAccessPort before install: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestInstallFirewallRejectsRemoteAccessOnTheUIPort(t *testing.T) {
 func TestRemoveFirewallForgetsTheInstallation(t *testing.T) {
 	f := newFakeRunner()
 	scriptFresh(f)
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestRemoveFirewallForgetsTheInstallation(t *testing.T) {
 func TestSetRemoteAccessPortReportsAFailedReinstall(t *testing.T) {
 	f := newFakeRunner()
 	scriptFresh(f)
-	g := New(f)
+	g := newLegacyGuard(f)
 	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}

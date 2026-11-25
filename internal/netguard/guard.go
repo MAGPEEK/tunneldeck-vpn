@@ -18,18 +18,17 @@ const (
 	rulePriority = "7194"
 )
 
-// backendCandidates are tried in order; the first that can list the filter
-// table is used for the process lifetime.
-var backendCandidates = []string{"iptables-legacy", "iptables"}
-
 // Guard installs the host-protection chains and the tunnel policy routing.
 // All methods are safe for concurrent use; calls are serialised.
 type Guard struct {
-	runner CommandRunner
-	root   fs.FS // file system the self-check looks for the TUN device in
+	runner     CommandRunner
+	root       fs.FS // file system the self-check looks for the TUN device in
+	preference BackendPreference
 
-	mu         sync.Mutex
-	backend    string   // detected iptables binary, empty until detected
+	mu sync.Mutex
+	// backend is the detected iptables backend, used for the process
+	// lifetime; nil until detected.
+	backend    *Backend
 	stateMatch []string // detected match for ESTABLISHED,RELATED, nil until detected
 	// remoteAccessPort is the TCP port of the HTTPS listener that tunnel
 	// traffic may reach, 0 while remote access is off.
@@ -45,8 +44,12 @@ type installation struct {
 }
 
 // New returns a Guard that runs every command through runner.
-func New(runner CommandRunner) *Guard {
-	return &Guard{runner: runner, root: os.DirFS("/")}
+func New(runner CommandRunner, opts ...Option) *Guard {
+	g := &Guard{runner: runner, root: os.DirFS("/"), preference: BackendAuto}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 // iptables runs the detected iptables binary with -w (wait for the xtables
@@ -56,25 +59,7 @@ func (g *Guard) iptables(ctx context.Context, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return g.runner.Run(ctx, backend, append([]string{"-w"}, args...)...)
-}
-
-// detectBackend returns the cached backend or finds the first candidate
-// that can list the filter table. Only success is cached.
-func (g *Guard) detectBackend(ctx context.Context) (string, error) {
-	if g.backend != "" {
-		return g.backend, nil
-	}
-	var attempts []error
-	for _, name := range backendCandidates {
-		if _, err := g.runner.Run(ctx, name, "-w", "-L", "-n"); err != nil {
-			attempts = append(attempts, err)
-			continue
-		}
-		g.backend = name
-		return name, nil
-	}
-	return "", &NoBackendError{Attempts: attempts}
+	return g.runner.Run(ctx, backend.Binary, append([]string{"-w"}, args...)...)
 }
 
 // listRules returns the "-A ..." lines of iptables -S for chain.

@@ -3,6 +3,7 @@ package netguard
 import (
 	"context"
 	"io/fs"
+	"slices"
 	"testing"
 	"testing/fstest"
 )
@@ -26,24 +27,22 @@ func TestSelfCheck(t *testing.T) {
 			root:   withTun(charDevice),
 			script: func(*fakeRunner) {},
 			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true},
-			wantCalls: []string{
-				"iptables-legacy -w -L -n",
+			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
 				legacy + "-X TUNNELDECK-PROBE",
-			},
+			}),
 		},
 		{
 			name:   "leftover probe chain is only deleted",
 			root:   withTun(charDevice),
 			script: func(f *fakeRunner) { f.on(legacy+"-N TUNNELDECK-PROBE", fail("iptables: Chain already exists.")) },
 			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true},
-			wantCalls: []string{
-				"iptables-legacy -w -L -n",
+			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
 				legacy + "-X TUNNELDECK-PROBE",
-			},
+			}),
 		},
 		{
 			name: "no tun device, no ip tool, no NET_ADMIN for chains",
@@ -53,11 +52,10 @@ func TestSelfCheck(t *testing.T) {
 					on(legacy+"-N TUNNELDECK-PROBE", fail(noPermission))
 			},
 			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: false, CheckNetAdmin: false},
-			wantCalls: []string{
-				"iptables-legacy -w -L -n",
+			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
-			},
+			}),
 		},
 		{
 			name: "tun is not a device and probe deletion fails",
@@ -66,25 +64,24 @@ func TestSelfCheck(t *testing.T) {
 				f.on(legacy+"-X TUNNELDECK-PROBE", fail(noPermission))
 			},
 			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: false},
-			wantCalls: []string{
-				"iptables-legacy -w -L -n",
+			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
 				legacy + "-X TUNNELDECK-PROBE",
-			},
+			}),
 		},
 		{
 			name: "no iptables backend",
 			root: withTun(charDevice),
 			script: func(f *fakeRunner) {
-				f.on("iptables-legacy -w -L -n", fail(noPermission), fail(noPermission)).
-					on("iptables -w -L -n", fail(noPermission), fail(noPermission))
+				f.on("iptables-legacy -w -t filter -S", fail(noPermission), fail(noPermission)).
+					on("iptables -V", ok(nftVersion), ok(nftVersion))
 			},
 			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: false, CheckIPTool: true, CheckNetAdmin: false},
 			wantCalls: []string{
-				"iptables-legacy -w -L -n", "iptables -w -L -n",
+				"iptables-legacy -w -t filter -S", "iptables -V",
 				ruleShow,
-				"iptables-legacy -w -L -n", "iptables -w -L -n",
+				"iptables-legacy -w -t filter -S", "iptables -V",
 			},
 		},
 	}
@@ -92,7 +89,7 @@ func TestSelfCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
 			tt.script(f)
-			g := New(f)
+			g := newLegacyGuard(f)
 			g.root = tt.root
 			results := g.SelfCheck(context.Background())
 			if len(results) != len(tt.wantOK) {

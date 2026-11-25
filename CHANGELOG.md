@@ -26,3 +26,5 @@ All notable changes to this project are documented in this file. The format foll
 ### Fixed
 
 - Profile form: "Key direction" is shown only while a TLS auth key is set, and is no longer sent without one.
+- iptables backend: TunnelDeck now uses the backend that the host's firewall (ufw, firewalld, Docker) already uses instead of always preferring `iptables-legacy`; on modern hosts its chains no longer live in a second, parallel rule set where the host's nftables rules still dropped ports opened under host access. Without host rules nf_tables is preferred, old kernels keep legacy. The System page and the start log name the backend and the reason, and warn when the host mixes both. `TUNNELDECK_IPTABLES=auto|nft|legacy` overrides the detection.
+- Deleting the active profile while it is in state `error` (or disconnected) no longer fails with 409: it is disconnected first, then deleted. Deletion is still refused while the tunnel is connecting, connected, reconnecting or disconnecting.

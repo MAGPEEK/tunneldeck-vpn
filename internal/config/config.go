@@ -18,6 +18,7 @@ const (
 	EnvSecretKey  = "TUNNELDECK_SECRET_KEY"
 	EnvLogLevel   = "TUNNELDECK_LOG_LEVEL"
 	EnvResetAdmin = "TUNNELDECK_RESET_ADMIN"
+	EnvIptables   = "TUNNELDECK_IPTABLES"
 	EnvTimeZone   = "TZ"
 )
 
@@ -26,6 +27,13 @@ const (
 	DefaultDataDir  = "/data"
 	DefaultPort     = 8194
 	DefaultTimeZone = "UTC"
+)
+
+// Values of TUNNELDECK_IPTABLES: detect the host's backend, or force one.
+const (
+	IptablesAuto   = "auto"
+	IptablesNft    = "nft"
+	IptablesLegacy = "legacy"
 )
 
 // Config is the validated configuration from the environment.
@@ -40,6 +48,9 @@ type Config struct {
 	SecretKey  string
 	LogLevel   slog.Level
 	ResetAdmin bool
+	// Iptables is the iptables backend preference: IptablesAuto (default),
+	// IptablesNft or IptablesLegacy.
+	Iptables string
 	// TimeZone is the TZ name, DefaultTimeZone when TZ is unset.
 	TimeZone string
 }
@@ -71,6 +82,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.ResetAdmin, err = parseFlag(getenv(EnvResetAdmin)); err != nil {
 		errs = append(errs, fmt.Errorf("%s: %w", EnvResetAdmin, err))
+	}
+	if cfg.Iptables, err = parseIptables(getenv(EnvIptables)); err != nil {
+		errs = append(errs, fmt.Errorf("%s: %w", EnvIptables, err))
 	}
 	if _, err := time.LoadLocation(cfg.TimeZone); err != nil {
 		errs = append(errs, fmt.Errorf("%s: unknown time zone %q", EnvTimeZone, cfg.TimeZone))
@@ -113,6 +127,16 @@ func parseLogLevel(value string) (slog.Level, error) {
 		return slog.LevelError, nil
 	}
 	return 0, errors.New("must be debug, info, warn or error")
+}
+
+func parseIptables(value string) (string, error) {
+	switch value = strings.ToLower(strings.TrimSpace(value)); value {
+	case "":
+		return IptablesAuto, nil
+	case IptablesAuto, IptablesNft, IptablesLegacy:
+		return value, nil
+	}
+	return "", errors.New("must be auto, nft or legacy")
 }
 
 func parseFlag(value string) (bool, error) {

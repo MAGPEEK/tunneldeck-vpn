@@ -66,7 +66,7 @@ func (g *Guard) checkIptables(ctx context.Context) CheckResult {
 	if err != nil {
 		return failed(CheckIptables, err.Error(), hintIptables)
 	}
-	return passed(CheckIptables, "using "+backend)
+	return passed(CheckIptables, "using "+backend.Binary+": "+backend.Reason)
 }
 
 func (g *Guard) checkIPTool(ctx context.Context) CheckResult {

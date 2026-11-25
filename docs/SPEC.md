@@ -89,7 +89,7 @@ Container runs with `network_mode: host`, `cap_add: NET_ADMIN`, device `/dev/net
 - **Host protection:** chain `TUNNELDECK-INPUT`, jumped to from `INPUT` (position 1) for `-i tdvpn0`: accept `ESTABLISHED,RELATED`; accept each enabled `HostAccessRule` (proto tcp|udp, port, optional source CIDR); drop the rest. Chain `TUNNELDECK-FORWARD` from `FORWARD` (position 1): drop everything in or out of `tdvpn0` (stage 1 forwards nothing).
 - Rules are installed at application start (before any tunnel) and re-applied idempotently whenever host-access rules change; removed on graceful shutdown.
 - The UI port can never be opened through a host-access rule (validation error).
-- iptables backend: detect at start whether `iptables-legacy` or `iptables` (nft) works on the host kernel and use that binary for the process lifetime.
+- iptables backend: share the host firewall's backend. At start, count the host rules (filter and nat tables, without TunnelDeck's own chains and `ACCEPT` policies) that `iptables-nft` and `iptables-legacy` (or plain `iptables`, per `iptables -V`) list; use the backend that holds rules, the one with more if both do (with a warning), nf_tables if neither does, and the only working one on old kernels. The binary is kept for the process lifetime; the self-check and the start log name it and the reason. `TUNNELDECK_IPTABLES` can force one.
 - Startup self-check reports: `/dev/net/tun` present, `NET_ADMIN` effective, iptables usable. Failures are shown in the UI (System status), not just logged.
 
 ## 7. Persistence and secrets
@@ -131,7 +131,7 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | POST | `/api/setup`, `/api/login`, `/api/logout` | Account and session |
 | GET | `/api/drivers` | Protocols with their `FormSchema` |
 | GET/POST | `/api/profiles` | List / create |
-| GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete refused while active and connected) |
+| GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete refused while the profile is active and connecting, connected, reconnecting or disconnecting; an active profile in state `error` is disconnected first) |
 | POST | `/api/profiles/import` | Parse `.ovpn` text → draft profile + warnings (not saved). The draft echoes the secrets contained in the uploaded text back to the same client so the form can submit them with the create request — the only response that carries secret values, and never from storage |
 | GET | `/api/connection` | State, active profile, VPN IP, remote, since, bytes in/out, rates |
 | POST | `/api/connection/connect` `{profileId}`, `/disconnect`, `/reconnect` | Control |
@@ -149,6 +149,7 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | `TUNNELDECK_SECRET_KEY` | – | Base64 key instead of `secret.key` |
 | `TUNNELDECK_LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `TUNNELDECK_RESET_ADMIN` | – | `1` removes the admin account at start (see §8) |
+| `TUNNELDECK_IPTABLES` | `auto` | iptables backend: `auto` (share the host firewall's backend, see §6) \| `nft` \| `legacy` |
 | `TZ` | `UTC` | Time zone for the daily reconnect and log timestamps |
 
 Backup in stage 1 = copying `/data` including `secret.key`; an export/import UI is not part of stage 1.

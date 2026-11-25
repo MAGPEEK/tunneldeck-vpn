@@ -15,20 +15,34 @@ const (
 	vpnWrongPassword = "not-the-password"
 )
 
-// backend is a TunnelDeck container that sees only one working iptables
-// backend (compose.yml removes the other one's binaries).
+// backend is a TunnelDeck container and the iptables backend its automatic
+// detection must choose (compose.yml sets up each host).
 type backend struct {
 	name    string
 	service string
-	// iptables is the binary that lists this backend's chains.
+	// iptables is the binary that lists the chosen backend's chains.
 	iptables string
-	// selfCheck is the expected detail of the "iptables" self-check.
-	selfCheck string
+	// unusedIptables lists the backend that must stay free of TunnelDeck's
+	// chains; empty when its binaries were removed.
+	unusedIptables string
+	// selfCheckPrefix is the expected start of the "iptables" self-check
+	// detail; the rule count after it depends on Docker's own rules.
+	selfCheckPrefix string
 }
 
 var backends = []backend{
-	{name: "iptables-legacy", service: "tunneldeck-legacy", iptables: "iptables-legacy", selfCheck: "using iptables-legacy"},
-	{name: "iptables-nft", service: "tunneldeck-nft", iptables: "iptables-nft", selfCheck: "using iptables"},
+	{
+		name: "only-legacy", service: "tunneldeck-legacy", iptables: "iptables-legacy",
+		selfCheckPrefix: "using iptables-legacy: only the legacy backend works",
+	},
+	{
+		name: "only-nft", service: "tunneldeck-nft", iptables: "iptables-nft",
+		selfCheckPrefix: "using iptables-nft: only the nf_tables backend works",
+	},
+	{
+		name: "both-nft-has-host-rules", service: "tunneldeck-shared", iptables: "iptables-nft", unusedIptables: "iptables-legacy",
+		selfCheckPrefix: "using iptables-nft: host rules only in nf_tables (",
+	},
 }
 
 // pki is the throwaway PKI of one test server, read from its container.

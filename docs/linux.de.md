@@ -21,7 +21,7 @@ Diese Anleitung betreibt TunnelDeck auf jedem Linux-Host mit Docker: Server, Min
   echo tun | sudo tee /etc/modules-load.d/tun.conf
   ```
 
-- **iptables-Unterstützung im Kernel**: nftables (`nf_tables`, jede aktuelle Distribution) oder die alten Module `ip_tables`/`iptable_filter` (alte Kernel wie der 4.4 von DSM). Das Image enthält `iptables-legacy` und `iptables` (nft); TunnelDeck probiert zuerst `iptables-legacy` und nimmt das erste, das funktioniert (siehe Abschnitt 4). Der Container kann keine Kernelmodule laden: Funktioniert keins, eins auf dem Host laden, zum Beispiel `sudo modprobe nf_tables` oder `sudo modprobe -a ip_tables iptable_filter`.
+- **iptables-Unterstützung im Kernel**: nftables (`nf_tables`, jede aktuelle Distribution) oder die alten Module `ip_tables`/`iptable_filter` (alte Kernel wie der 4.4 von DSM). Das Image enthält `iptables-legacy` und `iptables-nft`; TunnelDeck nimmt das, welches die Firewall des Hosts bereits nutzt (siehe Abschnitt 4). Der Container kann keine Kernelmodule laden: Funktioniert keins, eins auf dem Host laden, zum Beispiel `sudo modprobe nf_tables` oder `sudo modprobe -a ip_tables iptable_filter`.
 - **Policy-Routing** (`ip rule`), in jedem Distributionskernel enthalten.
 
 ## 2. Starten
@@ -40,6 +40,7 @@ services:
     environment:
       TZ: Europe/Berlin
       # TUNNELDECK_LISTEN: "192.168.1.10:8194"  # Standard: Schnittstelle der Default-Route, Port 8194
+      # TUNNELDECK_IPTABLES: nft                # Standard auto: Backend der Host-Firewall
     restart: unless-stopped
 ```
 
@@ -70,25 +71,31 @@ Was TunnelDeck auf dem Host ändert (SPEC §6):
 Den Zustand mit dem Backend prüfen, das TunnelDeck verwendet (der iptables-Selbsttest auf der Seite System nennt es):
 
 ```sh
+sudo iptables-nft -S INPUT | head -3        # Backend "iptables-nft"
 sudo iptables-legacy -S INPUT | head -3     # Backend "iptables-legacy"
-sudo iptables-nft -S INPUT | head -3        # Backend "iptables" (nft)
 ip rule show; ip route show table 7194
 ```
 
-### Zwei Backends, zwei Regelwerke
+### Welches iptables-Backend TunnelDeck nutzt
 
-`iptables-legacy` und `iptables-nft` führen getrennte Regelwerke, und der Kernel wendet beide an: Ein Paket muss die Legacy-Ketten *und* die nftables-Ketten passieren. Ein `ACCEPT` im einen hebt ein `DROP` im anderen nicht auf. TunnelDeck nimmt `iptables-legacy`, sobald der Kernel es unterstützt, auch auf Hosts, deren ufw, firewalld oder Docker nftables nutzen. Folgen:
+`iptables-legacy` und `iptables-nft` führen getrennte Regelwerke, und der Kernel wendet beide an: Ein Paket muss die Legacy-Ketten *und* die nftables-Ketten passieren. Ein `ACCEPT` im einen hebt ein `DROP` im anderen nicht auf. TunnelDeck teilt sich deshalb das Backend mit der Firewall des Hosts. Beim Start listet es mit beiden Programmen die Tabellen `filter` und `nat` und zählt die Regeln darin, ohne seine eigenen Ketten und ohne `ACCEPT`-Policies:
 
-- Was TunnelDeck verwirft, bleibt verworfen, egal was die Host-Firewall erlaubt.
-- Filtert die Host-Firewall im anderen Backend eingehenden Verkehr auf `tdvpn0`, muss ein unter **Host-Zugriff** freigegebener Port (oder der Port des Fernzugriffs) dort ebenfalls erlaubt werden.
+- nur ein Backend funktioniert: dieses (alte Kernel wie der 4.4 von DSM haben nur legacy),
+- nur ein Backend enthält Regeln: dieses,
+- beide enthalten Regeln: das mit mehr Regeln; die Seite System und das Log warnen, dass der Host beide Backends mischt und die Regeln des anderen weiter gelten,
+- keins enthält Regeln: nf_tables.
+
+Der iptables-Selbsttest auf der Seite System und das Start-Log (`iptables backend binary=... reason=...`) nennen die Wahl und den Grund. Wer sie übersteuern will, setzt `TUNNELDECK_IPTABLES` auf `nft` oder `legacy` (Standard `auto`).
+
+Auch im gemeinsamen Backend wirken die Regeln zusammen, in fester Reihenfolge: TunnelDeck setzt seinen Sprung an Position 1 von `INPUT`, für Verkehr, der über `tdvpn0` ankommt, entscheidet also zuerst seine Kette, und diese Entscheidung gilt. Ein unter **Host-Zugriff** freigegebener Port (oder der Port des Fernzugriffs) ist erreichbar, auch wenn die Host-Firewall ihn verwerfen würde; alles andere aus dem Tunnel wird verworfen, auch wenn die Host-Firewall es erlaubt. Verkehr auf anderen Schnittstellen läuft nie durch die Ketten von TunnelDeck. Regeln in einer anderen *Tabelle* (die eigene nftables-Tabelle von firewalld oder das andere Backend auf einem gemischten Host) werden getrennt ausgewertet und können verwerfen, was TunnelDeck annimmt.
 
 ### ufw
 
 Mit dem üblichen `default deny incoming` von ufw:
 
 - Den UI-Port aus dem LAN erlauben, sonst sperrt ufw den Browser aus: `sudo ufw allow from 192.168.1.0/24 to any port 8194 proto tcp`.
-- **Gleiches Backend** (TunnelDeck zeigt `using iptables`, ufw auf nft): Der Sprung von TunnelDeck steht in `INPUT` vor den Ketten von ufw, TunnelDeck entscheidet also allein über Tunnelverkehr. Eine Host-Zugriffsregel öffnet den Port; die eigenen Freigaben von ufw (zum Beispiel `ufw allow 22`) öffnen am Tunnel nichts. `ufw reload` lässt den Sprung von TunnelDeck an erster Stelle.
-- **Verschiedene Backends** (TunnelDeck zeigt `using iptables-legacy`, ufw auf nft): Eine Host-Zugriffsregel allein reicht nicht, ufw verwirft den Port weiterhin. Ihn zusätzlich in ufw erlauben:
+- **Gleiches Backend** (der Normalfall: ufw auf nft, TunnelDeck zeigt `using iptables-nft`): Der Sprung von TunnelDeck steht in `INPUT` vor den Ketten von ufw, TunnelDeck entscheidet also allein über Tunnelverkehr. Eine Host-Zugriffsregel öffnet den Port; die eigenen Freigaben von ufw (zum Beispiel `ufw allow 22`) öffnen am Tunnel nichts. `ufw reload` lässt den Sprung von TunnelDeck an erster Stelle.
+- **Verschiedene Backends** (nur wenn `TUNNELDECK_IPTABLES` das andere Backend erzwingt oder der Host beide mischt und das andere mehr Regeln enthält): Eine Host-Zugriffsregel allein reicht nicht, ufw verwirft den Port weiterhin. Ihn zusätzlich in ufw erlauben:
 
   ```sh
   sudo ufw allow in on tdvpn0 to any port 8443 proto tcp
@@ -96,7 +103,7 @@ Mit dem üblichen `default deny incoming` von ufw:
 
   Die Regel lässt sich anlegen, auch wenn `tdvpn0` gerade nicht existiert. Ein nur in ufw erlaubter Port bleibt zu, weil TunnelDeck ihn verwirft.
 
-Beide Fälle sind in einem Container-Labor geprüft (Alpine, ufw 0.36.2 auf iptables-nft, TunnelDeck mit einem Testserver verbunden, Proben durch den Tunnel). Nicht geprüft auf einer vollständigen Distribution wie Ubuntu oder Debian.
+Beide Fälle sind in einem Container-Labor geprüft (Alpine, ufw 0.36.2 auf iptables-nft, TunnelDeck mit einem Testserver verbunden, Proben durch den Tunnel). Der End-to-End-Test deckt den gemeinsamen Fall mit automatischer Erkennung ab: eine Host-Regel in nf_tables, die TCP aus dem Tunnel verwirft, und Host-Zugriffsregeln, die ihren Port trotzdem öffnen. Nicht geprüft auf einer vollständigen Distribution wie Ubuntu oder Debian.
 
 ### firewalld
 

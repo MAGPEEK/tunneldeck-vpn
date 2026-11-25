@@ -80,6 +80,15 @@ const (
 	notPermitted = "RTNETLINK answers: Operation not permitted"
 )
 
+// newLegacyGuard returns a Guard forced to the legacy backend, so tests of
+// the chain handling see a short, fixed detection (detectLegacy).
+func newLegacyGuard(f *fakeRunner) *Guard {
+	return New(f, WithBackend(BackendLegacy))
+}
+
+// detectLegacy is the detection of newLegacyGuard.
+var detectLegacy = []string{"iptables-legacy -w -t filter -S", "iptables-legacy -w -t nat -S"}
+
 func assertCalls(t *testing.T, got, want []string) {
 	t.Helper()
 	if slices.Equal(got, want) {

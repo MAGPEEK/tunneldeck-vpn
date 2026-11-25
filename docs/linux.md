@@ -21,7 +21,7 @@ This guide runs TunnelDeck on any Linux host with Docker: a server, a mini PC, a
   echo tun | sudo tee /etc/modules-load.d/tun.conf
   ```
 
-- **iptables support in the kernel**: nftables (`nf_tables`, every current distribution) or the legacy `ip_tables`/`iptable_filter` modules (old kernels such as DSM's 4.4). The image ships both `iptables-legacy` and `iptables` (nft); TunnelDeck tries `iptables-legacy` first and uses the first that works (see section 4). The container cannot load kernel modules: if neither works, load one on the host, for example `sudo modprobe nf_tables` or `sudo modprobe -a ip_tables iptable_filter`.
+- **iptables support in the kernel**: nftables (`nf_tables`, every current distribution) or the legacy `ip_tables`/`iptable_filter` modules (old kernels such as DSM's 4.4). The image ships both `iptables-legacy` and `iptables-nft`; TunnelDeck uses the one your host's firewall already uses (see section 4). The container cannot load kernel modules: if neither works, load one on the host, for example `sudo modprobe nf_tables` or `sudo modprobe -a ip_tables iptable_filter`.
 - **Policy routing** (`ip rule`), part of every distribution kernel.
 
 ## 2. Start
@@ -40,6 +40,7 @@ services:
     environment:
       TZ: Europe/Berlin
       # TUNNELDECK_LISTEN: "192.168.1.10:8194"  # default: default-route interface, port 8194
+      # TUNNELDECK_IPTABLES: nft                # default auto: the host firewall's backend
     restart: unless-stopped
 ```
 
@@ -70,25 +71,31 @@ What TunnelDeck changes on the host (SPEC §6):
 Check the state with the backend TunnelDeck uses (the iptables self-check on the System page names it):
 
 ```sh
+sudo iptables-nft -S INPUT | head -3        # backend "iptables-nft"
 sudo iptables-legacy -S INPUT | head -3     # backend "iptables-legacy"
-sudo iptables-nft -S INPUT | head -3        # backend "iptables" (nft)
 ip rule show; ip route show table 7194
 ```
 
-### Two backends, two rule sets
+### Which iptables backend TunnelDeck uses
 
-`iptables-legacy` and `iptables-nft` keep separate rule sets, and the kernel applies both: a packet must pass the legacy chains *and* the nftables chains. An `ACCEPT` in one does not override a `DROP` in the other. TunnelDeck uses `iptables-legacy` whenever the kernel supports it, even on hosts whose ufw, firewalld or Docker use nftables. Consequences:
+`iptables-legacy` and `iptables-nft` keep separate rule sets, and the kernel applies both: a packet must pass the legacy chains *and* the nftables chains. An `ACCEPT` in one does not override a `DROP` in the other. TunnelDeck therefore shares the backend of the host's firewall. At start it lists the `filter` and `nat` tables with both binaries and counts the rules there, ignoring its own chains and `ACCEPT` policies:
 
-- Traffic TunnelDeck drops stays dropped, whatever the host firewall allows.
-- If the host firewall filters incoming traffic on `tdvpn0` in the other backend, a port you open under **Host access** (or the remote-access port) must be allowed there as well.
+- only one backend works: that one (old kernels such as DSM's 4.4 have only legacy),
+- only one backend holds rules: that one,
+- both hold rules: the one with more; the System page and the log warn that the host mixes backends, whose other rules still apply,
+- neither holds rules: nf_tables.
+
+The iptables self-check on the System page and the start log (`iptables backend binary=... reason=...`) name the choice and the reason. To override it, set `TUNNELDECK_IPTABLES` to `nft` or `legacy` (default `auto`).
+
+On a shared backend the rules still interact, in a fixed order: TunnelDeck inserts its jump at position 1 of `INPUT`, so for traffic arriving on `tdvpn0` its chain decides first and that decision wins. A port opened under **Host access** (or the remote-access port) is reachable even if the host firewall would drop it; everything else from the tunnel is dropped even if the host firewall allows it. Traffic on other interfaces never enters TunnelDeck's chains. Rules in another *table* (firewalld's own nftables table, or the other backend on a mixed host) are evaluated separately and can still drop what TunnelDeck accepts.
 
 ### ufw
 
 With ufw's usual `default deny incoming`:
 
 - Allow the UI port from your LAN, otherwise ufw blocks the browser: `sudo ufw allow from 192.168.1.0/24 to any port 8194 proto tcp`.
-- **Same backend** (TunnelDeck shows `using iptables`, ufw on nft): TunnelDeck's jump sits before ufw's chains in `INPUT`, so TunnelDeck alone decides about tunnel traffic. A host-access rule opens the port; ufw's own allow rules (for example `ufw allow 22`) open nothing on the tunnel. `ufw reload` keeps TunnelDeck's jump first.
-- **Different backends** (TunnelDeck shows `using iptables-legacy`, ufw on nft): a host-access rule alone is not enough, because ufw still drops the port. Allow it in ufw too:
+- **Same backend** (the normal case: ufw on nft, TunnelDeck shows `using iptables-nft`): TunnelDeck's jump sits before ufw's chains in `INPUT`, so TunnelDeck alone decides about tunnel traffic. A host-access rule opens the port; ufw's own allow rules (for example `ufw allow 22`) open nothing on the tunnel. `ufw reload` keeps TunnelDeck's jump first.
+- **Different backends** (only when `TUNNELDECK_IPTABLES` forces the other backend, or the host mixes both and the other one holds more rules): a host-access rule alone is not enough, because ufw still drops the port. Allow it in ufw too:
 
   ```sh
   sudo ufw allow in on tdvpn0 to any port 8443 proto tcp
@@ -96,7 +103,7 @@ With ufw's usual `default deny incoming`:
 
   The rule can be added while `tdvpn0` does not exist. A port allowed only in ufw stays closed, because TunnelDeck drops it.
 
-Both cases were verified in a container lab (Alpine, ufw 0.36.2 on iptables-nft, TunnelDeck connected to a test server, probes through the tunnel). Not verified on a full distribution install such as Ubuntu or Debian.
+Both cases were verified in a container lab (Alpine, ufw 0.36.2 on iptables-nft, TunnelDeck connected to a test server, probes through the tunnel). The end-to-end test covers the shared case with automatic detection: a host rule in nf_tables that drops TCP from the tunnel, and host-access rules that still open their port. Not verified on a full distribution install such as Ubuntu or Debian.
 
 ### firewalld
 

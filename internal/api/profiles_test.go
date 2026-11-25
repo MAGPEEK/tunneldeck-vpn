@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -208,15 +209,19 @@ func TestUpdateMissingProfile(t *testing.T) {
 
 func TestDeleteProfile(t *testing.T) {
 	tests := []struct {
-		name   string
-		state  domain.ConnectionState
-		active bool
-		status int
+		name         string
+		state        domain.ConnectionState
+		active       bool
+		status       int
+		wantCommands []string
 	}{
 		{name: "inactive", state: domain.StateConnected, status: http.StatusNoContent},
-		{name: "active but disconnected", state: domain.StateDisconnected, active: true, status: http.StatusNoContent},
+		{name: "active but disconnected", state: domain.StateDisconnected, active: true, status: http.StatusNoContent, wantCommands: []string{"disconnect"}},
+		{name: "active in error", state: domain.StateError, active: true, status: http.StatusNoContent, wantCommands: []string{"disconnect"}},
+		{name: "active and connecting", state: domain.StateConnecting, active: true, status: http.StatusConflict},
 		{name: "active and connected", state: domain.StateConnected, active: true, status: http.StatusConflict},
-		{name: "active and retrying", state: domain.StateError, active: true, status: http.StatusConflict},
+		{name: "active and reconnecting", state: domain.StateReconnecting, active: true, status: http.StatusConflict},
+		{name: "active and disconnecting", state: domain.StateDisconnecting, active: true, status: http.StatusConflict},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,6 +233,9 @@ func TestDeleteProfile(t *testing.T) {
 			}
 			env.connection.setStatus(status)
 			rec := env.do(t, http.MethodDelete, "/api/profiles/"+stored.ID, "")
+			if !slices.Equal(env.connection.commands, tt.wantCommands) {
+				t.Errorf("connection commands = %v, want %v", env.connection.commands, tt.wantCommands)
+			}
 			if tt.status == http.StatusConflict {
 				p := assertProblem(t, rec, tt.status, CodeConflict)
 				if !strings.Contains(p.Detail, "Disconnect") {
@@ -246,6 +254,17 @@ func TestDeleteProfile(t *testing.T) {
 	}
 	env := newTestEnv(t)
 	assertProblem(t, env.do(t, http.MethodDelete, "/api/profiles/missing", ""), http.StatusNotFound, CodeNotFound)
+}
+
+func TestDeleteProfileKeepsProfileWhenDisconnectFails(t *testing.T) {
+	env := newTestEnv(t)
+	stored := env.storedProfile("Office")
+	env.connection.setStatus(vpn.Status{State: domain.StateError, ProfileID: stored.ID})
+	env.connection.commandErr = fmt.Errorf("manager stopped: %w", domain.ErrConflict)
+	assertProblem(t, env.do(t, http.MethodDelete, "/api/profiles/"+stored.ID, ""), http.StatusConflict, CodeConflict)
+	if len(env.profiles.ListProfiles()) != 1 || len(env.connection.changed) != 0 {
+		t.Errorf("profiles %v, changed %v; want the profile kept", env.profiles.ListProfiles(), env.connection.changed)
+	}
 }
 
 func TestImportProfile(t *testing.T) {
