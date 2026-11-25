@@ -1,0 +1,25 @@
+# Build output
+/bin/
+/dist/
+web/dist/*
+!web/dist/.gitkeep
+web/node_modules/
+*.exe
+*.test
+coverage.out
+web/coverage/
+
+# Runtime data and secrets
+/data/
+*.ovpn
+*.key
+*.pem
+.env
+.env.*
+
+# Tools
+.idea/
+.vscode/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
