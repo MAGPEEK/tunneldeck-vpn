@@ -76,6 +76,7 @@ Every profile (driver-independent, part of `domain.Profile`) has `dailyReconnect
 - `docs/openvpn-notes.md` is binding for this driver (OpenVPN 2.7.x from Alpine): the always-emitted directives, the `cipher` → `data-ciphers` mapping (`none` → `data-ciphers none:CHACHA20-POLY1305` + `data-ciphers-fallback none`), compression rules, importer drops and the management dialogue. Decisions on its open points: OpenVPN configures the interface itself (no `ifconfig-noexec`); pushed IPv6 is ignored; `remote-cert-tls server` is emitted unless the profile setting `verifyServerCertUsage` is switched off (default on); client key and tls-auth/tls-crypt key are written inline into the rendered config in the tmpfs runtime directory (0700 dir, 0600 file, deleted on stop) because OpenVPN offers no other channel — passwords and key passphrases go over management only.
 - Routes: OpenVPN must not touch the main routing table (`route-noexec`; pushed and configured `redirect-gateway` is neutralised). See 6.
 - Profile fields (OpenVPN settings): `remoteHost`, `port`, `proto` (udp|tcp), `compression` (none|lzo), `authMode` (password | certificate | certificate+password), `username`, `password`*, `caCert`, `clientCert`, `clientKey`*, `tlsAuthKey`* / `tlsCryptKey`* + `keyDirection`, `cipher` (free text incl. `none`), `authDigest`, `resolveRetry`, `keepalive`, `extraOptions` (list of raw lines). `*` = secret.
+- **Current-practice defaults and advisories.** New profiles default to what OpenVPN 2.7 considers current: AEAD data ciphers negotiated (`cipher` empty → OpenVPN default `AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305`), `authDigest` empty (irrelevant for AEAD), no compression, `tls-version-min 1.2` rendered when the profile sets nothing (TLS 1.3 is used when the server offers it), `tls-crypt` preferred over `tls-auth`. Legacy settings stay possible because the server dictates them, but `Advisories(profile)` returns stable-coded findings that the form and the dashboard show: `unencrypted_data_channel` (cipher `none`, severity danger), `weak_cipher` (BF-CBC, DES, 3DES, RC2, CAST5, any CBC without AEAD → warning), `weak_digest` (MD5, SHA1, `none` with a non-AEAD cipher), `compression_enabled` (deprecated, VORACLE), `tls_below_1_2`, `tls_auth_instead_of_crypt` (info), `server_usage_check_disabled`, `fragment_in_use` (info: legacy MTU workaround), `no_dco` (info: kernel 4.4 has no data-channel offload, expect lower throughput). Advisories never block saving or connecting.
 - `caCert` is required for every `authMode`, including `password` (the server must always be verified; mdex issues a CA certificate).
 - `extraOptions` are validated: one directive per line, and a denylist rejects anything that runs code or fights the app: `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `auth-user-pass-verify`, `client-connect`, `client-disconnect`, `learn-address`, `plugin`, `script-security`, `management*`, `daemon`, `log`, `log-append`, `status`, `writepid`, `config`, `cd`, `chroot`, `dev`, `dev-type`, `dev-node`, `iproute`, `route-noexec`, `auth-user-pass`. `redirect-gateway` is accepted but dropped with a visible warning ("handled by TunnelDeck").
 - `.ovpn` import maps known directives to fields, inline blocks (`<ca>`, `<cert>`, `<key>`, `<tls-auth>`, `<tls-crypt>`) to cert/secret fields, everything else to `extraOptions` (subject to the denylist; rejected lines are reported, not silently dropped).
@@ -108,6 +109,17 @@ Writes are atomic (temp file + rename) and serialised by a mutex. The API never 
 - All `/api/*` except `setup`, `login`, `session` require a session. Mutating requests also require header `X-TunnelDeck-Request: 1` and a matching `Origin`/`Host` (CSRF).
 - Lost password: `tunneldeck reset-admin` (run via `docker exec`) removes the admin account and all sessions; alternatively env `TUNNELDECK_RESET_ADMIN=1` does the same at start and logs a warning on every start until it is removed. Profiles and settings are kept; the UI shows setup again.
 - Login rate limit: 5 failures per IP per minute, then lockout with backoff. Constant-time comparison.
+
+### 8.1 Remote access to the UI over the tunnel (HTTPS only)
+
+Off by default. Setting `remoteAccess { enabled bool, port int (default 8443), certificateSource "selfSigned" | "uploaded" }` in `settings.json`.
+
+- When enabled, a second listener serves the same app over **HTTPS only** on `0.0.0.0:<port>` (so it is reachable on the VPN address and, as a bonus, on the LAN). TLS 1.2 minimum, TLS 1.3 preferred, Go's default cipher suites. The plain-HTTP listener stays LAN-only and is never reachable from the tunnel.
+- Certificate: `selfSigned` — ECDSA P-256 certificate generated on first enable, valid 2 years, renewed automatically 30 days before expiry, stored in `/data` with the key encrypted like other secrets; its SHA-256 fingerprint is shown in the UI so the user can verify the browser warning. `uploaded` — PEM certificate chain and key (RFC 7468) validated on upload (key matches, not expired); the key is a secret.
+- `netguard` adds an accept for TCP `<port>` on the tunnel device while enabled. This is the only way the UI becomes reachable from the tunnel; a host-access rule for the HTTP port stays forbidden.
+- On the HTTPS listener: session cookie with `Secure`, `Strict-Transport-Security: max-age=31536000`, same CSRF and rate-limit rules. Login attempts from tunnel addresses use a stricter limit (3 failures per minute).
+- Changing the setting applies without a container restart. The port must not collide with the HTTP port or an enabled host-access rule.
+- API: `GET/PUT /api/remote-access` (state, port, source, certificate subject, expiry, fingerprint; never the key), `POST /api/remote-access/certificate` (upload). UI: section "Remote access" on the System page with a clear warning that the login becomes reachable from the internet.
 
 ## 9. HTTP API
 
@@ -222,6 +234,6 @@ Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning
 
 1. Stage 1 (this spec). Developed locally; nothing is pushed. Field test on the DS723+ with an image exported via `docker save` and imported in Container Manager.
 2. After a successful field test: public GitHub repository, image on GitHub Container Registry.
-3. Stage 2: gateway functions (LAN allow-list, kill switch, port forwards, traffic chart).
+3. Stage 2: gateway functions (LAN allow-list, kill switch, port forwards, traffic chart). Port forwards include a freely chosen external port mapped to a host service (e.g. tunnel port 4444 → DSM 5001), as the RUT240 offered for its own web UI.
 4. WireGuard driver (userspace `wireguard-go`, because the DS723+ kernel has no WireGuard module), then IPsec/IKEv2.
 5. Notifications (webhook) — not before stage 2.

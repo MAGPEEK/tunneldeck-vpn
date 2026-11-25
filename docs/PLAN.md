@@ -30,7 +30,11 @@ Implement process supervision and the management client in `internal/vpn/openvpn
 
 Implement `internal/netguard` per SPEC §6: backend detection, idempotent chain install/update/remove, policy routing add/remove, startup self-check. All commands through `CommandRunner`; tests assert exact command sequences and idempotency with a fake runner; one integration test (build tag `integration`) meant to run in a Linux container with NET_ADMIN.
 
-## [ ] 8. HTTP API and SSE — medium — after: 4, 6, 7
+## [ ] 13. Profile advisories — medium — after: 6
+
+Implement `Advisories(profile)` in `internal/vpn/openvpn` and the current-practice defaults per SPEC §5 ("Current-practice defaults and advisories"); expose advisories through the `Driver` interface (`Advise(profile) []Advisory`, driver-independent `Advisory{Code, Severity, Field}` in `internal/vpn`) so the API can return them with each profile and with the connection status. Table-driven tests for every code, including the mdex profile (must yield `unencrypted_data_channel`, `fragment_in_use`, `no_dco`).
+
+## [ ] 8. HTTP API and SSE — medium — after: 4, 6, 7, 13
 
 Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. `tunneldeck reset-admin` runs in a second process (`docker exec`), so it must ask the running server to call `auth.Service.ResetAdmin` over a root-only unix control socket (`/run/tunneldeck/control.sock`); if no server is running it edits the store directly. `TUNNELDECK_RESET_ADMIN=1` resets at start. The API also enforces that a host-access rule never opens the UI port. Handler tests with `httptest` and fakes for every endpoint and auth rule.
 
@@ -38,13 +42,13 @@ Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON error
 
 Implement in `web/`: design tokens and base styles, light/dark theme, app shell with sidebar (SPEC §11), routing, typed API client (CSRF header, error mapping), session handling, setup and login pages, i18n (de/en) scaffolding, shared components (Button, Card, Field, StatePill, EmptyState, Table). Component tests. Works against the API contract in SPEC §9 with mocked fetch.
 
-## [ ] 10. Frontend dashboard and profiles — medium — after: 8, 9
+## [ ] 10. Frontend dashboard and profiles — medium — after: 8, 9, 13, 14
 
-Implement Dashboard, Profiles (schema-driven form, import, secret fields), Host access and System pages per SPEC §11, live updates via SSE. Tests for the schema form renderer, connection card states and log filter. Verify in a browser against the running backend.
+Implement Dashboard, Profiles (schema-driven form, import, secret fields), Host access and System pages per SPEC §11, the "Remote access" section (SPEC §8.1) on the System page, profile advisories (SPEC §5) in the form and on the dashboard, live updates via SSE. Tests for the schema form renderer, connection card states and log filter. Verify in a browser against the running backend.
 
 ## [ ] 11. Image, compose, README — medium — after: 10
 
-Finalise Dockerfile (pin the `openvpn` package to `~2.7`, non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example, security model, roadmap (SPEC §15), versioning per SPEC §13 (version from `git describe` via build arg, OCI labels, release tagging steps in `docs/RELEASING.md`). Add a documented way to export the image as a `.tar` (`docker save`) for import in Synology Container Manager.
+Finalise Dockerfile (pin the `openvpn` package to `~2.7`, non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example written as a migration from a Teltonika RUT240 (which RUT240 fields map to which profile fields, which extra options are dropped or translated and why, disconnect the router before connecting because one mdex account allows one session, recommendation to move from level 20 to level 30), security model, roadmap (SPEC §15), versioning per SPEC §13 (version from `git describe` via build arg, OCI labels, release tagging steps in `docs/RELEASING.md`). Add a documented way to export the image as a `.tar` (`docker save`) for import in Synology Container Manager.
 
 ## [ ] 12. End-to-end test — careful — after: 11
 
