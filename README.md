@@ -1,4 +1,4 @@
-# TunnelDeck
+# TunnelDeck-VPN
 
 **A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC, a Raspberry Pi or a NAS.
 
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck:0.1.0-dev
+    image: magpeek/tunneldeck-vpn:0.1.0-dev
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
@@ -44,8 +44,8 @@ Open `http://<host-ip>:8194` and create the admin account. If you forget the pas
 
 | Port | Protocol | Reachable from | Purpose |
 |---|---|---|---|
-| 8194 | HTTP | LAN only, never through the tunnel | Web UI. Change it with `TUNNELDECK_LISTEN=<lan-ip>:<port>`. |
-| 8443 (default, free to choose) | HTTPS | LAN and the VPN tunnel | Optional remote access to the web UI. Off by default; turn it on under **System → Remote access**. |
+| 8194 | HTTP | LAN only, never through the tunnel | Web UI. Change it with `TUNNELDECK_LISTEN=<lan-ip>:<port>`, e.g. `192.168.1.10:9000`. |
+| 8443 (default, free to choose) | HTTPS | LAN and the VPN tunnel | Optional remote access to the web UI. Off by default; turn it on under **System → Remote access**. Remote access over the VPN is HTTPS only, never plain HTTP. |
 
 All other ports of the host are closed to the tunnel unless you open them under **Host access**.
 

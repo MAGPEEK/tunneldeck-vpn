@@ -1,4 +1,4 @@
-# TunnelDeck
+# TunnelDeck-VPN
 
 **Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Läuft auf jedem Linux-Docker-Host mit amd64 oder arm64: Server, Mini-PC, Raspberry Pi oder NAS.
 
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck:0.1.0-dev
+    image: magpeek/tunneldeck-vpn:0.1.0-dev
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
@@ -44,8 +44,8 @@ services:
 
 | Port | Protokoll | Erreichbar aus | Zweck |
 |---|---|---|---|
-| 8194 | HTTP | nur LAN, nie durch den Tunnel | Weboberfläche. Ändern mit `TUNNELDECK_LISTEN=<LAN-IP>:<Port>`. |
-| 8443 (Vorgabe, frei wählbar) | HTTPS | LAN und VPN-Tunnel | Optionaler Fernzugriff auf die Weboberfläche. Standardmäßig aus; einschalten unter **System → Fernzugriff**. |
+| 8194 | HTTP | nur LAN, nie durch den Tunnel | Weboberfläche. Ändern mit `TUNNELDECK_LISTEN=<LAN-IP>:<Port>`, z. B. `192.168.1.10:9000`. |
+| 8443 (Vorgabe, frei wählbar) | HTTPS | LAN und VPN-Tunnel | Optionaler Fernzugriff auf die Weboberfläche. Standardmäßig aus; einschalten unter **System → Fernzugriff**. Fernzugriff über das VPN nur per HTTPS, nie per reinem HTTP. |
 
 Alle anderen Ports des Hosts sind für den Tunnel gesperrt, außer du gibst sie unter **Host-Zugriff** frei.
 

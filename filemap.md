@@ -11,7 +11,7 @@
 - `docker-compose.yml` — local use: host network, `NET_ADMIN`, `/dev/net/tun`, `./data:/data`, optional env vars as comments
 - `deploy/synology/docker-compose.yml` — Synology Container Manager project, data in `/volume1/docker/tunneldeck`
 - `scripts/version.sh` — derives `VERSION`, `REVISION`, image `TAG` from `git describe` (sourced by the two scripts below)
-- `scripts/build-image.sh` — builds `magpeek/tunneldeck:<tag>` with version build args; no push
+- `scripts/build-image.sh` — builds `magpeek/tunneldeck-vpn:<tag>` with version build args; no push
 - `scripts/export-image.sh` — `docker save` to `tunneldeck-<tag>.tar` for Synology import
 - `docs/synology.md`, `docs/synology.de.md` — DS723+ / DSM 7.2 guide: TUN module, project, first sign-in, firewall, reverse proxy, remote access, backup, update, reset-admin
 - `docs/linux.md`, `docs/linux.de.md` — generic Linux Docker host guide: requirements, compose, first sign-in, iptables backends next to Docker/ufw/firewalld, reverse proxy, remote access, backup, update, reset-admin

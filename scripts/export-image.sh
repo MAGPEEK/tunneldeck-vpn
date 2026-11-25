@@ -1,5 +1,5 @@
 #!/bin/sh
-# Saves magpeek/tunneldeck:<tag> as tunneldeck-<tag>.tar in the current
+# Saves magpeek/tunneldeck-vpn:<tag> as tunneldeck-<tag>.tar in the current
 # directory, for import in Synology Container Manager (Image > Add > Add
 # from file).
 #

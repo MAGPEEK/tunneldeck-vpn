@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds magpeek/tunneldeck:<tag> with the version from git (scripts/version.sh).
+# Builds magpeek/tunneldeck-vpn:<tag> with the version from git (scripts/version.sh).
 #
 #   scripts/build-image.sh [tag]
 #

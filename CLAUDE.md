@@ -1,4 +1,4 @@
-# TunnelDeck
+# TunnelDeck-VPN
 
 Go 1.27 backend + React 19/TypeScript/Vite frontend (`web/`), shipped as one Docker image. Spec: `docs/SPEC.md`. Tasks: `docs/PLAN.md`. Navigation: `filemap.md`. OpenVPN specifics: `docs/openvpn-notes.md`.
 

@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "TunnelDeck"
+    "name": "TunnelDeck-VPN"
   },
   "nav": {
     "label": "Main navigation",
@@ -38,7 +38,7 @@
     "loading": "Loading",
     "signOut": "Sign out",
     "unreachableTitle": "Can't reach the server",
-    "unreachableBody": "Check that TunnelDeck is running, then try again.",
+    "unreachableBody": "Check that TunnelDeck-VPN is running, then try again.",
     "retry": "Try again"
   },
   "auth": {
@@ -236,9 +236,9 @@
     "line": "Line {{line}}:",
     "notImported": "Not imported",
     "code": {
-      "runs_code": "runs programs or scripts, which TunnelDeck does not allow.",
-      "escapes_sandbox": "would change files or the process, which TunnelDeck does not allow.",
-      "routing_handled": "is handled by TunnelDeck.",
+      "runs_code": "runs programs or scripts, which TunnelDeck-VPN does not allow.",
+      "escapes_sandbox": "would change files or the process, which TunnelDeck-VPN does not allow.",
+      "routing_handled": "is handled by TunnelDeck-VPN.",
       "duplicate_directive": "appears more than once; only one is kept.",
       "managed_by_field": "is set through a profile field.",
       "deprecated_ignored": "is deprecated and ignored by OpenVPN.",
@@ -248,11 +248,11 @@
       "invalid_directive": "is not a valid OpenVPN directive.",
       "inline_block": "inline blocks are only allowed for keys and certificates.",
       "line_too_long": "is too long.",
-      "invalid_value": "has a value TunnelDeck cannot use.",
+      "invalid_value": "has a value TunnelDeck-VPN cannot use.",
       "file_reference": "refers to a file; paste its content into the profile instead.",
       "additional_remote": "is an additional server; only the first one is used.",
-      "unsupported_device": "sets a device type TunnelDeck does not support.",
-      "inline_block_unsupported": "is an inline block TunnelDeck does not support.",
+      "unsupported_device": "sets a device type TunnelDeck-VPN does not support.",
+      "inline_block_unsupported": "is an inline block TunnelDeck-VPN does not support.",
       "cipher_mapped": "was converted to the current cipher setting.",
       "compression_receive_only": "compression is accepted from the server but not used for sending.",
       "compression_kept": "compression stays on because the server requires it.",

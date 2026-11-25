@@ -75,7 +75,7 @@ func (d documentSpec) decodeVersioned(data []byte) (map[string]json.RawMessage, 
 		}
 	}
 	if version > d.currentVersion {
-		return nil, 0, fmt.Errorf("%s: %w: file has version %d, this TunnelDeck supports up to %d; upgrade TunnelDeck",
+		return nil, 0, fmt.Errorf("%s: %w: file has version %d, this TunnelDeck-VPN supports up to %d; upgrade TunnelDeck-VPN",
 			d.fileName, errSchemaTooNew, version, d.currentVersion)
 	}
 	return doc, version, nil

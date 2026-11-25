@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "TunnelDeck"
+    "name": "TunnelDeck-VPN"
   },
   "nav": {
     "label": "Hauptnavigation",
@@ -38,7 +38,7 @@
     "loading": "Wird geladen",
     "signOut": "Abmelden",
     "unreachableTitle": "Server nicht erreichbar",
-    "unreachableBody": "Prüfen Sie, ob TunnelDeck läuft, und versuchen Sie es erneut.",
+    "unreachableBody": "Prüfen Sie, ob TunnelDeck-VPN läuft, und versuchen Sie es erneut.",
     "retry": "Erneut versuchen"
   },
   "auth": {
@@ -236,9 +236,9 @@
     "line": "Zeile {{line}}:",
     "notImported": "Nicht importiert",
     "code": {
-      "runs_code": "startet Programme oder Skripte; das lässt TunnelDeck nicht zu.",
-      "escapes_sandbox": "würde Dateien oder den Prozess verändern; das lässt TunnelDeck nicht zu.",
-      "routing_handled": "übernimmt TunnelDeck selbst.",
+      "runs_code": "startet Programme oder Skripte; das lässt TunnelDeck-VPN nicht zu.",
+      "escapes_sandbox": "würde Dateien oder den Prozess verändern; das lässt TunnelDeck-VPN nicht zu.",
+      "routing_handled": "übernimmt TunnelDeck-VPN selbst.",
       "duplicate_directive": "kommt mehrfach vor; nur eine wird übernommen.",
       "managed_by_field": "wird über ein Profilfeld gesetzt.",
       "deprecated_ignored": "ist veraltet und wird von OpenVPN ignoriert.",
@@ -248,11 +248,11 @@
       "invalid_directive": "ist keine gültige OpenVPN-Direktive.",
       "inline_block": "Inline-Blöcke sind nur für Schlüssel und Zertifikate erlaubt.",
       "line_too_long": "ist zu lang.",
-      "invalid_value": "hat einen Wert, den TunnelDeck nicht verwenden kann.",
+      "invalid_value": "hat einen Wert, den TunnelDeck-VPN nicht verwenden kann.",
       "file_reference": "verweist auf eine Datei; fügen Sie stattdessen deren Inhalt ins Profil ein.",
       "additional_remote": "ist ein weiterer Server; nur der erste wird verwendet.",
-      "unsupported_device": "setzt einen Gerätetyp, den TunnelDeck nicht unterstützt.",
-      "inline_block_unsupported": "ist ein Inline-Block, den TunnelDeck nicht unterstützt.",
+      "unsupported_device": "setzt einen Gerätetyp, den TunnelDeck-VPN nicht unterstützt.",
+      "inline_block_unsupported": "ist ein Inline-Block, den TunnelDeck-VPN nicht unterstützt.",
       "cipher_mapped": "wurde in die aktuelle Verschlüsselungseinstellung übertragen.",
       "compression_receive_only": "Komprimierung wird vom Server angenommen, aber beim Senden nicht verwendet.",
       "compression_kept": "Komprimierung bleibt aktiv, weil der Server sie verlangt.",

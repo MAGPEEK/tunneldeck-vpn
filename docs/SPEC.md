@@ -1,6 +1,6 @@
-# TunnelDeck — Specification
+# TunnelDeck-VPN — Specification
 
-Working name: **TunnelDeck** (binary `tunneldeck`). A self-hosted VPN client gateway in a Docker container with a modern web UI. License: MIT.
+Working name: **TunnelDeck-VPN** (binary `tunneldeck`). A self-hosted VPN client gateway in a Docker container with a modern web UI. License: MIT.
 
 ## 1. Goals
 
@@ -78,18 +78,18 @@ Every profile (driver-independent, part of `domain.Profile`) has `dailyReconnect
 - Profile fields (OpenVPN settings): `remoteHost`, `port`, `proto` (udp|tcp), `compression` (none|lzo), `authMode` (password | certificate | certificate+password), `username`, `password`*, `caCert`, `clientCert`, `clientKey`*, `tlsAuthKey`* / `tlsCryptKey`* + `keyDirection`, `cipher` (free text incl. `none`), `authDigest`, `resolveRetry`, `keepalive`, `extraOptions` (list of raw lines). `*` = secret.
 - **Current-practice defaults and advisories.** New profiles default to what OpenVPN 2.7 considers current: AEAD data ciphers negotiated (`cipher` empty → OpenVPN default `AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305`), `authDigest` empty (irrelevant for AEAD), no compression, `tls-version-min 1.2` rendered when the profile sets nothing (TLS 1.3 is used when the server offers it), `tls-crypt` preferred over `tls-auth`. Legacy settings stay possible because the server dictates them, but `Advisories(profile)` returns stable-coded findings that the form and the dashboard show: `unencrypted_data_channel` (cipher `none`, severity danger), `weak_cipher` (BF-CBC, DES, 3DES, RC2, CAST5, any CBC without AEAD → warning), `weak_digest` (MD5, SHA1, `none` with a non-AEAD cipher), `compression_enabled` (deprecated, VORACLE), `tls_below_1_2`, `tls_auth_instead_of_crypt` (info), `server_usage_check_disabled`, `fragment_in_use` (info: legacy MTU workaround), `no_dco` (info: kernel 4.4 has no data-channel offload, expect lower throughput). Advisories never block saving or connecting.
 - `caCert` is required for every `authMode`, including `password` (the server must always be verified; mdex issues a CA certificate).
-- `extraOptions` are validated: one directive per line, and a denylist rejects anything that runs code or fights the app: `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `auth-user-pass-verify`, `client-connect`, `client-disconnect`, `learn-address`, `plugin`, `script-security`, `management*`, `daemon`, `log`, `log-append`, `status`, `writepid`, `config`, `cd`, `chroot`, `dev`, `dev-type`, `dev-node`, `iproute`, `route-noexec`, `auth-user-pass`. `redirect-gateway` is accepted but dropped with a visible warning ("handled by TunnelDeck").
+- `extraOptions` are validated: one directive per line, and a denylist rejects anything that runs code or fights the app: `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `auth-user-pass-verify`, `client-connect`, `client-disconnect`, `learn-address`, `plugin`, `script-security`, `management*`, `daemon`, `log`, `log-append`, `status`, `writepid`, `config`, `cd`, `chroot`, `dev`, `dev-type`, `dev-node`, `iproute`, `route-noexec`, `auth-user-pass`. `redirect-gateway` is accepted but dropped with a visible warning ("handled by TunnelDeck-VPN").
 - `.ovpn` import maps known directives to fields, inline blocks (`<ca>`, `<cert>`, `<key>`, `<tls-auth>`, `<tls-crypt>`) to cert/secret fields, everything else to `extraOptions` (subject to the denylist; rejected lines are reported, not silently dropped).
 
 ## 6. Networking (stage 1)
 
 Container runs with `network_mode: host`, `cap_add: NET_ADMIN`, device `/dev/net/tun`.
 
-- **Routing:** routing table `7194`. On connect: `ip route replace default dev tdvpn0 table 7194`, `ip rule add from <vpn-ip> lookup 7194 priority 7194`. On disconnect both are removed. TunnelDeck and OpenVPN never add routes to the main table (`route-noexec`, `route-nopull`), so the host keeps its default route; the only entry that appears there is the kernel's own connected route for the tunnel subnet. Routing is re-applied on every `CONNECTED` state because the VPN IP can change. Effect: replies to connections arriving at the VPN IP leave through the tunnel.
+- **Routing:** routing table `7194`. On connect: `ip route replace default dev tdvpn0 table 7194`, `ip rule add from <vpn-ip> lookup 7194 priority 7194`. On disconnect both are removed. TunnelDeck-VPN and OpenVPN never add routes to the main table (`route-noexec`, `route-nopull`), so the host keeps its default route; the only entry that appears there is the kernel's own connected route for the tunnel subnet. Routing is re-applied on every `CONNECTED` state because the VPN IP can change. Effect: replies to connections arriving at the VPN IP leave through the tunnel.
 - **Host protection:** chain `TUNNELDECK-INPUT`, jumped to from `INPUT` (position 1) for `-i tdvpn0`: accept `ESTABLISHED,RELATED`; accept each enabled `HostAccessRule` (proto tcp|udp, port, optional source CIDR); drop the rest. Chain `TUNNELDECK-FORWARD` from `FORWARD` (position 1): drop everything in or out of `tdvpn0` (stage 1 forwards nothing).
 - Rules are installed at application start (before any tunnel) and re-applied idempotently whenever host-access rules change; removed on graceful shutdown.
 - The UI port can never be opened through a host-access rule (validation error).
-- iptables backend: share the host firewall's backend. At start, count the host rules (filter and nat tables, without TunnelDeck's own chains and `ACCEPT` policies) that `iptables-nft` and `iptables-legacy` (or plain `iptables`, per `iptables -V`) list; use the backend that holds rules, the one with more if both do (with a warning), nf_tables if neither does, and the only working one on old kernels. The binary is kept for the process lifetime; the self-check and the start log name it and the reason. `TUNNELDECK_IPTABLES` can force one.
+- iptables backend: share the host firewall's backend. At start, count the host rules (filter and nat tables, without TunnelDeck-VPN's own chains and `ACCEPT` policies) that `iptables-nft` and `iptables-legacy` (or plain `iptables`, per `iptables -V`) list; use the backend that holds rules, the one with more if both do (with a warning), nf_tables if neither does, and the only working one on old kernels. The binary is kept for the process lifetime; the self-check and the start log name it and the reason. `TUNNELDECK_IPTABLES` can force one.
 - Startup self-check reports: `/dev/net/tun` present, `NET_ADMIN` effective, iptables usable. Failures are shown in the UI (System status), not just logged.
 
 ## 7. Persistence and secrets
@@ -233,7 +233,7 @@ Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning
 
 ## 15. Roadmap and release
 
-1. Stage 1 (this spec). Public from the start (owner's decision, 2026-11-25): code at `github.com/MAGPEEK/tunneldeck`, image at `magpeek/tunneldeck` on Docker Hub. Development builds are tagged `0.1.0-dev`; `latest` and plain version tags only for releases. Field test on the DS723+ pulls the image from Docker Hub (or imports a `docker save` export).
+1. Stage 1 (this spec). Public from the start (owner's decision, 2026-11-25): code at `github.com/MAGPEEK/tunneldeck-vpn`, image at `magpeek/tunneldeck-vpn` on Docker Hub. Development builds are tagged `0.1.0-dev`; `latest` and plain version tags only for releases. Field test on the DS723+ pulls the image from Docker Hub (or imports a `docker save` export).
 2. After a successful field test: tag `v0.1.0` and publish the release image.
 3. Stage 2: gateway functions (LAN allow-list, kill switch, port forwards, traffic chart). Port forwards include a freely chosen external port mapped to a host service (e.g. tunnel port 4444 → DSM 5001), as the RUT240 offered for its own web UI.
 4. WireGuard driver (userspace `wireguard-go`, because the DS723+ kernel has no WireGuard module), then IPsec/IKEv2.

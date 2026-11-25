@@ -1,6 +1,6 @@
 # Releasing
 
-How a TunnelDeck release is cut (SPEC §13, §15). The git tag `vX.Y.Z` is the single source of truth for the version.
+How a TunnelDeck-VPN release is cut (SPEC §13, §15). The git tag `vX.Y.Z` is the single source of truth for the version.
 
 ## Version numbers
 
@@ -22,7 +22,7 @@ How a TunnelDeck release is cut (SPEC §13, §15). The git tag `vX.Y.Z` is the s
 
    ```sh
    git commit -am "chore(release): vX.Y.Z"
-   git tag -a vX.Y.Z -m "TunnelDeck X.Y.Z"
+   git tag -a vX.Y.Z -m "TunnelDeck-VPN X.Y.Z"
    ```
 
 4. **Build** from the clean, tagged tree. The script must print `version X.Y.Z` without `-dirty`.
@@ -35,7 +35,7 @@ How a TunnelDeck release is cut (SPEC §13, §15). The git tag `vX.Y.Z` is the s
 
    ```sh
    docker run -d --name td-smoke --cap-add NET_ADMIN --device /dev/net/tun \
-     -e TUNNELDECK_LISTEN=0.0.0.0:8194 -p 127.0.0.1:18194:8194 magpeek/tunneldeck:X.Y.Z
+     -e TUNNELDECK_LISTEN=0.0.0.0:8194 -p 127.0.0.1:18194:8194 magpeek/tunneldeck-vpn:X.Y.Z
    docker inspect -f '{{.State.Health.Status}}' td-smoke   # healthy after a few seconds
    docker exec td-smoke openvpn --version                  # OpenVPN 2.7.x
    ```
@@ -48,7 +48,7 @@ How a TunnelDeck release is cut (SPEC §13, §15). The git tag `vX.Y.Z` is the s
    . scripts/version.sh
    docker buildx build --platform linux/amd64,linux/arm64 \
      --build-arg VERSION="$VERSION" --build-arg REVISION="$REVISION" \
-     -t magpeek/tunneldeck:X.Y.Z -t magpeek/tunneldeck:X.Y -t magpeek/tunneldeck:latest \
+     -t magpeek/tunneldeck-vpn:X.Y.Z -t magpeek/tunneldeck-vpn:X.Y -t magpeek/tunneldeck-vpn:latest \
      --push .
    ```
 

@@ -127,7 +127,7 @@ func (s *session) answer(realm string) {
 	case realmPrivateKey:
 		_ = s.commands.send("password", credentialCommand("password", realmPrivateKey, creds.keyPassphrase))
 	default:
-		s.log(domain.LogLevelWarn, fmt.Sprintf("openvpn asked for %q credentials, which TunnelDeck does not provide", realm))
+		s.log(domain.LogLevelWarn, fmt.Sprintf("openvpn asked for %q credentials, which TunnelDeck-VPN does not provide", realm))
 	}
 }
 

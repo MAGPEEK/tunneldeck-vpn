@@ -3,7 +3,7 @@
 services:
   tunneldeck:
     build: .
-    image: magpeek/tunneldeck:0.1.0-dev
+    image: magpeek/tunneldeck-vpn:0.1.0-dev
     container_name: tunneldeck
     network_mode: host
     cap_add:
@@ -12,8 +12,12 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - ./data:/data
-    environment:
-      TZ: Europe/Berlin
+    # Web UI: listens on the host's LAN address, port 8194; never reachable
+    # through the VPN tunnel. To change address or port set TUNNELDECK_LISTEN,
+    # e.g. TUNNELDECK_LISTEN: "192.168.1.10:9000".
+    # Remote access over the VPN is HTTPS only: enable it on the System page
+    # (default port 8443, freely selectable).
+    environment:      TZ: Europe/Berlin
       # Optional, see docs/SPEC.md §10:
       # TUNNELDECK_LISTEN: "192.168.1.10:8194"  # default: default-route interface, port 8194
       # TUNNELDECK_LOG_LEVEL: info              # debug | info | warn | error

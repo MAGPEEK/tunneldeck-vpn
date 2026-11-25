@@ -32,11 +32,11 @@ var (
 	}
 	verdictRouting = verdict{
 		code: CodeRoutingHandled, severity: SeverityWarning,
-		message: "dropped: routing is handled by TunnelDeck",
+		message: "dropped: routing is handled by TunnelDeck-VPN",
 	}
 	verdictDuplicate = verdict{
 		code: CodeDuplicateDirective, severity: SeverityWarning,
-		message: "dropped: TunnelDeck always emits this directive",
+		message: "dropped: TunnelDeck-VPN always emits this directive",
 	}
 	verdictManagedByField = verdict{
 		code: CodeManagedByField, severity: SeverityWarning,

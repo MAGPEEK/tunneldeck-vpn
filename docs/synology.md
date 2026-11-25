@@ -1,15 +1,15 @@
-# TunnelDeck on a Synology DS723+ (DSM 7.2)
+# TunnelDeck-VPN on a Synology DS723+ (DSM 7.2)
 
 [Deutsch](synology.de.md)
 
-This guide runs TunnelDeck with Container Manager on DSM 7.2. The DS723+ is an x86-64 model, so it uses the `linux/amd64` image. Steps marked *check on your NAS* have not been verified on real DSM hardware yet.
+This guide runs TunnelDeck-VPN with Container Manager on DSM 7.2. The DS723+ is an x86-64 model, so it uses the `linux/amd64` image. Steps marked *check on your NAS* have not been verified on real DSM hardware yet.
 
 ## 1. Prerequisites
 
 - DSM 7.2 with **Container Manager** installed from the Package Center.
 - SSH enabled for the first check (Control Panel > Terminal & SNMP), or use a scheduled task instead.
 - Two shared-folder paths under the `docker` share:
-  - `docker/tunneldeck`: TunnelDeck's data (`/data` in the container),
+  - `docker/tunneldeck`: TunnelDeck-VPN's data (`/data` in the container),
   - `docker/tunneldeck-project`: the compose file for Container Manager.
 
 ### TUN device
@@ -44,7 +44,7 @@ Run the task once (select it, `Run`) and check `ls -l /dev/net/tun` again. Packa
    - Project name: `tunneldeck`
    - Path: `/volume1/docker/tunneldeck-project`
    - Source: use the existing `docker-compose.yml`, or "Create docker-compose.yml" and paste the file.
-3. Adjust `TZ` if needed, skip the web portal settings, and finish. Container Manager pulls `magpeek/tunneldeck` and starts the container.
+3. Adjust `TZ` if needed, skip the web portal settings, and finish. Container Manager pulls `magpeek/tunneldeck-vpn` and starts the container.
 
 The compose file gives the container host networking, `NET_ADMIN` and `/dev/net/tun`, and mounts `/volume1/docker/tunneldeck` as `/data`. Optional variables (listen address, log level, secret key, admin reset) are listed there as comments.
 
@@ -52,7 +52,7 @@ The compose file gives the container host networking, `NET_ADMIN` and `/dev/net/
 
 ## 3. First sign-in
 
-1. Open `http://<NAS-IP>:8194`. TunnelDeck listens on the address of the interface that holds the default route; set `TUNNELDECK_LISTEN` to choose another one.
+1. Open `http://<NAS-IP>:8194`. TunnelDeck-VPN listens on the address of the interface that holds the default route; set `TUNNELDECK_LISTEN` to choose another address or port (example `192.168.1.10:9000`). The UI is never reachable through the VPN tunnel; remote access over the VPN is HTTPS only (System page, default port 8443, freely selectable).
 2. Create the admin account (password of at least 12 characters).
 3. Open **System** and check that every self-check passes: TUN device, iptables, `ip`, `NET_ADMIN`. Each failed check shows a hint.
 
@@ -61,7 +61,7 @@ The container's health status in Container Manager shows whether the web server 
 ## 4. DSM firewall
 
 - If the DSM firewall is on (Control Panel > Security > Firewall), allow TCP `8194` from your LAN subnet only.
-- If you use remote access (section 6), its port (default TCP `8443`) arrives through the tunnel device. TunnelDeck puts its own chain first in `INPUT` when it starts. DSM rebuilds its rules when you change firewall settings; restart the container afterwards so TunnelDeck's chain is first again. *Check on your NAS* with `sudo iptables -S INPUT | head -3`.
+- If you use remote access (section 6), its port (default TCP `8443`) arrives through the tunnel device. TunnelDeck-VPN puts its own chain first in `INPUT` when it starts. DSM rebuilds its rules when you change firewall settings; restart the container afterwards so TunnelDeck-VPN's chain is first again. *Check on your NAS* with `sudo iptables -S INPUT | head -3`.
 - Do not forward `8194` on your internet router. The plain-HTTP UI is meant for the LAN only.
 
 ## 5. HTTPS in the LAN with the DSM reverse proxy
@@ -69,14 +69,14 @@ The container's health status in Container Manager shows whether the web server 
 Control Panel > Login Portal > Advanced > Reverse Proxy > Create:
 
 - Source: protocol `HTTPS`, hostname of your choice (for example `tunneldeck.home.arpa`), port `8195`.
-- Destination: protocol `HTTP`, hostname `<NAS-IP>` (not `localhost`, because TunnelDeck listens on the LAN address), port `8194`.
+- Destination: protocol `HTTP`, hostname `<NAS-IP>` (not `localhost`, because TunnelDeck-VPN listens on the LAN address), port `8194`.
 - Pick a certificate for the hostname under Control Panel > Security > Certificate > Settings.
 
-The live view uses server-sent events; TunnelDeck sends `X-Accel-Buffering: no`, so the proxy passes them through without buffering. Sign-in checks that the browser's `Origin` matches the `Host` header. If sign-in fails behind the proxy, add a custom header `Host` = `$http_host` to the rule (*check on your NAS*). Behind the proxy, all browsers share the NAS address for the sign-in rate limit.
+The live view uses server-sent events; TunnelDeck-VPN sends `X-Accel-Buffering: no`, so the proxy passes them through without buffering. Sign-in checks that the browser's `Origin` matches the `Host` header. If sign-in fails behind the proxy, add a custom header `Host` = `$http_host` to the rule (*check on your NAS*). Behind the proxy, all browsers share the NAS address for the sign-in rate limit.
 
 ## 6. Remote access over the tunnel
 
-To reach TunnelDeck from the internet through its VPN address (SPEC §8.1), open **System > Remote access**:
+To reach TunnelDeck-VPN from the internet through its VPN address (SPEC §8.1), open **System > Remote access**:
 
 1. Turn it on and keep port `8443`, or choose a free port.
 2. Keep the self-signed certificate, or upload your own certificate and key (PEM).

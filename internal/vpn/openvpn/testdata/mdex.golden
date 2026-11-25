@@ -1,4 +1,4 @@
-# rendered by TunnelDeck - do not edit
+# rendered by TunnelDeck-VPN - do not edit
 client
 dev tdvpn0
 dev-type tun
@@ -32,7 +32,7 @@ reneg-sec 86400
 tls-version-min 1.2
 explicit-exit-notify 2
 
-# routing is owned by TunnelDeck
+# routing is owned by TunnelDeck-VPN
 route-noexec
 route-nopull
 pull-filter ignore "ifconfig-ipv6"

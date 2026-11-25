@@ -71,7 +71,7 @@ type renderer struct {
 }
 
 func (r *renderer) render() string {
-	r.line("# rendered by TunnelDeck - do not edit")
+	r.line("# rendered by TunnelDeck-VPN - do not edit")
 	r.connection()
 	r.dataChannel()
 	r.verification()
@@ -202,7 +202,7 @@ func (r *renderer) conflict(option extraOption) (Warning, bool) {
 }
 
 func (r *renderer) routing() {
-	r.section("routing is owned by TunnelDeck")
+	r.section("routing is owned by TunnelDeck-VPN")
 	r.line("route-noexec")
 	r.line("route-nopull")
 	r.line(`pull-filter ignore "ifconfig-ipv6"`)

@@ -23,6 +23,11 @@ All notable changes to this project are documented in this file. The format foll
 - Documentation: Linux Docker host guide (TUN device, iptables backends next to ufw, firewalld and Docker's chains, reverse proxy, remote access, backup, update, `reset-admin`) in English and German.
 - End-to-end test (`test/e2e/`, build tag `e2e`) against throwaway OpenVPN servers (username/password, `cipher none`, client certificate with tls-crypt) on both iptables backends; CI job `e2e`.
 
+### Changed
+
+- Display name is now TunnelDeck-VPN (UI title, i18n, docs, image labels, rendered-config header, warnings, LICENSE). Repository moved to `https://github.com/MAGPEEK/tunneldeck-vpn`, image renamed to `magpeek/tunneldeck-vpn`. Technical identifiers (binary, module, `TUNNELDECK_*` variables, chains, `tdvpn0`, container name) are unchanged.
+- Compose files, READMEs and install guides document how the web UI is reached: LAN address port 8194 (change with `TUNNELDECK_LISTEN`, e.g. `192.168.1.10:9000`), never through the tunnel; remote access over the VPN is HTTPS only.
+
 ### Fixed
 
 - Profile form: "Key direction" is shown only while a TLS auth key is set, and is no longer sent without one.

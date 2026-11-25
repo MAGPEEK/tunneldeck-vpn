@@ -15,4 +15,4 @@ esac
 
 REVISION=$(git rev-parse HEAD 2>/dev/null || echo unknown)
 TAG=$(printf '%s' "$VERSION" | tr '+' '-')
-IMAGE="magpeek/tunneldeck"
+IMAGE="magpeek/tunneldeck-vpn"

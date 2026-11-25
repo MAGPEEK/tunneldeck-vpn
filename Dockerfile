@@ -22,11 +22,11 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 FROM alpine:3.24.4
 ARG VERSION=0.1.0-dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.title="TunnelDeck" \
+LABEL org.opencontainers.image.title="TunnelDeck-VPN" \
       org.opencontainers.image.description="Self-hosted VPN client with a web UI, packaged as one container" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.source="https://github.com/MAGPEEK/tunneldeck" \
+      org.opencontainers.image.source="https://github.com/MAGPEEK/tunneldeck-vpn" \
       org.opencontainers.image.licenses="MIT"
 # openvpn stays on the 2.7 series that docs/openvpn-notes.md was verified
 # against; tzdata serves TZ for the daily reconnect (SPEC §4.3).
