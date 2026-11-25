@@ -16,6 +16,7 @@ type fakeDriver struct{ protocol domain.Protocol }
 func (f fakeDriver) Protocol() domain.Protocol                          { return f.protocol }
 func (fakeDriver) Describe() FormSchema                                 { return FormSchema{} }
 func (fakeDriver) Validate(domain.Profile) error                        { return nil }
+func (fakeDriver) Advise(domain.PublicProfile) []Advisory               { return nil }
 func (fakeDriver) Start(context.Context, domain.Profile, Secrets) error { return nil }
 func (fakeDriver) Stop(context.Context) error                           { return nil }
 func (fakeDriver) Events() <-chan domain.Event                          { return nil }

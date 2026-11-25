@@ -30,11 +30,11 @@ Implement process supervision and the management client in `internal/vpn/openvpn
 
 Implement `internal/netguard` per SPEC §6: backend detection, idempotent chain install/update/remove, policy routing add/remove, startup self-check. All commands through `CommandRunner`; tests assert exact command sequences and idempotency with a fake runner; one integration test (build tag `integration`) meant to run in a Linux container with NET_ADMIN.
 
-## [ ] 13. Profile advisories — medium — after: 6
+## [x] 13. Profile advisories — medium — after: 6
 
 Implement `Advisories(profile)` in `internal/vpn/openvpn` and the current-practice defaults per SPEC §5 ("Current-practice defaults and advisories"); expose advisories through the `Driver` interface (`Advise(profile) []Advisory`, driver-independent `Advisory{Code, Severity, Field}` in `internal/vpn`) so the API can return them with each profile and with the connection status. Table-driven tests for every code, including the mdex profile (must yield `unencrypted_data_channel`, `fragment_in_use`, `no_dco`).
 
-## [ ] 8. HTTP API and SSE — medium — after: 4, 6, 7, 13
+## [x] 8. HTTP API and SSE — medium — after: 4, 6, 7, 13
 
 Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. `tunneldeck reset-admin` runs in a second process (`docker exec`), so it must ask the running server to call `auth.Service.ResetAdmin` over a root-only unix control socket (`/run/tunneldeck/control.sock`); if no server is running it edits the store directly. `TUNNELDECK_RESET_ADMIN=1` resets at start. The API also enforces that a host-access rule never opens the UI port. Handler tests with `httptest` and fakes for every endpoint and auth rule.
 

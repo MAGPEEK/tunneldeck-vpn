@@ -33,6 +33,9 @@ key-direction 1
 auth-user-pass
 auth-retry none
 
+# extra options
+tls-version-min 1.2
+
 # routing is owned by TunnelDeck
 route-noexec
 route-nopull

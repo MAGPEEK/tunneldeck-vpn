@@ -116,6 +116,9 @@ func (*Driver) Describe() vpn.FormSchema { return Describe() }
 // Validate checks the OpenVPN settings and secrets of p.
 func (*Driver) Validate(p domain.Profile) error { return Validate(p) }
 
+// Advise returns the advisories of p.
+func (*Driver) Advise(p domain.PublicProfile) []vpn.Advisory { return Advise(p) }
+
 // Events streams state, traffic and log events until the process has ended.
 // The last state event is "disconnected" after a requested stop or a clean
 // exit, or "error" with a domain.ErrorCode.

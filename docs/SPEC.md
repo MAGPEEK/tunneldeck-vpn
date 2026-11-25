@@ -232,8 +232,8 @@ Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning
 
 ## 15. Roadmap and release
 
-1. Stage 1 (this spec). Developed locally; nothing is pushed. Field test on the DS723+ with an image exported via `docker save` and imported in Container Manager.
-2. After a successful field test: public GitHub repository, image on GitHub Container Registry.
+1. Stage 1 (this spec). Public from the start (owner's decision, 2026-11-25): code at `github.com/MAGPEEK/tunneldeck`, image at `magpeek/tunneldeck` on Docker Hub. Development builds are tagged `0.1.0-dev`; `latest` and plain version tags only for releases. Field test on the DS723+ pulls the image from Docker Hub (or imports a `docker save` export).
+2. After a successful field test: tag `v0.1.0` and publish the release image.
 3. Stage 2: gateway functions (LAN allow-list, kill switch, port forwards, traffic chart). Port forwards include a freely chosen external port mapped to a host service (e.g. tunnel port 4444 → DSM 5001), as the RUT240 offered for its own web UI.
 4. WireGuard driver (userspace `wireguard-go`, because the DS723+ kernel has no WireGuard module), then IPsec/IKEv2.
 5. Notifications (webhook) — not before stage 2.

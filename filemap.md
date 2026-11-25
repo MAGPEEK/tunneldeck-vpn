@@ -13,18 +13,19 @@
 - `docs/PLAN.md` — task list and status
 - `docs/openvpn-notes.md` — lab-verified OpenVPN 2.7 facts: directives, management dialogue, reference config; binding for the driver
 - `docs/reference/original-compose.yml` — original Alpine/OpenVPN compose this project replaces
-- `cmd/tunneldeck/` — entry point: listen address, `/api/system`, embedded SPA, graceful shutdown
-- `internal/config/` — environment → typed config (doc only)
+- `cmd/tunneldeck/` — entry point: subcommands `serve`/`reset-admin` (`main.go`), wiring, startup order and graceful shutdown (`serve.go`), listen-address detection (`listen.go`), auth/cookie/import adapters for the API (`adapters.go`), `reset-admin` via control socket or store (`reset.go`)
+- `internal/config/` — SPEC §10 environment → validated `Config` (`config.go`)
+- `internal/control/` — root-only unix control socket (`control.sock`, one-line protocol) for `reset-admin`; SO_PEERCRED check in `peer_linux.go`, fallback in `peer_other.go`
 - `internal/domain/` — core types: Profile (generic Settings plus Secrets), PublicProfile/hasValue, DailyReconnect, HostAccessRule, events, DesiredConnection, AdminAccount, sentinel errors and ValidationError, NewID
-- `internal/vpn/` — `Driver` and `Secrets` (`driver.go`), `FormSchema` (`schema.go`), driver `Registry` (`registry.go`), Clock (`clock.go`), ConnectionManager and its interfaces (`manager.go`), its state machine (`loop.go`, `loop_events.go`), Status (`status.go`), backoff and daily schedule (`schedule.go`), log ring (`logring.go`)
+- `internal/vpn/` — `Driver` and `Secrets` (`driver.go`), `Advisory` (`advisory.go`), `FormSchema` (`schema.go`), driver `Registry` (`registry.go`), Clock (`clock.go`), ConnectionManager and its interfaces (`manager.go`), its state machine (`loop.go`, `loop_events.go`), Status (`status.go`), backoff and daily schedule (`schedule.go`), log ring (`logring.go`)
 - `internal/vpn/vpntest/` — FakeClock, test-only
 - `internal/vpn/openvpn/` (runtime) — Driver (`driver.go`), process supervision (`supervisor.go`), management dialogue (`session.go`), line parser (`management.go`), log levels (`logline.go`), seams (`system.go`), `Pdeathsig` (`process_linux.go`, no-op `process_other.go`)
-- `internal/vpn/openvpn/` (config) — keys and `Validate` (`settings.go`), `Render` (`render.go`), `ImportOVPN` (`importer.go`), `Describe` (`schema.go`), `Warning` (`warning.go`), tokenizer (`directive.go`), denylist (`classify.go`, `extra.go`), PEM/static-key checks (`pem.go`); golden files in `testdata/`
+- `internal/vpn/openvpn/` (config) — keys and `Validate` (`settings.go`), `Render` (`render.go`), `ImportOVPN` (`importer.go`), `Advise` (`advisory.go`), `Describe` (`schema.go`), `Warning` (`warning.go`), tokenizer (`directive.go`), denylist (`classify.go`, `extra.go`), PEM/static-key checks (`pem.go`); golden files in `testdata/`
 - `internal/netguard/` — CommandRunner/ExecRunner (`runner.go`), Guard and backend detection (`guard.go`), iptables chains (`firewall.go`), policy routing table 7194 (`routing.go`), startup self-check (`selfcheck.go`), error types (`errors.go`); integration test behind `integration && linux`
 - `internal/store/` — settings.json and profiles.json with atomic writes, a mutex, schemaVersion migrations (`document.go`) and a file-system seam (`atomic.go`)
 - `internal/secret/` — AES-256-GCM `enc:v1:` Cipher; `secret.key` load/create and `TUNNELDECK_SECRET_KEY` override
 - `internal/auth/` — admin setup/reset, argon2id hashing (`password.go`), in-memory sessions (`session.go`), login rate limit (`ratelimit.go`), session cookie helpers (`cookie.go`); `service.go` is the entry point
-- `internal/api/` — REST handlers, SSE, middleware (doc only)
+- `internal/api/` — REST API per SPEC §9: consumed interfaces (`deps.go`), routes and 404/405 (`server.go`), session/CSRF/logging middleware (`middleware.go`), RFC 9457 errors (`problem.go`), JSON body rules (`json.go`), handlers (`session.go`, `profiles.go`, `connection.go`, `hostaccess.go`, `system.go`), SSE (`events.go`); fakes in `fakes_test.go`
 - `internal/web/` — `go:embed all:dist` of the SPA with fallback to `index.html`
 - `internal/web/dist/` — Vite build output (git-ignored); only the committed `.gitkeep` is tracked, so `go build` works without a frontend build, and a Vite plugin re-creates it after each build
 - `web/` — React 19 + TypeScript + Vite app; `npm run build` writes to `internal/web/dist`

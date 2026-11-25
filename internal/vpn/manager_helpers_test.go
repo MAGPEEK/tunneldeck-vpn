@@ -161,6 +161,9 @@ func newScriptedDriver() *scriptedDriver {
 func (*scriptedDriver) Protocol() domain.Protocol     { return fakeProtocol }
 func (*scriptedDriver) Describe() FormSchema          { return FormSchema{} }
 func (*scriptedDriver) Validate(domain.Profile) error { return nil }
+func (*scriptedDriver) Advise(domain.PublicProfile) []Advisory {
+	return nil
+}
 func (d *scriptedDriver) Events() <-chan domain.Event { return d.events }
 
 func (d *scriptedDriver) Start(_ context.Context, p domain.Profile, s Secrets) error {

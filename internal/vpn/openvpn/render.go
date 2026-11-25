@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -141,6 +142,16 @@ func (r *renderer) verification() {
 	}
 }
 
+// extrasSetTLSVersion reports whether a kept extra option bounds the TLS
+// version. A tls-version-max counts too: a default minimum above it would
+// make OpenVPN refuse the config.
+func (r *renderer) extrasSetTLSVersion() bool {
+	return slices.ContainsFunc(r.config.extras.kept, func(option extraOption) bool {
+		name := option.directive.name
+		return name == "tls-version-min" || name == "tls-version-max"
+	})
+}
+
 func (r *renderer) authentication() {
 	r.section("credentials over management, never in this file")
 	if r.config.usesPassword() {
@@ -150,7 +161,9 @@ func (r *renderer) authentication() {
 }
 
 // extraOptions renders the kept extra options in their order, minus those
-// that conflict with the profile.
+// that conflict with the profile, followed by "tls-version-min 1.2" when
+// they bound no TLS version (SPEC §5). The default sits in this section so
+// that an imported rendered config renders the same again.
 func (r *renderer) extraOptions() {
 	r.warnings = append(r.warnings, r.config.extras.dropped...)
 	var lines []string
@@ -161,8 +174,8 @@ func (r *renderer) extraOptions() {
 		}
 		lines = append(lines, option.directive.String())
 	}
-	if len(lines) == 0 {
-		return
+	if !r.extrasSetTLSVersion() {
+		lines = append(lines, directive{name: "tls-version-min", args: []string{defaultTLSVersionMin}}.String())
 	}
 	r.section("extra options")
 	for _, line := range lines {

@@ -2,95 +2,48 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"tunneldeck/internal/web"
+	"tunneldeck/internal/config"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-const (
-	defaultListenAddress = "127.0.0.1:8194"
-	shutdownTimeout      = 10 * time.Second
-	readHeaderTimeout    = 10 * time.Second
-)
-
 func main() {
-	if err := run(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, os.Args[1:], os.Getenv); err != nil {
 		slog.Error("tunneldeck stopped", "error", err)
+		stop()
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	server := &http.Server{
-		Addr:              listenAddress(),
-		Handler:           newRouter(web.Handler()),
-		ReadHeaderTimeout: readHeaderTimeout,
+// run executes the subcommand in args: "serve" (the default) or
+// "reset-admin".
+func run(ctx context.Context, args []string, getenv func(string) string) error {
+	command := "serve"
+	if len(args) > 0 {
+		command = args[0]
 	}
-	return serve(ctx, server)
-}
-
-func listenAddress() string {
-	if address := os.Getenv("TUNNELDECK_LISTEN"); address != "" {
-		return address
+	if len(args) > 1 {
+		return fmt.Errorf("%s takes no arguments", command)
 	}
-	return defaultListenAddress
-}
-
-func newRouter(spa http.Handler) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/system", systemHandler(version))
-	mux.HandleFunc("/api/", http.NotFound)
-	mux.Handle("/", spa)
-	return mux
-}
-
-type systemResponse struct {
-	Version string `json:"version"`
-}
-
-func systemHandler(version string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(systemResponse{Version: version}); err != nil {
-			slog.Error("write system response", "error", err)
-		}
+	cfg, err := config.Load(getenv)
+	if err != nil {
+		return err
 	}
-}
-
-func serve(ctx context.Context, server *http.Server) error {
-	serveErr := make(chan error, 1)
-	go func() {
-		slog.Info("listening", "address", server.Addr, "version", version)
-		serveErr <- server.ListenAndServe()
-	}()
-
-	select {
-	case err := <-serveErr:
-		return fmt.Errorf("serve http: %w", err)
-	case <-ctx.Done():
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel})))
+	switch command {
+	case "serve":
+		return serveCommand(ctx, cfg)
+	case "reset-admin":
+		return resetAdminCommand(ctx, cfg, controlSocketPath())
 	}
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shut down http server: %w", err)
-	}
-	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve http: %w", err)
-	}
-	return nil
+	return fmt.Errorf("unknown command %q: use serve or reset-admin", command)
 }

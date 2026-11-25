@@ -20,6 +20,10 @@ type Driver interface {
 	Describe() FormSchema
 	// Validate checks the protocol-specific settings and secrets of p.
 	Validate(p domain.Profile) error
+	// Advise returns the advisories of p. It is a pure function of the
+	// settings and of which secrets hold a value, so it never needs secret
+	// values.
+	Advise(p domain.PublicProfile) []Advisory
 	// Start brings the tunnel for p up with the secrets s. It returns once
 	// the attempt is under way, without waiting for its events to be read;
 	// ctx bounds only the start itself.
