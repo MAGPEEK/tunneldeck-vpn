@@ -40,6 +40,15 @@ services:
 
 `http://<host-ip>:8194` öffnen und das Admin-Konto anlegen. Passwort vergessen: `docker exec tunneldeck tunneldeck reset-admin`.
 
+## Ports
+
+| Port | Protokoll | Erreichbar aus | Zweck |
+|---|---|---|---|
+| 8194 | HTTP | nur LAN, nie durch den Tunnel | Weboberfläche. Ändern mit `TUNNELDECK_LISTEN=<LAN-IP>:<Port>`. |
+| 8443 (Vorgabe, frei wählbar) | HTTPS | LAN und VPN-Tunnel | Optionaler Fernzugriff auf die Weboberfläche. Standardmäßig aus; einschalten unter **System → Fernzugriff**. |
+
+Alle anderen Ports des Hosts sind für den Tunnel gesperrt, außer du gibst sie unter **Host-Zugriff** frei.
+
 ## Dokumentation
 
 - [Einrichtung auf einem Linux-Docker-Host](docs/linux.de.md): TUN-Gerät, Firewall-Werkzeuge (ufw, firewalld), HTTPS, Sicherung, Aktualisierung
