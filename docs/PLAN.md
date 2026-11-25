@@ -22,7 +22,7 @@ Implement `internal/auth` per SPEC §8: setup-once admin creation, argon2id hash
 
 Implement `internal/vpn` `Driver`, `FormSchema`, registry (SPEC §4.1) and in `internal/vpn/openvpn`: `Describe()` schema, `Validate`, config renderer (profile → config text, following `docs/openvpn-notes.md`), extra-option validation with the denylist (SPEC §5), `.ovpn` importer with warnings. Pure functions, golden-file tests incl. the mdex reference profile and hostile inputs (script directives, inline blocks, CRLF, comments, quoted args).
 
-## [ ] 6. OpenVPN supervisor and management — heavy — after: 5
+## [x] 6. OpenVPN supervisor and management — heavy — after: 5
 
 Implement process supervision and the management client in `internal/vpn/openvpn` (`Start`, `Stop`, `Events`) and `vpn.ConnectionManager` (SPEC §4.1–4.2): state machine, credentials over management, byte counts → rates, log ring buffer feed, backoff retry with stop-on-auth-failure, scheduled daily reconnect (SPEC §4.3, injected clock), persisted desired state and reconnect on start, calls into a `netguard`-shaped interface on connect/disconnect: `InstallFirewall` is re-run before every connect (other software may have reordered the host chains) and a failure refuses the connect; `RouteThroughTunnel` after the VPN IP is known; `ClearTunnelRouting` on disconnect. Process and socket behind interfaces; tests with a fake management server and fake process covering races (stop during connect, process crash, double connect, shutdown).
 

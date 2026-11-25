@@ -19,10 +19,35 @@ type Event interface {
 	Kind() EventKind
 }
 
+// ErrorCode classifies why a tunnel failed. Codes are stable; the UI
+// translates by code.
+type ErrorCode string
+
+// Error codes of StateEvent.Code.
+const (
+	// ErrorCodeAuthFailed: the server rejected the credentials.
+	ErrorCodeAuthFailed ErrorCode = "auth_failed"
+	// ErrorCodeServerRejected: the server refused the connection for a
+	// stated reason, usually a configuration mismatch.
+	ErrorCodeServerRejected ErrorCode = "server_rejected"
+	// ErrorCodeProcessFailed: the tunnel process failed or ended on its own.
+	ErrorCodeProcessFailed ErrorCode = "process_failed"
+	// ErrorCodeFirewallFailed: the host protection could not be installed,
+	// so no tunnel was started.
+	ErrorCodeFirewallFailed ErrorCode = "firewall_failed"
+	// ErrorCodeRoutingFailed: the tunnel routing could not be applied.
+	ErrorCodeRoutingFailed ErrorCode = "routing_failed"
+	// ErrorCodeProfileInvalid: the profile cannot be used by its driver.
+	ErrorCodeProfileInvalid ErrorCode = "profile_invalid"
+	// ErrorCodeStartFailed: the driver could not start the tunnel.
+	ErrorCodeStartFailed ErrorCode = "start_failed"
+)
+
 // StateEvent reports a connection state change. VPNIP, Remote and Since are
-// set while connected.
+// set while connected; Code is set in the error state.
 type StateEvent struct {
 	State   ConnectionState `json:"state"`
+	Code    ErrorCode       `json:"code,omitempty"`
 	Message string          `json:"message,omitempty"`
 	VPNIP   string          `json:"vpnIp,omitempty"`
 	Remote  string          `json:"remote,omitempty"`
@@ -32,10 +57,14 @@ type StateEvent struct {
 // Kind returns EventKindState.
 func (StateEvent) Kind() EventKind { return EventKindState }
 
-// TrafficEvent reports the byte counters of the tunnel since it came up.
+// TrafficEvent reports the byte counters of the tunnel since it came up and
+// the current rates in bytes per second. Drivers leave the rates at zero;
+// the ConnectionManager computes them.
 type TrafficEvent struct {
 	BytesIn  uint64 `json:"bytesIn"`
 	BytesOut uint64 `json:"bytesOut"`
+	RateIn   uint64 `json:"rateIn"`
+	RateOut  uint64 `json:"rateOut"`
 }
 
 // Kind returns EventKindTraffic.
