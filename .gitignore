@@ -12,6 +12,7 @@ web/coverage/
 # Runtime data and secrets
 /data/
 *.ovpn
+!**/testdata/*.ovpn
 *.key
 *.pem
 .env
