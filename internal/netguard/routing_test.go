@@ -35,7 +35,7 @@ type routingCase struct {
 }
 
 func routeThroughTunnel(g *Guard) error {
-	return g.RouteThroughTunnel(context.Background(), vpnIP)
+	return g.RouteThroughTunnel(context.Background(), vpnIP, nil)
 }
 
 func clearTunnelRouting(g *Guard) error {
@@ -132,7 +132,7 @@ func TestRouteThroughTunnelRejectsNonIPv4(t *testing.T) {
 		{},
 	} {
 		f := newFakeRunner()
-		err := New(f).RouteThroughTunnel(context.Background(), addr)
+		err := New(f).RouteThroughTunnel(context.Background(), addr, nil)
 		var v *domain.ValidationError
 		if !errors.As(err, &v) || v.Fields["vpnIp"] == "" {
 			t.Errorf("%v: err = %v, want a validation error on vpnIp", addr, err)

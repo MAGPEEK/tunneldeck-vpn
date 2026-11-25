@@ -95,7 +95,8 @@ func (s *fakeStore) setDaily(id string, daily domain.DailyReconnect) {
 	})
 }
 
-// fakeGuard records netguard calls as "install", "route <ip>", "clear".
+// fakeGuard records netguard calls as "install", "route <ip>" (followed by
+// " to <networks>" when there are remote networks), "clear".
 type fakeGuard struct {
 	mu         sync.Mutex
 	calls      []string
@@ -114,10 +115,14 @@ func (g *fakeGuard) InstallFirewall(_ context.Context, firewall domain.Firewall,
 	return g.installErr
 }
 
-func (g *fakeGuard) RouteThroughTunnel(_ context.Context, vpnIP netip.Addr) error {
+func (g *fakeGuard) RouteThroughTunnel(_ context.Context, vpnIP netip.Addr, remoteNetworks []netip.Prefix) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.calls = append(g.calls, "route "+vpnIP.String())
+	call := "route " + vpnIP.String()
+	if len(remoteNetworks) > 0 {
+		call += fmt.Sprintf(" to %v", remoteNetworks)
+	}
+	g.calls = append(g.calls, call)
 	return g.routeErr
 }
 
@@ -309,7 +314,23 @@ type managerHarness struct {
 	drivers chan *scriptedDriver
 	// prepare adjusts every new driver before the manager uses it.
 	prepare func(*scriptedDriver)
-	gates   []chan struct{}
+	// wrap, when set, gives the manager a different Driver around each new
+	// scripted driver.
+	wrap  func(*scriptedDriver) Driver
+	gates []chan struct{}
+}
+
+// networkedDriver is a scripted driver whose profiles name remote
+// networks; it records the profile it was asked about.
+type networkedDriver struct {
+	*scriptedDriver
+	networks []netip.Prefix
+	asked    chan string
+}
+
+func (d networkedDriver) RemoteNetworks(p domain.Profile) []netip.Prefix {
+	d.asked <- p.ID
+	return d.networks
 }
 
 var defaultStart = time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
@@ -348,6 +369,9 @@ func (h *managerHarness) newDriver() Driver {
 		h.prepare(d)
 	}
 	h.drivers <- d
+	if h.wrap != nil {
+		return h.wrap(d)
+	}
 	return d
 }
 

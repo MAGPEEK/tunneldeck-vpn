@@ -3,6 +3,7 @@ package openvpn
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -515,4 +516,27 @@ func eventText(e domain.Event) string {
 		return e.Message
 	}
 	return ""
+}
+
+func TestDriverValidateChecksRemoteNetworksAgainstTheLAN(t *testing.T) {
+	settings := mdexSettings()
+	settings[KeyRemoteNetworks] = []string{"192.168.2.0/25"}
+	p := newProfile(t, settings, mdexSecrets())
+	lan := func(context.Context) ([]netip.Prefix, error) {
+		return []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")}, nil
+	}
+	failing := func(context.Context) ([]netip.Prefix, error) { return nil, errors.New("ip: not found") }
+
+	if _, ok := validationFields(t, New(Options{LANSubnets: lan}).Validate(p))[KeyRemoteNetworks]; !ok {
+		t.Error("remote network inside the LAN accepted")
+	}
+	for name, source := range map[string]LANSource{"no LAN source": nil, "failing LAN source": failing} {
+		if err := New(Options{LANSubnets: source}).Validate(p); err != nil {
+			t.Errorf("%s: Validate = %v, want the check skipped", name, err)
+		}
+	}
+	if got := New(Options{}).RemoteNetworks(p); !slices.Equal(got, []netip.Prefix{netip.MustParsePrefix("192.168.2.0/25")}) {
+		t.Errorf("RemoteNetworks = %v", got)
+	}
+	var _ vpn.RemoteNetworker = New(Options{})
 }

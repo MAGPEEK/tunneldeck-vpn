@@ -46,7 +46,15 @@ var (
 		code: CodeDeprecatedIgnored, severity: SeverityWarning,
 		message: "dropped: deprecated, OpenVPN 2.7 ignores it",
 	}
+	verdictStaticKey = verdict{
+		code: CodeStaticKeyUnsupported, severity: SeverityRejected,
+		message: "static-key mode is deprecated in OpenVPN 2.7 and insecure, and is not supported; " +
+			"ask the provider for a certificate-based configuration (tls-crypt protects the handshake)",
+	}
 )
+
+// directiveStaticKey selects static-key mode ("secret", SPEC §17).
+const directiveStaticKey = "secret"
 
 // directivesRunningCode run scripts or load code. setenv is included because
 // "setenv opt <directive>" dispatches any directive.
@@ -63,8 +71,7 @@ var directivesRunningCode = set(
 var directivesEscapingSandbox = set(
 	"daemon", "inetd", "log", "log-append", "syslog", "status", "writepid",
 	"config", "cd", "chroot", "tmp-dir", "replay-persist", "tls-export-cert",
-	"askpass", "pkcs12", "capath", "crl-verify", "extra-certs", "dh", "secret",
-	"tls-crypt-v2",
+	"askpass", "pkcs12", "capath", "crl-verify", "extra-certs", "dh", "tls-crypt-v2",
 )
 
 // prefixesEscapingSandbox covers management* and dev, dev-type, dev-node.
@@ -100,6 +107,8 @@ func classify(d directive) (v verdict, removed bool) {
 		return verdictInvalidName, true
 	case directivesRunningCode[d.name]:
 		return verdictRunsCode, true
+	case d.name == directiveStaticKey:
+		return verdictStaticKey, true
 	case directivesEscapingSandbox[d.name] || hasAnyPrefix(d.name, prefixesEscapingSandbox):
 		return verdictEscapesSandbox, true
 	case directivesRouting[d.name] || hasAnyPrefix(d.name, prefixesRouting):

@@ -43,9 +43,11 @@ The servers generate a fresh PKI at start (`server/make-pki.sh`, ECDSA P-256, va
 
 | Variant | Server | Profile |
 |---|---|---|
-| A | username/password via `auth-user-pass-verify`, CA, data cipher negotiated (AES-256-GCM), UDP | `authMode password` |
+| A | username/password via `auth-user-pass-verify`, CA, data cipher negotiated (AES-256-GCM), UDP | `authMode password`, `remoteNetworks: ["10.99.0.0/24"]` |
 | B | like mdex level 20: username/password, `data-ciphers none`, `auth none`, `fragment 1448`, `mssfix`, UDP | `cipher none`, `authDigest none`, extra options |
 | C | client certificate required, `tls-crypt`, TCP | `authMode certificate`, client key and tls-crypt key as secrets |
+
+Every server also has a dummy interface `remote0` with `10.99.0.1/24`, a network "behind" it that is pushed to nobody; only variant A's profile names it in `remoteNetworks`.
 
 The test password contains a space, `"`, `\`, `'`, `#`, `;` and `$` to exercise the management escaping.
 
@@ -59,7 +61,7 @@ TunnelDeck-VPN shares the backend of the host's firewall (SPEC §6): it counts t
 | `tunneldeck-nft` | `xtables-legacy-multi` deleted: a modern host without the legacy `ip_tables` modules | `using iptables-nft: only the nf_tables backend works` |
 | `tunneldeck-shared` | both binaries work; a host firewall on nf_tables already has `-A INPUT -i tdvpn0 -p tcp -j DROP`, like ufw's "deny incoming" | `using iptables-nft: host rules only in nf_tables (<n>)` |
 
-`<n>` includes the nat rules Docker installs in every container namespace for its embedded DNS, so the test checks the detail up to the count. It lists TunnelDeck-VPN's chains with the chosen backend's own binary; for `tunneldeck-shared` it also checks that `iptables-legacy` holds none of them. The host's DROP rule makes the host-access and remote-access steps fail if TunnelDeck-VPN installed its chains in the other backend.
+`<n>` includes the nat rules Docker installs in every container namespace for its embedded DNS, so the test checks the detail up to the count. It lists TunnelDeck-VPN's chains with the chosen backend's own binary; for `tunneldeck-shared` it also checks that `iptables-legacy` holds none of them. The host's DROP rule makes the firewall and remote-access steps fail if TunnelDeck-VPN installed its chains in the other backend.
 
 ## Assertions per backend and variant
 
@@ -67,10 +69,10 @@ TunnelDeck-VPN shares the backend of the host's firewall (SPEC §6): it counts t
 2. Variants A and B: a profile with a wrong password ends in state `error` with `lastError.code` `auth_failed`; the server's verify script sees exactly one attempt, also 10 s later (no retry). Deleting that profile while it is still in state `error` succeeds and leaves the connection `disconnected`.
 3. Connect: state `connected` within 60 s; the VPN IP is a client address of the server's pool.
 4. Traffic: five 1000-byte pings from the host side to the server's tunnel address succeed, and both byte counters grow by at least 5000.
-5. Routing: the main table differs from before only by the kernel's connected route of the tunnel subnet (SPEC §6); `ip rule` has `7194: from <vpn-ip> lookup 7194`; table 7194 holds only `default dev tdvpn0`.
-6. Host protection: `INPUT` jumps to `TUNNELDECK-INPUT` first and that chain ends with `DROP` (and the unused backend holds no TunnelDeck-VPN rule). From the probe, the UI port 8194 and a listening dummy service (TCP 9000) are unreachable; a host-access rule for 8194 is refused (`validation_failed`); a rule for 9000 makes it reachable while 8194 stays closed; removing the rule closes it again.
+5. Routing: the main table differs from before only by the kernel's connected route of the tunnel subnet (SPEC §6); `ip rule` has `7194: from <vpn-ip> lookup 7194` (variant A also `7180: from all to 10.99.0.0/24 lookup 7194`); table 7194 holds only `default dev tdvpn0`. Variant A: the host pings `10.99.0.1` behind the server.
+6. Host protection: `INPUT` jumps to `TUNNELDECK-INPUT` first and that chain ends with `DROP` (and the unused backend holds no TunnelDeck-VPN rule). From the probe, the UI port 8194 and a listening dummy service (TCP 9000) are unreachable; an inbound firewall rule to this device for 8194 is refused (`validation_failed`); a rule for 9000 makes it reachable while 8194 stays closed; removing the rule closes it again.
 7. Remote access: enabling HTTPS remote access (port 8443, self-signed) makes `https://<vpn-ip>:8443/api/session` answer 200 with `Strict-Transport-Security: max-age=31536000` from the probe, while 8194 stays closed; disabling closes 8443 again.
-8. Disconnect: main table and rules are exactly as before.
+8. Disconnect: main table and rules are exactly as before; variant A: `10.99.0.1` is no longer reachable.
 9. Restart: connect, `docker compose restart` the TunnelDeck-VPN container, sign in again; the tunnel comes back by itself, routing is as in step 5 and the firewall is installed.
 
 ## Not covered

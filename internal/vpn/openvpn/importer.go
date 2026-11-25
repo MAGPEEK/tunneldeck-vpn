@@ -82,18 +82,19 @@ type importer struct {
 	warnings []Warning
 	extras   []string
 
-	remoteFound  bool
-	remotePort   int
-	remoteProto  string
-	port         int
-	proto        string
-	cipher       string
-	dataCiphers  string
-	keyDirection string
-	authUserPass bool
-	certificate  bool
-	tlsAuth      bool
-	verifySeen   bool
+	remoteFound   bool
+	remotePort    int
+	remoteProto   string
+	port          int
+	proto         string
+	cipher        string
+	dataCiphers   string
+	keyDirection  string
+	authUserPass  bool
+	certificate   bool
+	tlsAuth       bool
+	verifySeen    bool
+	staticKeySeen bool
 }
 
 func newImporter() *importer {
@@ -104,29 +105,31 @@ type directiveHandler func(im *importer, d directive, line int)
 
 // directiveHandlers map known directives to profile fields.
 var directiveHandlers = map[string]directiveHandler{
-	"remote":          (*importer).remote,
-	"proto":           (*importer).protoDirective,
-	"port":            (*importer).portDirective,
-	"rport":           (*importer).portDirective,
-	"dev":             (*importer).device,
-	"dev-type":        (*importer).device,
-	"ca":              (*importer).fileOrInline,
-	"cert":            (*importer).fileOrInline,
-	"key":             (*importer).fileOrInline,
-	"tls-auth":        (*importer).fileOrInline,
-	"tls-crypt":       (*importer).fileOrInline,
-	"key-direction":   (*importer).keyDirectionDirective,
-	"cipher":          (*importer).cipherDirective,
-	"data-ciphers":    (*importer).dataCiphersDirective,
-	"ncp-ciphers":     (*importer).dataCiphersDirective,
-	"auth":            settingFromArg(KeyAuthDigest),
-	"resolv-retry":    settingFromArg(KeyResolveRetry),
-	"keepalive":       (*importer).keepalive,
-	"comp-lzo":        (*importer).compLZO,
-	"compress":        (*importer).compress,
-	"auth-user-pass":  (*importer).authUserPassDirective,
-	"remote-cert-tls": (*importer).remoteCertTLS,
-	"ns-cert-type":    (*importer).nsCertType,
+	"remote":           (*importer).remote,
+	"proto":            (*importer).protoDirective,
+	"port":             (*importer).portDirective,
+	"rport":            (*importer).portDirective,
+	"dev":              (*importer).device,
+	"dev-type":         (*importer).device,
+	"ca":               (*importer).fileOrInline,
+	"cert":             (*importer).fileOrInline,
+	"key":              (*importer).fileOrInline,
+	"pkcs12":           (*importer).fileOrInline,
+	"tls-auth":         (*importer).fileOrInline,
+	"tls-crypt":        (*importer).fileOrInline,
+	"key-direction":    (*importer).keyDirectionDirective,
+	"cipher":           (*importer).cipherDirective,
+	"data-ciphers":     (*importer).dataCiphersDirective,
+	"ncp-ciphers":      (*importer).dataCiphersDirective,
+	"auth":             settingFromArg(KeyAuthDigest),
+	"resolv-retry":     settingFromArg(KeyResolveRetry),
+	"keepalive":        (*importer).keepalive,
+	"comp-lzo":         (*importer).compLZO,
+	"compress":         (*importer).compress,
+	"auth-user-pass":   (*importer).authUserPassDirective,
+	"remote-cert-tls":  (*importer).remoteCertTLS,
+	"ns-cert-type":     (*importer).nsCertType,
+	directiveStaticKey: (*importer).staticKey,
 }
 
 func (im *importer) line(raw string, number int) {
@@ -166,6 +169,11 @@ func (im *importer) block(tag string, content []string, number int) {
 	case "key":
 		im.secrets[SecretClientKey] = body
 		im.certificate = true
+	case "pkcs12":
+		im.secrets[SecretPKCS12] = body
+		im.certificate = true
+	case directiveStaticKey:
+		im.staticKey(directive{name: tag}, number)
 	case "tls-auth":
 		im.secrets[SecretTLSAuthKey] = body
 		im.tlsAuth = true
@@ -369,6 +377,16 @@ func (im *importer) nsCertType(d directive, number int) {
 		Code: CodeNsCertTypeMapped, Severity: SeverityInfo, Directive: d.name, Line: number,
 		Message: "deprecated; replaced by remote-cert-tls server",
 	})
+}
+
+// staticKey rejects static-key mode (SPEC §17) once per file, whether it
+// is selected by the directive, its inline block or both.
+func (im *importer) staticKey(d directive, number int) {
+	if im.staticKeySeen {
+		return
+	}
+	im.staticKeySeen = true
+	im.warn(verdictStaticKey.warning(d, number))
 }
 
 func (im *importer) requireArg(d directive, number int) (string, bool) {

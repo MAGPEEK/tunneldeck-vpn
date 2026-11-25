@@ -2,6 +2,7 @@ package netguard
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"slices"
 	"strings"
@@ -73,7 +74,7 @@ func TestRouteThroughTunnelInstallsPolicyRules(t *testing.T) {
 			f := newFakeRunner()
 			g := lancomGuard(t, f)
 			f.on(ruleShow, ok(tt.listing))
-			if err := g.RouteThroughTunnel(context.Background(), vpnIP); err != nil {
+			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
 				t.Fatalf("RouteThroughTunnel: %v", err)
 			}
 			assertCalls(t, f.calls, tt.want)
@@ -85,7 +86,7 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 	f := newFakeRunner()
 	g := lancomGuard(t, f)
 	f.on(ruleShow, ok(defaultRules))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
 		t.Fatal(err)
 	}
 	f.takeCalls()
@@ -264,5 +265,105 @@ func TestParsePolicyListing(t *testing.T) {
 		if _, ok := listing.owned[i].parse(); ok {
 			t.Errorf("rule %d %v parsed, want it treated as foreign", i, listing.owned[i].tokens)
 		}
+	}
+}
+
+// remoteNetworks are networks behind the VPN outside lanListing's LAN.
+var remoteNetworks = []netip.Prefix{netip.MustParsePrefix("10.99.0.0/24"), netip.MustParsePrefix("172.30.0.0/16")}
+
+const (
+	addRemote99 = "ip rule add from 0.0.0.0/0 to 10.99.0.0/24 lookup 7194 priority 7180"
+	addRemote30 = "ip rule add from 0.0.0.0/0 to 172.30.0.0/16 lookup 7194 priority 7180"
+)
+
+func TestRouteThroughTunnelRoutesRemoteNetworks(t *testing.T) {
+	f := newFakeRunner()
+	g := newLegacyGuard(f)
+	f.on(ruleShow, ok(defaultRules))
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks); err != nil {
+		t.Fatalf("RouteThroughTunnel: %v", err)
+	}
+	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow,
+		"ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow, addRemote99, addRemote30})
+
+	// A changed list: present rules stay, stale ones go.
+	f.on(ruleShow, ok("7180:\tfrom all to 10.99.0.0/24 lookup 7194\n"+
+		"7180:\tfrom all to 10.98.0.0/24 lookup 7194\n"+
+		"7194:\tfrom 10.8.0.2 lookup 7194\n"))
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks); err != nil {
+		t.Fatalf("RouteThroughTunnel again: %v", err)
+	}
+	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, addrShow,
+		"ip rule del priority 7180 from all to 10.98.0.0/24 lookup 7194", addRemote30})
+
+	f.on(ruleShow, ok("7180:\tfrom all to 10.99.0.0/24 lookup 7194\n7194:\tfrom 10.8.0.2 lookup 7194\n"))
+	if err := g.ClearTunnelRouting(context.Background()); err != nil {
+		t.Fatalf("ClearTunnelRouting: %v", err)
+	}
+	assertCalls(t, f.takeCalls(), []string{ruleShow,
+		"ip rule del priority 7180 from all to 10.99.0.0/24 lookup 7194",
+		"ip rule del from 10.8.0.2 lookup 7194 priority 7194", routeDelete})
+}
+
+func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
+	f := newFakeRunner()
+	g := lancomGuard(t, f)
+	f.on(ruleShow, ok(defaultRules))
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks[:1]); err != nil {
+		t.Fatal(err)
+	}
+	if calls := f.takeCalls(); !slices.Equal(calls[len(calls)-2:], []string{addOutbound, addRemote99}) {
+		t.Fatalf("remote network not routed after the firewall's rules: %q", calls)
+	}
+
+	scriptState(f, installedState{input: 1, forward: 1, forwardJumps: []string{"-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"}})
+	f.on(ruleShow, ok("7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n"+
+		"7180:\tfrom all to 10.99.0.0/24 lookup 7194\n"+
+		"7190:\tfrom 192.168.2.2 lookup 7194\n"+
+		"7191:\tfrom 192.168.2.2 ipproto 17 sport 500 lookup 7194\n"+
+		"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n"))
+	f.on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
+		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
+	if err := g.InstallFirewall(context.Background(), rulesOnly(lancomFirewall.Rules[:2]...), uiPort); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	calls := f.takeCalls()
+	assertCalls(t, calls[slices.Index(calls, ruleShow):], []string{ruleShow,
+		"ip rule del priority 7190 from 192.168.2.2 lookup 7194"})
+}
+
+func TestRouteThroughTunnelRefusesRemoteNetworks(t *testing.T) {
+	tests := []struct {
+		name    string
+		network string
+		// commands is true when the refusal needs the LAN, so the route and
+		// the VPN rule were already in place.
+		commands bool
+	}{
+		{name: "overlaps the LAN", network: "192.168.0.0/16", commands: true},
+		{name: "inside the LAN", network: "192.168.2.128/25", commands: true},
+		{name: "every address", network: "0.0.0.0/0"},
+		{name: "host bits set", network: "10.99.0.1/24"},
+		{name: "IPv6", network: "fd00::/64"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRunner()
+			g := newLegacyGuard(f)
+			f.on(ruleShow, ok(defaultRules))
+			err := g.RouteThroughTunnel(context.Background(), vpnIP, []netip.Prefix{netip.MustParsePrefix(tt.network)})
+			var v *domain.ValidationError
+			if !errors.As(err, &v) || v.Fields["remoteNetworks"] == "" {
+				t.Fatalf("err = %v, want a validation error on remoteNetworks", err)
+			}
+			if got := len(f.calls) > 0; got != tt.commands {
+				t.Errorf("commands run = %q", f.calls)
+			}
+			for _, call := range f.calls {
+				if strings.Contains(call, "priority 7180") {
+					t.Errorf("refused network routed: %q", call)
+				}
+			}
+		})
 	}
 }

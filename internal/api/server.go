@@ -42,7 +42,7 @@ type Server struct {
 	mux       *http.ServeMux
 	handler   http.Handler
 
-	// portsMu serialises host-access and remote-access updates: their ports
+	// portsMu serialises firewall and remote-access updates: their ports
 	// are checked against each other, and a rollback never overwrites a
 	// newer change.
 	portsMu sync.Mutex
@@ -103,8 +103,11 @@ func (s *Server) routes() {
 	s.private("GET /api/logs", s.getLogs)
 	s.private("GET /api/events", s.streamEvents)
 
-	s.private("GET /api/host-access", s.getHostAccess)
-	s.private("PUT /api/host-access", s.putHostAccess)
+	s.private("GET /api/firewall", s.getFirewall)
+	s.private("PUT /api/firewall", s.putFirewall)
+	s.private("POST /api/firewall/templates/ipsec", s.ipsecTemplate)
+	s.public("GET /api/host-access", s.goneHostAccess)
+	s.public("PUT /api/host-access", s.goneHostAccess)
 	s.private("GET /api/system", s.getSystem)
 
 	s.private("GET /api/remote-access", s.getRemoteAccess)

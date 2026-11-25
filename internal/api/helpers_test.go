@@ -16,14 +16,14 @@ import (
 var testNow = time.Date(2026, 11, 25, 8, 30, 0, 0, time.UTC)
 
 type testEnv struct {
-	auth       *fakeAuth
-	profiles   *fakeProfiles
-	connection *fakeConnection
-	hostAccess *fakeFirewallStore
-	firewall   *fakeFirewall
-	remote     *fakeRemoteAccess
-	listener   *fakeListener
-	server     *Server
+	auth          *fakeAuth
+	profiles      *fakeProfiles
+	connection    *fakeConnection
+	firewallStore *fakeFirewallStore
+	firewall      *fakeFirewall
+	remote        *fakeRemoteAccess
+	listener      *fakeListener
+	server        *Server
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -33,13 +33,13 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("register: %v", err)
 	}
 	env := &testEnv{
-		auth:       newFakeAuth(),
-		profiles:   &fakeProfiles{},
-		connection: &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},
-		hostAccess: &fakeFirewallStore{},
-		firewall:   &fakeFirewall{},
-		remote:     newFakeRemoteAccess(),
-		listener:   &fakeListener{},
+		auth:          newFakeAuth(),
+		profiles:      &fakeProfiles{},
+		connection:    &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},
+		firewallStore: &fakeFirewallStore{},
+		firewall:      newFakeFirewall(),
+		remote:        newFakeRemoteAccess(),
+		listener:      &fakeListener{},
 	}
 	env.server = New(Deps{
 		Auth:          env.auth,
@@ -48,7 +48,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Drivers:       registry,
 		Importer:      fakeImporter{},
 		Connection:    env.connection,
-		FirewallStore: env.hostAccess,
+		FirewallStore: env.firewallStore,
 		Firewall:      env.firewall,
 		System: System{
 			Version: "1.2.3", ListenAddress: "192.168.1.10:8194", UIPort: testUIPort, TimeZone: "Europe/Berlin",

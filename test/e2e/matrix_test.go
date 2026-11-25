@@ -58,21 +58,26 @@ type variant struct {
 	gateway netip.Addr   // the server's own tunnel address
 	// password is true when the server checks username and password.
 	password bool
-	settings func(pki) map[string]any
-	secrets  func(p pki, password string) map[string]string
+	// remoteHost, when valid, is an address on the network behind the
+	// server that the profile names in remoteNetworks.
+	remoteHost netip.Addr
+	settings   func(pki) map[string]any
+	secrets    func(p pki, password string) map[string]string
 }
 
 var variants = []variant{
 	{
-		name:     "A-userpass-aes-gcm",
-		service:  "server-a",
-		pool:     netip.MustParsePrefix("10.94.1.0/24"),
-		gateway:  netip.MustParseAddr("10.94.1.1"),
-		password: true,
+		name:       "A-userpass-aes-gcm",
+		service:    "server-a",
+		pool:       netip.MustParsePrefix("10.94.1.0/24"),
+		gateway:    netip.MustParseAddr("10.94.1.1"),
+		password:   true,
+		remoteHost: netip.MustParseAddr("10.99.0.1"),
 		settings: func(p pki) map[string]any {
 			return map[string]any{
 				"remoteHost": "server-a", "port": 1194, "proto": "udp",
 				"authMode": "password", "username": vpnUsername, "caCert": p.ca,
+				"remoteNetworks": []string{remoteNetwork.String()},
 			}
 		},
 		secrets: passwordSecrets,
@@ -109,6 +114,9 @@ var variants = []variant{
 		},
 	},
 }
+
+// remoteNetwork is the network behind every test server (entrypoint.sh).
+var remoteNetwork = netip.MustParsePrefix("10.99.0.0/24")
 
 func passwordSecrets(_ pki, password string) map[string]string {
 	return map[string]string{"password": password}

@@ -3,6 +3,7 @@ package netguard
 import (
 	"context"
 	"io/fs"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -38,6 +39,9 @@ type Guard struct {
 	// routed is true between a successful RouteThroughTunnel and the next
 	// ClearTunnelRouting: the policy rules of the firewall are in place.
 	routed bool
+	// remoteNetworks are the networks behind the VPN routed through the
+	// tunnel while routed is true.
+	remoteNetworks []netip.Prefix
 }
 
 type installation struct {

@@ -165,8 +165,11 @@ func (td *tunnelDeck) logTail() string {
 	return strings.Join(lines, "\n")
 }
 
-func (td *tunnelDeck) setHostAccess(rules []hostAccessRule) error {
-	return td.api.call(http.MethodPut, "/api/host-access", map[string]any{"rules": rules}, nil)
+// setFirewallRules replaces the firewall rules and keeps every global
+// protection on.
+func (td *tunnelDeck) setFirewallRules(rules []firewallRule) error {
+	settings := map[string]bool{"dropInvalid": true, "mssClamp": true, "synFloodProtection": true, "pingLimit": true}
+	return td.api.call(http.MethodPut, "/api/firewall", map[string]any{"rules": rules, "settings": settings}, nil)
 }
 
 // setRemoteAccess switches the HTTPS listener with a self-signed

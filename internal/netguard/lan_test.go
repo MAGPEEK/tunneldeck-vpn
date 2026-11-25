@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"slices"
 	"testing"
+	"testing/fstest"
 )
 
 func TestParseLANAddresses(t *testing.T) {
@@ -46,5 +47,29 @@ func TestLANSubnets(t *testing.T) {
 	f.on(addrShow, fail("exec: \"ip\": executable file not found in $PATH"))
 	if _, err := g.LANSubnets(context.Background()); err == nil {
 		t.Fatal("LANSubnets succeeded despite a failing ip")
+	}
+}
+
+func TestHostNetwork(t *testing.T) {
+	f := newFakeRunner()
+	g := newLegacyGuard(f)
+	g.root = fstest.MapFS{"proc/sys/net/ipv4/ip_forward": &fstest.MapFile{Data: []byte("1\n")}}
+	got, err := g.HostNetwork(context.Background())
+	if err != nil || got.Address != netip.MustParseAddr("192.168.2.10") || !got.IPForward ||
+		!slices.Equal(got.Subnets, []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")}) {
+		t.Fatalf("HostNetwork = %+v, %v", got, err)
+	}
+
+	f.on(addrShow, fail("exec: \"ip\": executable file not found in $PATH"))
+	got, err = g.HostNetwork(context.Background())
+	if err == nil || got.Address.IsValid() || got.Subnets != nil || got.IPForward {
+		t.Fatalf("HostNetwork with failing ip = %+v, %v", got, err)
+	}
+
+	g.root = fstest.MapFS{}
+	f.on(addrShow, ok(""))
+	got, err = g.HostNetwork(context.Background())
+	if err != nil || got.Address.IsValid() || len(got.Subnets) != 0 || got.IPForward {
+		t.Fatalf("HostNetwork without LAN and ip_forward = %+v, %v", got, err)
 	}
 }

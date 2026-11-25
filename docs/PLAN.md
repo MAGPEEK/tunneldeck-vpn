@@ -68,7 +68,7 @@ Finalise Dockerfile (pin the `openvpn` package to `~2.7`, non-root not possible 
 
 SPEC §16.1, §16.3: `domain.FirewallRule` with validation; store schema v1 → v2 migration (host-access rules → inbound rules to "This device"); netguard: inbound accept for the host, DNAT + forward + optional masquerade for other LAN targets, ESP/GRE forwarding, outbound policy routing with LAN exclusion, masquerade on `tdvpn0`, kill switch; `ip_forward` and LAN-subnet detection in the self-check. Unit tests with the fake runner for every rule shape; integration test.
 
-## [ ] 17. Firewall API — medium — after: 16
+## [x] 17. Firewall API — medium — after: 16
 
 `GET/PUT /api/firewall`, 410 on `/api/host-access`, validation errors per rule field, rollback on apply failure, connection manager re-applies routing rules on every connect.
 
@@ -80,6 +80,6 @@ SPEC §16.4: Firewall page with inbound/outbound tabs, reordering, "This device"
 
 Extend `test/e2e`: inbound port forward to a LAN container (with and without keepSourceAddress), ESP + UDP 500/4500 forwarding to a strongSwan "LANCOM stand-in" that establishes IPsec with a peer on the VPN side, outbound policy routing from one LAN container, kill switch when the tunnel drops, migration from a v1 settings file. Docs: firewall section in `docs/linux*.md`, `docs/synology*.md`, LANCOM IPsec example.
 
-## [ ] 20. OpenVPN remote networks and PKCS#12 — careful — after: 16
+## [x] 20. OpenVPN remote networks and PKCS#12 — careful — after: 16
 
 SPEC §17 "Adopt": profile setting `remoteNetworks` (form field, validation, `ip rule to <net> lookup 7194` while connected, usable as outbound firewall destination); inline/uploaded PKCS#12 as secret (importer maps `<pkcs12>`, renderer emits it inline); keep-alive placeholder; advisory/importer message for static-key mode. Tests incl. golden files; e2e: host reaches a network behind the test server.

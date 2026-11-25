@@ -121,7 +121,7 @@ func writeRemoteAccessFailed(w http.ResponseWriter) {
 }
 
 // validateRemoteAccess applies the domain rules, keeps the port off the UI
-// port and enabled TCP host-access rules (SPEC §8.1) and requires an
+// port and the public ports of enabled inbound TCP firewall rules (SPEC §8.1) and requires an
 // uploaded certificate for the uploaded source. The caller holds s.portsMu.
 func (s *Server) validateRemoteAccess(settings domain.RemoteAccess) error {
 	v := &domain.ValidationError{}

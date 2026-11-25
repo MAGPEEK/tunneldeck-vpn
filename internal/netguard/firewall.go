@@ -118,12 +118,18 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	return nil
 }
 
+// syncInstalledPolicy brings the policy rules of a routed tunnel in line
+// with the newly installed firewall; the remote networks stay.
 func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error {
+	want, err := policyRulesFor(g.installed.firewall, g.remoteNetworks, lan)
+	if err != nil {
+		return err
+	}
 	listing, err := g.listPolicyRules(ctx)
 	if err != nil {
 		return err
 	}
-	return g.syncPolicyRules(ctx, listing.owned, wantedPolicyRules(g.installed.firewall, lan))
+	return g.syncPolicyRules(ctx, listing.owned, want)
 }
 
 // RemoveFirewall deletes every jump to the four chains, then the chains.

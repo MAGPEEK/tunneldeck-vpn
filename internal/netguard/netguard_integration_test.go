@@ -81,8 +81,10 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 		t.Fatalf("InstallFirewall again: %v", err)
 	}
 
+	// A remote network behind the VPN (TEST-NET-2, outside every LAN).
+	remoteNetworks := []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}
 	for _, ip := range []string{"10.99.0.2", "10.99.0.2", "10.99.0.3"} {
-		if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr(ip)); err != nil {
+		if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr(ip), remoteNetworks); err != nil {
 			t.Fatalf("RouteThroughTunnel(%s): %v", ip, err)
 		}
 	}
@@ -91,9 +93,10 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 		t.Errorf("policy rules at 7194 = %v, %v; want only 10.99.0.3", listing.vpnSources, err)
 	}
 	// One LAN exclusion per LAN subnet, the outbound rule, the TCP range
-	// replies and the ESP replies; every listed rule must parse back
-	// into a wanted one, or the repeated calls above would have churned.
-	if want := len(lan) + 3; len(listing.owned) != want {
+	// replies, the ESP replies and the remote network; every listed rule
+	// must parse back into a wanted one, or the repeated calls above would
+	// have churned.
+	if want := len(lan) + 4; len(listing.owned) != want {
 		t.Errorf("owned policy rules = %v, want %d", listing.owned, want)
 	}
 	for _, rule := range listing.owned {
@@ -146,7 +149,7 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 func integrationFirewall(target string) domain.Firewall {
 	destination := domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: target}
 	return domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{
-		domain.HostAccessRule{Protocol: domain.TransportTCP, Port: 22, Enabled: true}.FirewallRule(),
+		hostAccess("", domain.ProtocolTCP, 22, "", true),
 		{Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
 			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(51820), Enabled: true},
 		{Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",

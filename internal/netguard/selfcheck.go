@@ -105,8 +105,7 @@ func (g *Guard) checkNetAdmin(ctx context.Context) CheckResult {
 
 // checkIPForward reads net.ipv4.ip_forward; netguard never changes it.
 func (g *Guard) checkIPForward() CheckResult {
-	data, err := fs.ReadFile(g.root, ipForwardPath)
-	value := strings.TrimSpace(string(data))
+	value, err := g.ipForwardValue()
 	switch {
 	case err != nil:
 		return failed(CheckIPForward, fmt.Sprintf("/%s cannot be read: %v", ipForwardPath, err), hintIPForward)
@@ -114,6 +113,12 @@ func (g *Guard) checkIPForward() CheckResult {
 		return failed(CheckIPForward, "IPv4 forwarding is off (net.ipv4.ip_forward = "+value+")", hintIPForward)
 	}
 	return passed(CheckIPForward, "IPv4 forwarding is on")
+}
+
+// ipForwardValue reads net.ipv4.ip_forward ("1" when on).
+func (g *Guard) ipForwardValue() (string, error) {
+	data, err := fs.ReadFile(g.root, ipForwardPath)
+	return strings.TrimSpace(string(data)), err
 }
 
 // checkLAN detects the LAN subnets that inbound rules to other devices

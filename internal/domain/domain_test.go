@@ -253,59 +253,6 @@ func TestProfilePublicHidesSecrets(t *testing.T) {
 	}
 }
 
-func TestHostAccessRuleValidate(t *testing.T) {
-	tests := []struct {
-		name       string
-		rule       HostAccessRule
-		wantFields []string
-	}{
-		{"tcp any source", HostAccessRule{Protocol: TransportTCP, Port: 22}, nil},
-		{"udp with source", HostAccessRule{Protocol: TransportUDP, Port: 65535, SourceCIDR: "10.8.0.0/24"}, nil},
-		{"single host", HostAccessRule{Protocol: TransportTCP, Port: 1, SourceCIDR: "10.8.0.7/32"}, nil},
-		{"bad protocol", HostAccessRule{Protocol: "icmp", Port: 22}, []string{"protocol"}},
-		{"empty protocol", HostAccessRule{Port: 22}, []string{"protocol"}},
-		{"port zero", HostAccessRule{Protocol: TransportTCP}, []string{"port"}},
-		{"port too high", HostAccessRule{Protocol: TransportTCP, Port: 65536}, []string{"port"}},
-		{"bare address", HostAccessRule{Protocol: TransportTCP, Port: 22, SourceCIDR: "10.0.0.1"}, []string{"sourceCidr"}},
-		{"ipv6", HostAccessRule{Protocol: TransportTCP, Port: 22, SourceCIDR: "fd00::/64"}, []string{"sourceCidr"}},
-		{"host bits set", HostAccessRule{Protocol: TransportTCP, Port: 22, SourceCIDR: "10.0.0.1/24"}, []string{"sourceCidr"}},
-		{"garbage", HostAccessRule{Protocol: TransportTCP, Port: 22, SourceCIDR: "nope"}, []string{"sourceCidr"}},
-		{"everything wrong", HostAccessRule{Protocol: "x", Port: -1, SourceCIDR: "y"}, []string{"protocol", "port", "sourceCidr"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assertFields(t, tt.rule.Validate(), tt.wantFields)
-		})
-	}
-}
-
-func TestValidateHostAccessRules(t *testing.T) {
-	ssh := HostAccessRule{ID: "a", Protocol: TransportTCP, Port: 22}
-	tests := []struct {
-		name       string
-		rules      []HostAccessRule
-		wantFields []string
-	}{
-		{"empty list", nil, nil},
-		{"distinct rules", []HostAccessRule{
-			ssh,
-			{ID: "b", Protocol: TransportUDP, Port: 22},
-			{ID: "c", Protocol: TransportTCP, Port: 22, SourceCIDR: "10.0.0.0/8"},
-			{Protocol: TransportTCP, Port: 443},
-			{Protocol: TransportTCP, Port: 444},
-		}, nil},
-		{"duplicate match", []HostAccessRule{ssh, {ID: "b", Protocol: TransportTCP, Port: 22}}, []string{"rules[1].port"}},
-		{"duplicate match disabled", []HostAccessRule{ssh, {ID: "b", Protocol: TransportTCP, Port: 22, Enabled: false}}, []string{"rules[1].port"}},
-		{"duplicate id", []HostAccessRule{ssh, {ID: "a", Protocol: TransportTCP, Port: 23}}, []string{"rules[1].id"}},
-		{"invalid rule", []HostAccessRule{ssh, {ID: "b", Protocol: TransportTCP}}, []string{"rules[1].port"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assertFields(t, ValidateHostAccessRules(tt.rules), tt.wantFields)
-		})
-	}
-}
-
 func TestEventKinds(t *testing.T) {
 	tests := []struct {
 		event Event

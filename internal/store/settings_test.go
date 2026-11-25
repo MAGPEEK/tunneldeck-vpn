@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"tunneldeck/internal/domain"
@@ -63,7 +64,11 @@ func TestLanguage(t *testing.T) {
 
 // hostRule is a valid inbound TCP rule to this device on port.
 func hostRule(port int) domain.FirewallRule {
-	return domain.HostAccessRule{Protocol: domain.TransportTCP, Port: port, Enabled: true}.FirewallRule()
+	return domain.FirewallRule{
+		Name: fmt.Sprintf("Host port %d/tcp", port), Direction: domain.DirectionInbound, Action: domain.ActionAccept,
+		Protocol: domain.ProtocolTCP, Destination: domain.FirewallDestination{Kind: domain.DestinationHost},
+		DestinationPort: domain.SinglePort(port), Enabled: true,
+	}
 }
 
 func TestFirewall(t *testing.T) {

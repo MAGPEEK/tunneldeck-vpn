@@ -3,6 +3,7 @@ package openvpn
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
@@ -28,10 +29,25 @@ const (
 	staticKeyHexLine = 32
 )
 
+// A PKCS#12 bundle (RFC 7292) is stored and rendered as base64. Its size is
+// bounded; real bundles of a certificate chain and a key are a few KiB.
+const (
+	maxPKCS12Bytes    = 64 << 10
+	pkcs12Base64Line  = 64
+	derSequence       = 0x30
+	derLongFormFlag   = 0x80
+	derMaxLengthBytes = 4
+)
+
+// pkcs12Version is the DER encoding of "version INTEGER {v3(3)}", the first
+// field of the PFX sequence.
+var pkcs12Version = []byte{0x02, 0x01, 0x03}
+
 var (
 	errNotCertificate = errors.New("must contain one or more PEM certificates (RFC 7468)")
 	errNotPrivateKey  = errors.New("must contain exactly one PEM private key (RFC 7468)")
 	errNotStaticKey   = errors.New("must be an OpenVPN static key (2048 bit, V1)")
+	errNotPKCS12      = errors.New("must be a base64-encoded PKCS#12 file (.p12, .pfx) of at most 64 KiB")
 )
 
 // canonicalCertificates checks that text holds only PEM certificates that
@@ -149,4 +165,47 @@ func canonicalStaticKey(text string) (string, error) {
 	}
 	out.WriteString(staticKeyEnd + "\n")
 	return out.String(), nil
+}
+
+// canonicalPKCS12 checks that text is base64 of a plausible PKCS#12 bundle
+// and returns it re-encoded in lines of 64 characters, as inline <pkcs12>
+// content. Whitespace, such as the line breaks of an .ovpn block, is
+// ignored. The bundle itself is not parsed: it may be encrypted, and
+// OpenVPN asks for its passphrase over management.
+func canonicalPKCS12(text string) (string, error) {
+	der, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(text), ""))
+	if err != nil || len(der) > maxPKCS12Bytes || !looksLikePKCS12(der) {
+		return "", errNotPKCS12
+	}
+	encoded := base64.StdEncoding.EncodeToString(der)
+	var out strings.Builder
+	for start := 0; start < len(encoded); start += pkcs12Base64Line {
+		out.WriteString(encoded[start:min(start+pkcs12Base64Line, len(encoded))] + "\n")
+	}
+	return out.String(), nil
+}
+
+// looksLikePKCS12 checks the start of a PFX structure (RFC 7292 §4): a
+// SEQUENCE whose definite length matches the data, or an indefinite
+// length (BER), followed by version 3.
+func looksLikePKCS12(der []byte) bool {
+	if len(der) < 2 || der[0] != derSequence {
+		return false
+	}
+	header, length := 2, int(der[1])
+	switch {
+	case der[1] == derLongFormFlag:
+		length = len(der) - header
+	case der[1] > derLongFormFlag:
+		count := int(der[1] &^ derLongFormFlag)
+		if count > derMaxLengthBytes || len(der) < header+count {
+			return false
+		}
+		length = 0
+		for _, b := range der[header : header+count] {
+			length = length<<8 | int(b)
+		}
+		header += count
+	}
+	return header+length == len(der) && bytes.HasPrefix(der[header:], pkcs12Version)
 }

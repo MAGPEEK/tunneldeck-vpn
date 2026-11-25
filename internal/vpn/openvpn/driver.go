@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"path"
 	"sync"
 	"time"
@@ -40,8 +41,17 @@ const (
 	eventBuffer = 64
 )
 
+// lanCheckTimeout bounds the LAN detection of Validate.
+const lanCheckTimeout = 5 * time.Second
+
+// LANSource returns the host's LAN subnets; netguard.Guard.LANSubnets
+// implements it.
+type LANSource func(ctx context.Context) ([]netip.Prefix, error)
+
 // Options configure the OpenVPN driver. Zero values select the defaults;
-// DeviceName is required and must be netguard.DeviceName.
+// DeviceName is required and must be netguard.DeviceName. Without
+// LANSubnets, Validate cannot reject remote networks that overlap the LAN;
+// netguard still refuses to route them.
 type Options struct {
 	RuntimeDir string
 	DeviceName string
@@ -50,6 +60,7 @@ type Options struct {
 	Dialer     Dialer
 	FileSystem FileSystem
 	Clock      vpn.Clock
+	LANSubnets LANSource
 }
 
 func (o Options) withDefaults() Options {
@@ -113,8 +124,28 @@ func (*Driver) Protocol() domain.Protocol { return domain.ProtocolOpenVPN }
 // Describe returns the profile form of the driver.
 func (*Driver) Describe() vpn.FormSchema { return Describe() }
 
-// Validate checks the OpenVPN settings and secrets of p.
-func (*Driver) Validate(p domain.Profile) error { return Validate(p) }
+// Validate checks the OpenVPN settings and secrets of p, and that its
+// remote networks stay clear of the host's LAN when the LAN is known.
+func (d *Driver) Validate(p domain.Profile) error { return ValidateWithLAN(p, d.lan()) }
+
+// lan returns the host's LAN subnets, or nil when they cannot be detected:
+// then netguard's check at connect time is the only one.
+func (d *Driver) lan() []netip.Prefix {
+	if d.opts.LANSubnets == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), lanCheckTimeout)
+	defer cancel()
+	lan, err := d.opts.LANSubnets(ctx)
+	if err != nil {
+		return nil
+	}
+	return lan
+}
+
+// RemoteNetworks returns the networks behind the VPN that p routes through
+// the tunnel while connected (vpn.RemoteNetworker).
+func (*Driver) RemoteNetworks(p domain.Profile) []netip.Prefix { return RemoteNetworks(p) }
 
 // Advise returns the advisories of p.
 func (*Driver) Advise(p domain.PublicProfile) []vpn.Advisory { return Advise(p) }

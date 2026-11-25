@@ -3,6 +3,7 @@ package vpn
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -59,6 +60,41 @@ func TestManagerConnectAndDisconnect(t *testing.T) {
 	}
 	if s := h.m.Status(); s.VPNIP != "" || s.State != domain.StateDisconnected {
 		t.Errorf("Status after disconnect = %+v", s)
+	}
+}
+
+// TestManagerRoutesRemoteNetworks: a driver that names remote networks gets
+// them routed on every connected event and cleared on disconnect.
+func TestManagerRoutesRemoteNetworks(t *testing.T) {
+	h := newManagerHarness(t)
+	asked := make(chan string, 4)
+	networks := []netip.Prefix{netip.MustParsePrefix("10.99.0.0/24"), netip.MustParsePrefix("172.30.0.0/16")}
+	h.wrap = func(d *scriptedDriver) Driver {
+		return networkedDriver{scriptedDriver: d, networks: networks, asked: asked}
+	}
+	d := h.connectUp("a", "10.66.0.2")
+	d.emit(domain.StateEvent{State: domain.StateReconnecting, Message: "ping-restart"})
+	h.waitState(domain.StateReconnecting)
+	d.emit(connectedEvent("10.66.0.3"))
+	h.waitState(domain.StateConnected)
+	if err := h.m.Disconnect(ctx); err != nil {
+		t.Fatalf("Disconnect: %v", err)
+	}
+	h.waitState(domain.StateDisconnected)
+
+	want := []string{
+		"install", "route 10.66.0.2 to [10.99.0.0/24 172.30.0.0/16]", "route 10.66.0.3 to [10.99.0.0/24 172.30.0.0/16]", "clear",
+	}
+	if calls := h.guard.recorded(); !slices.Equal(calls, want) {
+		t.Errorf("netguard calls = %v, want %v", calls, want)
+	}
+	close(asked)
+	var profiles []string
+	for id := range asked {
+		profiles = append(profiles, id)
+	}
+	if !slices.Equal(profiles, []string{"a"}) {
+		t.Errorf("remote networks asked for %v, want once for profile a", profiles)
 	}
 }
 

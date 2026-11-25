@@ -111,6 +111,12 @@ func TestDescribeMarshalsToJSON(t *testing.T) {
 		`"visibleWhen":{"secret":"tlsAuthKey"}`,
 		`"key":"verifyServerCertUsage","type":"bool","labelKey":"openvpn.verifyServerCertUsage","default":true`,
 		`"key":"extraOptions","type":"stringList"`,
+		`"key":"keepalive","type":"text","labelKey":"openvpn.keepalive","placeholder":"10 120"}`,
+		`"key":"remoteNetworks","type":"stringList","labelKey":"openvpn.remoteNetworks"`,
+		// Certificate and key or a PKCS#12 bundle: none is required alone.
+		`"key":"clientCert","type":"textarea","labelKey":"openvpn.clientCert","visibleWhen"`,
+		`"key":"clientKey","type":"secret","labelKey":"openvpn.clientKey","multiline":true`,
+		`"key":"pkcs12","type":"secret","labelKey":"openvpn.pkcs12","multiline":true`,
 	} {
 		if !strings.Contains(string(b), fragment) {
 			t.Errorf("schema JSON lacks %s", fragment)

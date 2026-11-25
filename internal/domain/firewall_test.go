@@ -274,30 +274,3 @@ func TestFirewallJSON(t *testing.T) {
 		t.Errorf("unset port ranges are not omitted: %s", data)
 	}
 }
-
-func TestHostAccessConversion(t *testing.T) {
-	h := HostAccessRule{ID: "x", Protocol: TransportUDP, Port: 161, SourceCIDR: "10.8.0.0/24", Enabled: true, Comment: "snmp"}
-	r := h.FirewallRule()
-	if r.Name != "Host port 161/udp" || r.Validate() != nil {
-		t.Fatalf("converted rule = %+v, %v", r, r.Validate())
-	}
-	if back, ok := r.HostAccessRule(); !ok || back != h {
-		t.Fatalf("round trip = %+v, %v", back, ok)
-	}
-	for name, other := range map[string]FirewallRule{
-		"forward":   forward(ProtocolUDP, "192.168.2.2", 500),
-		"range":     with(r, func(r *FirewallRule) { r.DestinationPort.To = 170 }),
-		"drop":      with(r, func(r *FirewallRule) { r.Action = ActionDrop }),
-		"esp":       with(r, func(r *FirewallRule) { r.Protocol, r.DestinationPort = ProtocolESP, PortRange{} }),
-		"bare":      with(r, func(r *FirewallRule) { r.Source = "10.8.0.1" }),
-		"sport":     with(r, func(r *FirewallRule) { r.SourcePort = SinglePort(1) }),
-		"outbound":  outbound("192.168.2.2", "0.0.0.0/0"),
-		"tcp+udp":   with(r, func(r *FirewallRule) { r.Protocol = ProtocolTCPUDP }),
-		"no port":   with(r, func(r *FirewallRule) { r.DestinationPort = PortRange{} }),
-		"other pub": with(r, func(r *FirewallRule) { r.PublicPort = SinglePort(1) }),
-	} {
-		if _, ok := other.HostAccessRule(); ok {
-			t.Errorf("%s: converted to a host-access rule", name)
-		}
-	}
-}

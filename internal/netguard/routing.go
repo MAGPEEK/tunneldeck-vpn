@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 
 	"tunneldeck/internal/domain"
@@ -13,13 +14,18 @@ import (
 // default route via DeviceName in table 7194 and a policy rule "from vpnIP
 // lookup 7194" at priority 7194. A rule at that priority for another source
 // is replaced. It also installs the policy rules of the installed
-// firewall's outbound rules and port forwards (wantedPolicyRules), which
-// exist only while the tunnel is up. Call it on every connected state, as
-// the VPN IP can change. The main routing table is never touched. IPv4
-// only.
-func (g *Guard) RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr) error {
+// firewall's outbound rules and port forwards (wantedPolicyRules) and one
+// rule "to <network> lookup 7194" at priority 7180 per remote network, so
+// the host reaches the networks behind the VPN; all of them exist only
+// while the tunnel is up. Remote networks that overlap the LAN are refused
+// with a *domain.ValidationError. Call it on every connected state, as the
+// VPN IP can change. The main routing table is never touched. IPv4 only.
+func (g *Guard) RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr, remoteNetworks []netip.Prefix) error {
 	if !vpnIP.Is4() {
 		return domain.NewValidationError("vpnIp", "must be an IPv4 address")
+	}
+	if err := checkRemoteNetworks(remoteNetworks); err != nil {
+		return err
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -33,7 +39,7 @@ func (g *Guard) RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr) error 
 	if err := g.routeVPNReplies(ctx, vpnIP, listing.vpnSources); err != nil {
 		return fmt.Errorf("route through tunnel: %w", err)
 	}
-	want, err := g.installedPolicyRules(ctx)
+	want, err := g.routedPolicyRules(ctx, remoteNetworks)
 	if err == nil {
 		err = g.syncPolicyRules(ctx, listing.owned, want)
 	}
@@ -41,6 +47,7 @@ func (g *Guard) RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr) error 
 		return fmt.Errorf("route through tunnel: %w", err)
 	}
 	g.routed = true
+	g.remoteNetworks = slices.Clone(remoteNetworks)
 	return nil
 }
 
@@ -63,27 +70,37 @@ func (g *Guard) routeVPNReplies(ctx context.Context, vpnIP netip.Addr, sources [
 	return err
 }
 
-// installedPolicyRules returns the policy rules of the installed firewall,
-// detecting the LAN only when there are any.
-func (g *Guard) installedPolicyRules(ctx context.Context) ([]policyRule, error) {
-	if g.installed == nil || !needsPolicyRules(g.installed.firewall) {
+// routedPolicyRules returns the policy rules of the installed firewall and
+// of remoteNetworks, detecting the LAN only when there are any.
+func (g *Guard) routedPolicyRules(ctx context.Context, remoteNetworks []netip.Prefix) ([]policyRule, error) {
+	firewall := g.installedFirewall()
+	if len(remoteNetworks) == 0 && !needsPolicyRules(firewall) {
 		return nil, nil
 	}
 	lan, err := g.detectLAN(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return wantedPolicyRules(g.installed.firewall, lan), nil
+	return policyRulesFor(firewall, remoteNetworks, lan)
+}
+
+// installedFirewall returns the installed firewall, or none.
+func (g *Guard) installedFirewall() domain.Firewall {
+	if g.installed == nil {
+		return domain.Firewall{}
+	}
+	return g.installed.firewall
 }
 
 // ClearTunnelRouting removes every policy rule netguard owns (priorities
-// 7100–7194) and the default route of table 7194. Already absent entries
-// are skipped. The firewall chains stay, so outbound traffic is dropped
-// instead of leaving through the normal internet connection (kill switch).
+// 7100–7194, remote networks included) and the default route of table
+// 7194. Already absent entries are skipped. The firewall chains stay, so
+// outbound traffic is dropped instead of leaving through the normal
+// internet connection (kill switch).
 func (g *Guard) ClearTunnelRouting(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.routed = false
+	g.routed, g.remoteNetworks = false, nil
 	listing, err := g.listPolicyRules(ctx)
 	if err != nil {
 		return fmt.Errorf("clear tunnel routing: %w", err)

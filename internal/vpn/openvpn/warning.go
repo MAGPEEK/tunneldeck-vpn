@@ -39,6 +39,7 @@ const (
 	CodeCompressionKept        = "compression_kept"
 	CodeNsCertTypeMapped       = "ns_cert_type_mapped"
 	CodeServerCertUsageAdded   = "server_cert_usage_added"
+	CodeStaticKeyUnsupported   = "static_key_unsupported"
 )
 
 // Warning reports a directive that was dropped, rejected or mapped while

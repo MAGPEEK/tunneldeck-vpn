@@ -41,6 +41,10 @@ func TestImportRenderGolden(t *testing.T) {
 			wantWarnings: []string{"client:duplicate_directive", "nobind:duplicate_directive", "script-security:runs_code"},
 		},
 		{
+			file: "pkcs12.ovpn", golden: "import_pkcs12.golden",
+			wantWarnings: []string{"client:duplicate_directive"},
+		},
+		{
 			file: "certificate.ovpn", golden: "import_certificate.golden",
 			wantWarnings: []string{
 				"client:duplicate_directive", "remote:additional_remote", "ns-cert-type:ns_cert_type_mapped",
@@ -112,6 +116,26 @@ func TestImportCertificateFields(t *testing.T) {
 	assertNoSecretsInConfig(t, config, map[string]any{KeyUsername: "alice"}, result.Secrets)
 }
 
+func TestImportPKCS12Fields(t *testing.T) {
+	m := testMaterial()
+	result, err := ImportOVPN(unredact(readTestdata(t, "pkcs12.ovpn")))
+	if err != nil {
+		t.Fatalf("ImportOVPN: %v", err)
+	}
+	if mode, _ := result.Settings.String(KeyAuthMode); mode != AuthModeCertificate {
+		t.Errorf("authMode = %q, want %q", mode, AuthModeCertificate)
+	}
+	if got := result.Secrets[SecretPKCS12]; got != m.pkcs12+"\n" {
+		t.Errorf("pkcs12 secret = %q, want the block content", got)
+	}
+	if result.Settings.Has(KeyClientCert) || result.Secrets[SecretClientKey] != "" {
+		t.Error("PKCS#12 import set clientCert or clientKey")
+	}
+	if err := Validate(domain.Profile{Protocol: domain.ProtocolOpenVPN, Settings: result.Settings, Secrets: result.Secrets}); err != nil {
+		t.Errorf("imported PKCS#12 profile does not validate: %v", err)
+	}
+}
+
 // TestRenderImportRenderIsStable imports each rendered golden config and
 // renders it again. Only values that never reach the file are carried over.
 func TestRenderImportRenderIsStable(t *testing.T) {
@@ -140,6 +164,13 @@ func TestRenderImportRenderIsStable(t *testing.T) {
 				KeyCACert: m.caPEM, KeyClientCert: m.clientCertPEM, KeyCipher: "AES-256-GCM",
 			},
 			secrets: vpn.Secrets{SecretClientKey: m.clientKeyPEM, SecretTLSCryptKey: m.tlsCryptKey},
+		},
+		{
+			name: "pkcs12",
+			settings: map[string]any{
+				KeyRemoteHost: "vpn.example.com", KeyAuthMode: AuthModeCertificate, KeyCACert: m.caPEM,
+			},
+			secrets: vpn.Secrets{SecretPKCS12: m.pkcs12},
 		},
 	}
 	for _, tt := range profiles {
@@ -281,6 +312,29 @@ func TestImportDirectives(t *testing.T) {
 			text:         "verify-x509-name " + strings.Repeat("a", 250) + "\nremote-cert-tls server",
 			wantExtras:   []string{},
 			wantWarnings: []string{":line_too_long"},
+		},
+		{
+			name:         "pkcs12 file reference",
+			text:         "pkcs12 client.p12\nremote-cert-tls server",
+			want:         map[string]any{KeyAuthMode: AuthModePassword},
+			wantWarnings: []string{"pkcs12:file_reference"},
+		},
+		{
+			name:         "static key file",
+			text:         "secret static.key 1\nremote-cert-tls server",
+			wantExtras:   []string{},
+			wantWarnings: []string{"secret:static_key_unsupported"},
+		},
+		{
+			name:         "inline static key reported once",
+			text:         "secret [inline]\n<secret>\nx\n</secret>\nremote-cert-tls server",
+			wantExtras:   []string{},
+			wantWarnings: []string{"secret:static_key_unsupported"},
+		},
+		{
+			name:         "inline static key without directive",
+			text:         "<secret>\nx\n</secret>\nremote-cert-tls server",
+			wantWarnings: []string{"secret:static_key_unsupported"},
 		},
 		{
 			name:       "commented credentials are ignored",

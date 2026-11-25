@@ -62,10 +62,10 @@ func (l *loop) driverClosed(t *tunnel) {
 	l.reconcile()
 }
 
-// tunnelConnected routes replies through the tunnel on every connected
-// event, because the VPN IP can change.
+// tunnelConnected routes replies and the remote networks through the
+// tunnel on every connected event, because the VPN IP can change.
 func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
-	if err := l.routeThroughTunnel(e.VPNIP); err != nil {
+	if err := l.routeThroughTunnel(e.VPNIP, t.remoteNetworks); err != nil {
 		t.failure = &failure{code: domain.ErrorCodeRoutingFailed, message: "routing through the tunnel failed: " + err.Error()}
 		l.reconcile()
 		return
@@ -82,14 +82,14 @@ func (l *loop) installFirewall() error {
 	return l.cfg.Guard.InstallFirewall(ctx, l.cfg.Firewall.Firewall(), l.cfg.UIPort)
 }
 
-func (l *loop) routeThroughTunnel(vpnIP string) error {
+func (l *loop) routeThroughTunnel(vpnIP string, remoteNetworks []netip.Prefix) error {
 	ip, err := netip.ParseAddr(vpnIP)
 	if err != nil {
 		return fmt.Errorf("the driver reported no valid VPN IP (%q)", vpnIP)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
-	return l.cfg.Guard.RouteThroughTunnel(ctx, ip)
+	return l.cfg.Guard.RouteThroughTunnel(ctx, ip, remoteNetworks)
 }
 
 func (l *loop) clearRouting() {

@@ -21,8 +21,9 @@ var privateEndpoints = []struct{ method, path string }{
 	{http.MethodPost, "/api/connection/reconnect"},
 	{http.MethodGet, "/api/logs"},
 	{http.MethodGet, "/api/events"},
-	{http.MethodGet, "/api/host-access"},
-	{http.MethodPut, "/api/host-access"},
+	{http.MethodGet, "/api/firewall"},
+	{http.MethodPut, "/api/firewall"},
+	{http.MethodPost, "/api/firewall/templates/ipsec"},
 	{http.MethodGet, "/api/system"},
 }
 
@@ -46,7 +47,8 @@ func TestCSRF(t *testing.T) {
 		{http.MethodPut, "/api/profiles/p1"},
 		{http.MethodDelete, "/api/profiles/p1"},
 		{http.MethodPost, "/api/connection/disconnect"},
-		{http.MethodPut, "/api/host-access"},
+		{http.MethodPut, "/api/firewall"},
+		{http.MethodPost, "/api/firewall/templates/ipsec"},
 	}
 	tests := []struct {
 		name string

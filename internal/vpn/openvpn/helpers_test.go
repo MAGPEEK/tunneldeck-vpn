@@ -7,6 +7,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
@@ -34,6 +36,26 @@ type material struct {
 	caPEM, clientCertPEM, clientKeyPEM string
 	rsaKeyPEM, ecKeyPEM                string
 	tlsAuthKey, tlsCryptKey            string
+	// pkcs12 is base64 on one line, as an upload field sends it.
+	pkcs12 string
+}
+
+// fakePKCS12 returns DER that starts like a PKCS#12 PFX (RFC 7292):
+// SEQUENCE { version 3, ... } with size bytes of content after the version.
+// TunnelDeck checks only that header; OpenVPN parses the bundle.
+func fakePKCS12(size int) []byte {
+	content := make([]byte, size)
+	for i := range content {
+		content[i] = byte(i)
+	}
+	der, err := asn1.Marshal(struct {
+		Version  int
+		AuthSafe []byte
+	}{Version: 3, AuthSafe: content})
+	if err != nil {
+		panic(err)
+	}
+	return der
 }
 
 var testMaterial = sync.OnceValue(func() material {
@@ -81,6 +103,7 @@ var testMaterial = sync.OnceValue(func() material {
 		rsaKeyPEM:     encodePEM(pemRSAPrivateKey, x509.MarshalPKCS1PrivateKey(rsaKey)),
 		tlsAuthKey:    staticKey(),
 		tlsCryptKey:   staticKey(),
+		pkcs12:        base64.StdEncoding.EncodeToString(fakePKCS12(300)),
 	}
 })
 
@@ -132,6 +155,7 @@ func redact(t *testing.T, text string) string {
 		{m.clientKeyPEM, "<CLIENT KEY PEM>\n"},
 		{mustCanonicalStaticKey(t, m.tlsAuthKey), "<TLS AUTH KEY>\n"},
 		{mustCanonicalStaticKey(t, m.tlsCryptKey), "<TLS CRYPT KEY>\n"},
+		{mustCanonicalPKCS12(t, m.pkcs12), "<PKCS12>\n"},
 	}
 	for _, r := range replacements {
 		text = strings.ReplaceAll(text, r.value, r.placeholder)
@@ -148,6 +172,7 @@ func unredact(text string) string {
 		"<CLIENT KEY PEM>\n", m.clientKeyPEM,
 		"<TLS AUTH KEY>\n", m.tlsAuthKey,
 		"<TLS CRYPT KEY>\n", m.tlsCryptKey,
+		"<PKCS12>\n", m.pkcs12+"\n",
 	).Replace(text)
 }
 
@@ -156,6 +181,15 @@ func mustCanonicalStaticKey(t *testing.T, text string) string {
 	canonical, err := canonicalStaticKey(text)
 	if err != nil {
 		t.Fatalf("canonicalStaticKey: %v", err)
+	}
+	return canonical
+}
+
+func mustCanonicalPKCS12(t *testing.T, text string) string {
+	t.Helper()
+	canonical, err := canonicalPKCS12(text)
+	if err != nil {
+		t.Fatalf("canonicalPKCS12: %v", err)
 	}
 	return canonical
 }

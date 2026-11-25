@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -112,25 +113,24 @@ func TestPutRemoteAccess(t *testing.T) {
 		{name: "UI port", body: `{"enabled":true,"port":8194,"certificateSource":"selfSigned"}`, status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantField: "port"},
 		{name: "UI port while disabled", body: `{"enabled":false,"port":8194,"certificateSource":"selfSigned"}`, status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantField: "port"},
 		{
-			name: "enabled TCP host-access port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`,
+			name: "enabled TCP firewall port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`,
 			status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantField: "port",
 			prepare: func(e *testEnv) {
-				e.hostAccess.setHostRules(domain.HostAccessRule{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true})
+				e.firewallStore.setRules(hostPortRule("r", domain.ProtocolTCP, 8443))
 			},
 		},
 		{
-			name: "disabled or UDP host-access port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
+			name: "disabled or UDP firewall port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
 			prepare: func(e *testEnv) {
-				e.hostAccess.setHostRules(
-					domain.HostAccessRule{ID: "a", Protocol: domain.TransportTCP, Port: 8443, Enabled: false},
-					domain.HostAccessRule{ID: "b", Protocol: domain.TransportUDP, Port: 8443, Enabled: true},
-				)
+				disabled := hostPortRule("a", domain.ProtocolTCP, 8443)
+				disabled.Enabled = false
+				e.firewallStore.setRules(disabled, hostPortRule("b", domain.ProtocolUDP, 8443))
 			},
 		},
 		{
-			name: "host-access port while disabled", body: `{"enabled":false,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
+			name: "firewall port while disabled", body: `{"enabled":false,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
 			prepare: func(e *testEnv) {
-				e.hostAccess.setHostRules(domain.HostAccessRule{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true})
+				e.firewallStore.setRules(hostPortRule("r", domain.ProtocolTCP, 8443))
 			},
 		},
 		{name: "unknown field", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned","x":1}`, status: http.StatusBadRequest, code: CodeBadRequest},
@@ -285,29 +285,32 @@ func TestUploadCertificateFailures(t *testing.T) {
 	assertNoKey(t, rec, pair)
 }
 
-func TestHostAccessRejectsTheRemoteAccessPort(t *testing.T) {
+func TestFirewallRejectsTheRemoteAccessPort(t *testing.T) {
+	const rule = `{"name":"r","direction":"inbound","protocol":"%s","destination":{"kind":"host"},"destinationPort":{"from":8443},"enabled":%t}`
 	tests := []struct {
-		name    string
-		enabled bool
-		rule    string
-		wantErr bool
+		name     string
+		enabled  bool
+		protocol string
+		ruleOn   bool
+		wantErr  bool
 	}{
-		{name: "enabled TCP rule", enabled: true, rule: `{"protocol":"tcp","port":8443,"enabled":true}`, wantErr: true},
-		{name: "disabled rule", enabled: true, rule: `{"protocol":"tcp","port":8443,"enabled":false}`},
-		{name: "UDP rule", enabled: true, rule: `{"protocol":"udp","port":8443,"enabled":true}`},
-		{name: "remote access off", enabled: false, rule: `{"protocol":"tcp","port":8443,"enabled":true}`},
+		{name: "enabled TCP rule", enabled: true, protocol: "tcp", ruleOn: true, wantErr: true},
+		{name: "enabled tcp+udp rule", enabled: true, protocol: "tcp+udp", ruleOn: true, wantErr: true},
+		{name: "disabled rule", enabled: true, protocol: "tcp"},
+		{name: "UDP rule", enabled: true, protocol: "udp", ruleOn: true},
+		{name: "remote access off", enabled: false, protocol: "tcp", ruleOn: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			env := newTestEnv(t)
 			env.remote.settings.Enabled = tt.enabled
-			rec := env.do(t, http.MethodPut, "/api/host-access", `{"rules":[`+tt.rule+`]}`)
+			rec := env.do(t, http.MethodPut, "/api/firewall", firewallBody(fmt.Sprintf(rule, tt.protocol, tt.ruleOn)))
 			if !tt.wantErr {
 				assertStatus(t, rec, http.StatusOK)
 				return
 			}
 			p := assertProblem(t, rec, http.StatusUnprocessableEntity, CodeValidationFailed)
-			if p.Fields["rules[0].port"] == "" {
+			if p.Fields["rules[0].destinationPort"] == "" {
 				t.Errorf("fields = %v", p.Fields)
 			}
 			if len(env.firewall.applied) != 0 {

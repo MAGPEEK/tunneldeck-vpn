@@ -1,7 +1,9 @@
 package openvpn
 
 import (
+	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +28,7 @@ const (
 	KeyResolveRetry          = "resolveRetry"
 	KeyKeepalive             = "keepalive"
 	KeyVerifyServerCertUsage = "verifyServerCertUsage"
+	KeyRemoteNetworks        = "remoteNetworks"
 	KeyExtraOptions          = "extraOptions"
 )
 
@@ -33,6 +36,7 @@ const (
 const (
 	SecretPassword      = "password"
 	SecretClientKey     = "clientKey"
+	SecretPKCS12        = "pkcs12"
 	SecretKeyPassphrase = "keyPassphrase"
 	SecretTLSAuthKey    = "tlsAuthKey"
 	SecretTLSCryptKey   = "tlsCryptKey"
@@ -76,6 +80,8 @@ const (
 	maxValueLength = 200
 	// maxHostLength leaves room for "remote <host> 65535 udp".
 	maxHostLength = maxLineLength - len("remote  65535 udp") - 1
+	// maxRemoteNetworks bounds the policy rules a profile adds.
+	maxRemoteNetworks = 32
 )
 
 var (
@@ -90,9 +96,9 @@ var (
 	settingKeys = set(
 		KeyRemoteHost, KeyPort, KeyProto, KeyCompression, KeyAuthMode, KeyUsername,
 		KeyCACert, KeyClientCert, KeyKeyDirection, KeyCipher, KeyAuthDigest,
-		KeyResolveRetry, KeyKeepalive, KeyVerifyServerCertUsage, KeyExtraOptions,
+		KeyResolveRetry, KeyKeepalive, KeyVerifyServerCertUsage, KeyRemoteNetworks, KeyExtraOptions,
 	)
-	secretKeys = set(SecretPassword, SecretClientKey, SecretKeyPassphrase, SecretTLSAuthKey, SecretTLSCryptKey)
+	secretKeys = set(SecretPassword, SecretClientKey, SecretPKCS12, SecretKeyPassphrase, SecretTLSAuthKey, SecretTLSCryptKey)
 )
 
 var (
@@ -103,8 +109,9 @@ var (
 	retrySeconds  = regexp.MustCompile(`^[0-9]{1,9}$`)
 )
 
-// profileConfig is a checked OpenVPN profile with defaults applied. PEM
-// and key fields hold canonical text, ready to be rendered inline.
+// profileConfig is a checked OpenVPN profile with defaults applied. PEM,
+// PKCS#12 and key fields hold canonical text, ready to be rendered inline.
+// In certificate modes either clientCert and clientKey or pkcs12 is set.
 type profileConfig struct {
 	remoteHost            string
 	port                  int
@@ -114,6 +121,7 @@ type profileConfig struct {
 	caCert                string
 	clientCert            string
 	clientKey             string
+	pkcs12                string
 	tlsAuthKey            string
 	tlsCryptKey           string
 	keyDirection          string
@@ -122,6 +130,7 @@ type profileConfig struct {
 	resolveRetry          string
 	keepalive             string
 	verifyServerCertUsage bool
+	remoteNetworks        []netip.Prefix
 	extras                extraResult
 }
 
@@ -131,13 +140,37 @@ func (c profileConfig) usesCertificate() bool { return slices.Contains(certifica
 // Validate checks the OpenVPN settings and secrets of p. It returns a
 // *domain.ValidationError whose field keys are the setting and secret keys.
 func Validate(p domain.Profile) error {
-	_, err := parseProfile(p, vpn.Secrets(p.Secrets))
+	return ValidateWithLAN(p, nil)
+}
+
+// ValidateWithLAN is Validate that also rejects remote networks overlapping
+// one of lan, the host's LAN subnets: routing them into the tunnel would
+// cut the host off from its LAN.
+func ValidateWithLAN(p domain.Profile, lan []netip.Prefix) error {
+	_, err := parseProfile(p, vpn.Secrets(p.Secrets), lan)
 	return err.OrNil()
 }
 
+// RemoteNetworks returns the networks behind the VPN that p names, in
+// order. Invalid entries are skipped; Validate reports them.
+func RemoteNetworks(p domain.Profile) []netip.Prefix {
+	entries, err := p.Settings.StringList(KeyRemoteNetworks)
+	if err != nil {
+		return nil
+	}
+	var networks []netip.Prefix
+	for _, entry := range entries {
+		if prefix, problem := parseRemoteNetwork(entry); problem == "" && !slices.Contains(networks, prefix) {
+			networks = append(networks, prefix)
+		}
+	}
+	return networks
+}
+
 // parseProfile checks p's settings together with secrets and returns the
-// typed config. The returned *ValidationError is empty when all is well.
-func parseProfile(p domain.Profile, secrets vpn.Secrets) (profileConfig, *domain.ValidationError) {
+// typed config. lan, when known, are the host's LAN subnets. The returned
+// *ValidationError is empty when all is well.
+func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (profileConfig, *domain.ValidationError) {
 	r := settingsReader{settings: p.Settings, errs: &domain.ValidationError{}}
 	if p.Protocol != domain.ProtocolOpenVPN {
 		r.errs.Add("protocol", "must be openvpn")
@@ -158,6 +191,7 @@ func parseProfile(p domain.Profile, secrets vpn.Secrets) (profileConfig, *domain
 		caCert:                r.certificates(KeyCACert, true),
 		extras:                r.extraOptions(),
 	}
+	c.remoteNetworks = r.remoteNetworks(c.remoteHost, lan)
 	c.tlsAuthKey = r.staticKey(SecretTLSAuthKey, secrets[SecretTLSAuthKey])
 	c.tlsCryptKey = r.staticKey(SecretTLSCryptKey, secrets[SecretTLSCryptKey])
 	if c.tlsAuthKey != "" && c.tlsCryptKey != "" {
@@ -165,10 +199,29 @@ func parseProfile(p domain.Profile, secrets vpn.Secrets) (profileConfig, *domain
 	}
 	r.credentials(c, secrets)
 	if c.usesCertificate() {
-		c.clientCert = r.certificates(KeyClientCert, true)
-		c.clientKey = r.privateKey(secrets[SecretClientKey])
+		r.clientIdentity(&c, secrets)
 	}
 	return c, r.errs
+}
+
+// clientIdentity reads the client certificate and key: either clientCert
+// with clientKey, or a pkcs12 bundle, never both.
+func (r settingsReader) clientIdentity(c *profileConfig, secrets vpn.Secrets) {
+	bundle := secrets[SecretPKCS12]
+	if bundle == "" {
+		c.clientCert = r.certificates(KeyClientCert, true)
+		c.clientKey = r.privateKey(secrets[SecretClientKey])
+		return
+	}
+	if r.str(KeyClientCert, "") != "" || secrets[SecretClientKey] != "" {
+		r.errs.Add(SecretPKCS12, "cannot be combined with clientCert and clientKey; use one of the two")
+		return
+	}
+	canonical, err := canonicalPKCS12(bundle)
+	if err != nil {
+		r.errs.Add(SecretPKCS12, err.Error())
+	}
+	c.pkcs12 = canonical
 }
 
 // settingsReader reads typed settings with defaults and collects errors.
@@ -281,6 +334,76 @@ func (r settingsReader) keepalive() string {
 	return value
 }
 
+// remoteNetworks reads the networks behind the VPN (SPEC §17). Entries must
+// be distinct IPv4 networks in canonical CIDR notation that contain neither
+// the server address nor a LAN subnet of the host, and no LAN subnet may
+// contain them: such traffic must never be routed into the tunnel.
+func (r settingsReader) remoteNetworks(remoteHost string, lan []netip.Prefix) []netip.Prefix {
+	if !r.settings.Has(KeyRemoteNetworks) {
+		return nil
+	}
+	entries, err := r.settings.StringList(KeyRemoteNetworks)
+	if err != nil {
+		r.errs.Add(KeyRemoteNetworks, "must be a list of strings")
+		return nil
+	}
+	if len(entries) > maxRemoteNetworks {
+		r.errs.Add(KeyRemoteNetworks, fmt.Sprintf("must have at most %d entries", maxRemoteNetworks))
+		return nil
+	}
+	server, _ := netip.ParseAddr(remoteHost)
+	var networks []netip.Prefix
+	var problems []string
+	for i, entry := range entries {
+		prefix, problem := parseRemoteNetwork(entry)
+		switch {
+		case problem != "":
+		case slices.Contains(networks, prefix):
+			problem = "is listed twice"
+		case server.IsValid() && prefix.Contains(server.Unmap()):
+			problem = "contains the server address, which must stay outside the tunnel"
+		case overlapsAny(prefix, lan):
+			problem = "overlaps a LAN subnet of this device (" + describeNetworks(lan) + ")"
+		}
+		if problem != "" {
+			problems = append(problems, fmt.Sprintf("entry %d %s", i+1, problem))
+			continue
+		}
+		networks = append(networks, prefix)
+	}
+	if len(problems) > 0 {
+		r.errs.Add(KeyRemoteNetworks, strings.Join(problems, "; "))
+	}
+	return networks
+}
+
+// parseRemoteNetwork parses one remote network. problem describes why
+// entry is unusable without repeating it.
+func parseRemoteNetwork(entry string) (prefix netip.Prefix, problem string) {
+	prefix, err := netip.ParsePrefix(entry)
+	switch {
+	case err != nil || !prefix.Addr().Is4():
+		return netip.Prefix{}, "must be an IPv4 network in CIDR notation, such as 10.1.2.0/24"
+	case prefix.String() != entry || prefix != prefix.Masked():
+		return netip.Prefix{}, "must be written as the network address with its prefix length, such as 10.1.2.0/24"
+	case prefix.Bits() == 0:
+		return netip.Prefix{}, "must not cover every address"
+	}
+	return prefix, ""
+}
+
+func overlapsAny(prefix netip.Prefix, others []netip.Prefix) bool {
+	return slices.ContainsFunc(others, prefix.Overlaps)
+}
+
+func describeNetworks(networks []netip.Prefix) string {
+	parts := make([]string, len(networks))
+	for i, n := range networks {
+		parts[i] = n.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (r settingsReader) certificates(key string, required bool) string {
 	text := r.str(key, "")
 	if text == "" {
@@ -298,7 +421,7 @@ func (r settingsReader) certificates(key string, required bool) string {
 
 func (r settingsReader) privateKey(text string) string {
 	if text == "" {
-		r.errs.Add(SecretClientKey, "is required")
+		r.errs.Add(SecretClientKey, "is required unless a pkcs12 file is given")
 		return ""
 	}
 	canonical, err := canonicalPrivateKey(text)

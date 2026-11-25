@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -371,13 +372,13 @@ func (h *fakeFirewallStore) setRules(rules ...domain.FirewallRule) {
 	h.firewall.Rules = rules
 }
 
-// setHostRules stores host-access rules as firewall rules.
-func (h *fakeFirewallStore) setHostRules(rules ...domain.HostAccessRule) {
-	converted := make([]domain.FirewallRule, len(rules))
-	for i, rule := range rules {
-		converted[i] = rule.FirewallRule()
+// hostPortRule is an enabled inbound accepting rule to this device.
+func hostPortRule(id string, protocol domain.FirewallProtocol, port int) domain.FirewallRule {
+	return domain.FirewallRule{
+		ID: id, Name: fmt.Sprintf("Host port %d/%s", port, protocol), Direction: domain.DirectionInbound,
+		Action: domain.ActionAccept, Protocol: protocol, Destination: domain.FirewallDestination{Kind: domain.DestinationHost},
+		DestinationPort: domain.SinglePort(port), Enabled: true,
 	}
-	h.setRules(converted...)
 }
 
 func cloneTestFirewall(f domain.Firewall) domain.Firewall {
@@ -385,11 +386,27 @@ func cloneTestFirewall(f domain.Firewall) domain.Firewall {
 	return f
 }
 
+// testHostNetwork is the LAN fakeFirewall reports by default.
+var testHostNetwork = domain.HostNetwork{
+	Address:   netip.MustParseAddr("192.168.2.10"),
+	Subnets:   []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")},
+	IPForward: true,
+}
+
+// fakeFirewall records installs; failOnce fails the next one, err every
+// one.
 type fakeFirewall struct {
-	mu      sync.Mutex
-	err     error
-	applied []domain.Firewall
-	uiPort  int
+	mu         sync.Mutex
+	err        error
+	failOnce   error
+	applied    []domain.Firewall
+	uiPort     int
+	network    domain.HostNetwork
+	networkErr error
+}
+
+func newFakeFirewall() *fakeFirewall {
+	return &fakeFirewall{network: testHostNetwork}
 }
 
 func (f *fakeFirewall) InstallFirewall(_ context.Context, firewall domain.Firewall, uiPort int) error {
@@ -397,7 +414,26 @@ func (f *fakeFirewall) InstallFirewall(_ context.Context, firewall domain.Firewa
 	defer f.mu.Unlock()
 	f.applied = append(f.applied, firewall)
 	f.uiPort = uiPort
+	if err := f.failOnce; err != nil {
+		f.failOnce = nil
+		return err
+	}
 	return f.err
+}
+
+func (f *fakeFirewall) HostNetwork(context.Context) (domain.HostNetwork, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.networkErr != nil {
+		return domain.HostNetwork{}, f.networkErr
+	}
+	return f.network, nil
+}
+
+func (f *fakeFirewall) installs() []domain.Firewall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.applied)
 }
 
 // fakeRemoteAccess is an in-memory remote-access store; keys are kept to

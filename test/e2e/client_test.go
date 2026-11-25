@@ -50,11 +50,31 @@ type profileRequest struct {
 	Secrets  map[string]string `json:"secrets"`
 }
 
-type hostAccessRule struct {
-	Protocol string `json:"protocol"`
-	Port     int    `json:"port"`
-	Enabled  bool   `json:"enabled"`
-	Comment  string `json:"comment"`
+// firewallRule is the part of a firewall rule the test sends.
+type firewallRule struct {
+	Name            string              `json:"name"`
+	Direction       string              `json:"direction"`
+	Protocol        string              `json:"protocol"`
+	Destination     firewallDestination `json:"destination"`
+	DestinationPort portRange           `json:"destinationPort"`
+	Enabled         bool                `json:"enabled"`
+	Comment         string              `json:"comment"`
+}
+
+type firewallDestination struct {
+	Kind string `json:"kind"`
+}
+
+type portRange struct {
+	From int `json:"from"`
+}
+
+// hostRule opens one TCP port of this device to the tunnel.
+func hostRule(port int, comment string) firewallRule {
+	return firewallRule{
+		Name: fmt.Sprintf("Host port %d/tcp", port), Direction: "inbound", Protocol: "tcp",
+		Destination: firewallDestination{Kind: "host"}, DestinationPort: portRange{From: port}, Enabled: true, Comment: comment,
+	}
 }
 
 type remoteAccess struct {

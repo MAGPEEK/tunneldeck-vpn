@@ -82,6 +82,9 @@ func TestExtraOptionsHostile(t *testing.T) {
 		{"dev-node /dev/net/tun", rejected(CodeEscapesSandbox)},
 		{"tls-export-cert /tmp", rejected(CodeEscapesSandbox)},
 		{"pkcs12 /data/x.p12", rejected(CodeEscapesSandbox)},
+		{"pkcs12 [inline]", rejected(CodeEscapesSandbox)},
+		// static-key mode (SPEC §17)
+		{"secret /data/static.key", rejected(CodeStaticKeyUnsupported)},
 		{"crl-verify /etc/crl.pem", rejected(CodeEscapesSandbox)},
 		// inline-block injection and line breaks
 		{"<ca>", rejected(CodeInlineBlock)},

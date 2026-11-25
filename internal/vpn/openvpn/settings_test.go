@@ -1,8 +1,12 @@
 package openvpn
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,6 +40,21 @@ func TestValidateAcceptsEveryAuthMode(t *testing.T) {
 				SecretPassword: "pw", SecretClientKey: m.rsaKeyPEM,
 				SecretKeyPassphrase: "phrase", SecretTLSAuthKey: m.tlsAuthKey,
 			},
+		},
+		{
+			name: "certificate as PKCS#12 with wrapped base64",
+			settings: map[string]any{
+				KeyRemoteHost: "vpn.example.com", KeyAuthMode: AuthModeCertificate, KeyCACert: m.caPEM,
+			},
+			secrets: vpn.Secrets{SecretPKCS12: mustCanonicalPKCS12(t, m.pkcs12), SecretKeyPassphrase: "phrase"},
+		},
+		{
+			name: "remote networks",
+			settings: map[string]any{
+				KeyRemoteHost: "198.51.100.7", KeyUsername: "u", KeyCACert: m.caPEM,
+				KeyRemoteNetworks: []string{"10.99.0.0/24", "10.98.0.0/16", "192.0.2.1/32", "198.51.100.0/31"},
+			},
+			secrets: vpn.Secrets{SecretPassword: "pw"},
 		},
 		{
 			name:     "defaults only",
@@ -120,6 +139,51 @@ func TestValidateRejects(t *testing.T) {
 		{"extra option runs code", func(s map[string]any, _ vpn.Secrets) {
 			s[KeyExtraOptions] = []string{"float", "--up /bin/sh"}
 		}, KeyExtraOptions},
+		{"pkcs12 and client key", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			delete(s, KeyClientCert)
+			sec[SecretClientKey] = m.clientKeyPEM
+			sec[SecretPKCS12] = m.pkcs12
+		}, SecretPKCS12},
+		{"pkcs12 and client cert", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			sec[SecretPKCS12] = m.pkcs12
+		}, SecretPKCS12},
+		{"pkcs12 not base64", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			delete(s, KeyClientCert)
+			sec[SecretPKCS12] = "not base64!"
+		}, SecretPKCS12},
+		{"pkcs12 is a PEM key", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			delete(s, KeyClientCert)
+			sec[SecretPKCS12] = m.clientKeyPEM
+		}, SecretPKCS12},
+		{"pkcs12 too large", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			delete(s, KeyClientCert)
+			sec[SecretPKCS12] = base64.StdEncoding.EncodeToString(fakePKCS12(maxPKCS12Bytes))
+		}, SecretPKCS12},
+		{"remote networks not a list", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = "10.99.0.0/24" }, KeyRemoteNetworks},
+		{"remote network without prefix", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = []string{"10.99.0.1"} }, KeyRemoteNetworks},
+		{"remote network with host bits", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = []string{"10.99.0.1/24"} }, KeyRemoteNetworks},
+		{"remote network with space", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = []string{" 10.99.0.0/24"} }, KeyRemoteNetworks},
+		{"remote network IPv6", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = []string{"fd00::/64"} }, KeyRemoteNetworks},
+		{"remote network everything", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteNetworks] = []string{"0.0.0.0/0"} }, KeyRemoteNetworks},
+		{"remote network twice", func(s map[string]any, _ vpn.Secrets) {
+			s[KeyRemoteNetworks] = []string{"10.99.0.0/24", "10.98.0.0/24", "10.99.0.0/24"}
+		}, KeyRemoteNetworks},
+		{"remote network holds the server", func(s map[string]any, _ vpn.Secrets) {
+			s[KeyRemoteHost] = "198.51.100.7"
+			s[KeyRemoteNetworks] = []string{"198.51.100.0/24"}
+		}, KeyRemoteNetworks},
+		{"too many remote networks", func(s map[string]any, _ vpn.Secrets) {
+			networks := make([]string, maxRemoteNetworks+1)
+			for i := range networks {
+				networks[i] = fmt.Sprintf("10.%d.0.0/16", i)
+			}
+			s[KeyRemoteNetworks] = networks
+		}, KeyRemoteNetworks},
 		{"unknown setting", func(s map[string]any, _ vpn.Secrets) { s["script"] = "x" }, "script"},
 		{"unknown secret", func(_ map[string]any, sec vpn.Secrets) { sec["token"] = "x" }, "token"},
 	}
@@ -164,5 +228,51 @@ func TestValidateMessagesNeverEchoValues(t *testing.T) {
 	err := Validate(newProfile(t, settings, secrets))
 	if err == nil || strings.Contains(err.Error(), "unter2") {
 		t.Errorf("Validate error = %v, must exist and not echo values", err)
+	}
+}
+
+func TestValidateWithLANRejectsOverlappingRemoteNetworks(t *testing.T) {
+	lan := []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24"), netip.MustParsePrefix("10.20.0.0/16")}
+	tests := []struct {
+		networks []string
+		wantErr  bool
+	}{
+		{networks: []string{"10.99.0.0/24", "192.168.3.0/24"}},
+		{networks: []string{"192.168.2.128/25"}, wantErr: true},
+		{networks: []string{"10.0.0.0/8"}, wantErr: true},
+		{networks: []string{"10.99.0.0/24", "10.20.5.0/24"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.networks, ","), func(t *testing.T) {
+			settings := mdexSettings()
+			settings[KeyRemoteNetworks] = tt.networks
+			p := newProfile(t, settings, mdexSecrets())
+			if err := Validate(p); err != nil {
+				t.Fatalf("Validate without LAN: %v", err)
+			}
+			err := ValidateWithLAN(p, lan)
+			if !tt.wantErr {
+				if err != nil {
+					t.Errorf("ValidateWithLAN: %v", err)
+				}
+				return
+			}
+			if message := validationFields(t, err)[KeyRemoteNetworks]; !strings.Contains(message, "LAN subnet") {
+				t.Errorf("remoteNetworks error = %q, want it to name the LAN", message)
+			}
+		})
+	}
+}
+
+func TestRemoteNetworks(t *testing.T) {
+	settings := mdexSettings()
+	settings[KeyRemoteNetworks] = []string{"10.99.0.0/24", "bogus", "192.0.2.0/25", "10.99.0.0/24"}
+	got := RemoteNetworks(newProfile(t, settings, nil))
+	want := []netip.Prefix{netip.MustParsePrefix("10.99.0.0/24"), netip.MustParsePrefix("192.0.2.0/25")}
+	if !slices.Equal(got, want) {
+		t.Errorf("RemoteNetworks = %v, want %v", got, want)
+	}
+	if got := RemoteNetworks(newProfile(t, mdexSettings(), nil)); got != nil {
+		t.Errorf("RemoteNetworks without the setting = %v, want none", got)
 	}
 }

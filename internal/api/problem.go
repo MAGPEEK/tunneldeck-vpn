@@ -28,6 +28,7 @@ const (
 	CodeFirewallFailed     = "firewall_failed"
 	CodeRemoteAccessFailed = "remote_access_failed"
 	CodeUnavailable        = "unavailable"
+	CodeGone               = "gone"
 )
 
 const problemContentType = "application/problem+json"

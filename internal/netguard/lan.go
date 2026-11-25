@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+
+	"tunneldeck/internal/domain"
 )
 
 // lanAddress is an IPv4 address of the host on a LAN interface.
@@ -31,6 +33,23 @@ func (g *Guard) LANSubnets(ctx context.Context) ([]netip.Prefix, error) {
 		return nil, err
 	}
 	return subnets(addrs), nil
+}
+
+// HostNetwork returns the host's first LAN address, its LAN subnets and
+// whether IPv4 forwarding is on. An unreadable ip_forward counts as off.
+func (g *Guard) HostNetwork(ctx context.Context) (domain.HostNetwork, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	addrs, err := g.detectLAN(ctx)
+	if err != nil {
+		return domain.HostNetwork{}, err
+	}
+	forward, _ := g.ipForwardValue()
+	network := domain.HostNetwork{Subnets: subnets(addrs), IPForward: forward == "1"}
+	if len(addrs) > 0 {
+		network.Address = addrs[0].prefix.Addr()
+	}
+	return network, nil
 }
 
 // detectLAN lists the host's LAN addresses with "ip -4 -o addr show".

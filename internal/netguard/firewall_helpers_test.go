@@ -1,6 +1,7 @@
 package netguard
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -16,13 +17,20 @@ const (
 // testFirewall holds the stage-1 shaped rules: two enabled host rules and
 // a disabled one; every global protection is off to keep sequences short.
 var testFirewall = domain.Firewall{Rules: []domain.FirewallRule{
-	hostAccess("ssh", domain.TransportTCP, 22, "", true),
-	hostAccess("wg", domain.TransportUDP, 51820, "192.168.1.0/24", true),
-	hostAccess("web", domain.TransportTCP, 80, "", false),
+	hostAccess("ssh", domain.ProtocolTCP, 22, "", true),
+	hostAccess("wg", domain.ProtocolUDP, 51820, "192.168.1.0/24", true),
+	hostAccess("web", domain.ProtocolTCP, 80, "", false),
 }}
 
-func hostAccess(id string, proto domain.TransportProtocol, port int, source string, enabled bool) domain.FirewallRule {
-	return domain.HostAccessRule{ID: id, Protocol: proto, Port: port, SourceCIDR: source, Enabled: enabled}.FirewallRule()
+// hostAccess returns an accepting inbound rule to this device on one port,
+// shaped like a migrated stage-1 host-access rule.
+func hostAccess(id string, proto domain.FirewallProtocol, port int, source string, enabled bool) domain.FirewallRule {
+	return domain.FirewallRule{
+		ID: id, Name: fmt.Sprintf("Host port %d/%s", port, proto), Direction: domain.DirectionInbound,
+		Action: domain.ActionAccept, Protocol: proto, Source: source,
+		Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(port),
+		Enabled: enabled,
+	}
 }
 
 func rulesOnly(rules ...domain.FirewallRule) domain.Firewall {

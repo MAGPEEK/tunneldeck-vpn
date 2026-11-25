@@ -116,9 +116,11 @@ type FirewallStore interface {
 	SetFirewall(firewall domain.Firewall) (domain.Firewall, error)
 }
 
-// Firewall applies the firewall; *netguard.Guard implements it.
+// Firewall applies the firewall and detects the host's network;
+// *netguard.Guard implements it.
 type Firewall interface {
 	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
+	HostNetwork(ctx context.Context) (domain.HostNetwork, error)
 }
 
 // RemoteAccessSettings persists the remote-access setting and its
@@ -152,8 +154,7 @@ type CheckResult struct {
 type System struct {
 	Version       string
 	ListenAddress string
-	// UIPort is the port of the web UI, which a host-access rule never
-	// opens.
+	// UIPort is the port of the web UI, which a firewall rule never opens.
 	UIPort int
 	// TimeZone names the server's time zone, for example "Europe/Berlin".
 	TimeZone string

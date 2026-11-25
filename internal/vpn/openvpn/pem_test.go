@@ -1,6 +1,7 @@
 package openvpn
 
 import (
+	"encoding/base64"
 	"encoding/pem"
 	"strings"
 	"testing"
@@ -128,4 +129,60 @@ func TestCanonicalStaticKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCanonicalPKCS12(t *testing.T) {
+	der := fakePKCS12(300)
+	oneLine := base64.StdEncoding.EncodeToString(der)
+	got, err := canonicalPKCS12("\n  " + oneLine[:50] + "\r\n" + oneLine[50:] + "\n")
+	if err != nil {
+		t.Fatalf("canonicalPKCS12: %v", err)
+	}
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if strings.Join(lines, "") != oneLine {
+		t.Errorf("canonical form does not hold the same bytes")
+	}
+	for i, line := range lines {
+		if len(line) > pkcs12Base64Line || (i < len(lines)-1 && len(line) != pkcs12Base64Line) {
+			t.Errorf("line %d has %d characters, want lines of %d", i+1, len(line), pkcs12Base64Line)
+		}
+	}
+}
+
+func TestLooksLikePKCS12(t *testing.T) {
+	indefinite := append([]byte{0x30, 0x80, 0x02, 0x01, 0x03, 0x04, 0x01, 0xff}, 0x00, 0x00)
+	tests := []struct {
+		name string
+		der  []byte
+		want bool
+	}{
+		{name: "short length", der: fakePKCS12(10), want: true},
+		{name: "one length byte", der: fakePKCS12(200), want: true},
+		{name: "two length bytes", der: fakePKCS12(3000), want: true},
+		{name: "indefinite length (BER)", der: indefinite, want: true},
+		{name: "empty", der: nil},
+		{name: "not a sequence", der: []byte{0x31, 0x03, 0x02, 0x01, 0x03}},
+		{name: "version 2", der: []byte{0x30, 0x03, 0x02, 0x01, 0x02}},
+		{name: "length too long", der: []byte{0x30, 0x04, 0x02, 0x01, 0x03}},
+		{name: "trailing data", der: append(fakePKCS12(10), 0x00)},
+		{name: "truncated length bytes", der: []byte{0x30, 0x82, 0x01}},
+		{name: "five length bytes", der: []byte{0x30, 0x85, 0, 0, 0, 0, 3, 0x02, 0x01, 0x03}},
+		{name: "certificate", der: mustDecodePEM(t, testMaterial().clientCertPEM)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := looksLikePKCS12(tt.der); got != tt.want {
+				t.Errorf("looksLikePKCS12 = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func mustDecodePEM(t *testing.T, text string) []byte {
+	t.Helper()
+	block, _ := pem.Decode([]byte(text))
+	if block == nil {
+		t.Fatal("no PEM block")
+	}
+	return block.Bytes
 }

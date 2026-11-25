@@ -182,7 +182,7 @@ func logBackend(guard *netguard.Guard) {
 
 func (a *app) startManager(ctx context.Context) error {
 	registry := vpn.NewRegistry()
-	factory := openvpn.Factory(openvpn.Options{DeviceName: netguard.DeviceName})
+	factory := openvpn.Factory(openvpn.Options{DeviceName: netguard.DeviceName, LANSubnets: a.guard.LANSubnets})
 	if err := registry.Register(domain.ProtocolOpenVPN, factory); err != nil {
 		return fmt.Errorf("register drivers: %w", err)
 	}

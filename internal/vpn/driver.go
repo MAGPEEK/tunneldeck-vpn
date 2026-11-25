@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"net/netip"
 
 	"tunneldeck/internal/domain"
 )
@@ -34,4 +35,22 @@ type Driver interface {
 	// without Stop reports a last state event "disconnected" or "error"
 	// (with a domain.ErrorCode), or closes the channel.
 	Events() <-chan domain.Event
+}
+
+// RemoteNetworker is implemented by drivers whose profiles name networks
+// behind the VPN (SPEC §17: OpenVPN's remoteNetworks, later WireGuard's
+// allowed IPs). While the tunnel is connected, the ConnectionManager has
+// the host route them through the tunnel. Drivers without it route none.
+type RemoteNetworker interface {
+	// RemoteNetworks returns the IPv4 networks behind the VPN of the
+	// validated profile p.
+	RemoteNetworks(p domain.Profile) []netip.Prefix
+}
+
+// remoteNetworksOf returns the remote networks of p if driver names any.
+func remoteNetworksOf(driver Driver, p domain.Profile) []netip.Prefix {
+	if r, ok := driver.(RemoteNetworker); ok {
+		return r.RemoteNetworks(p)
+	}
+	return nil
 }

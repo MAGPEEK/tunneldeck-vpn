@@ -144,6 +144,8 @@ VERIFIED: management-notes "Command Parsing"; `options_parse.c` `parse_line()`; 
 - OpenVPN logs the command as `MANAGEMENT: CMD 'password [...]'` (masked). The **username is logged in clear text** at verb 3 (`MANAGEMENT: CMD 'username "Auth" "tduser"'`). VERIFIED: lab.
 - No `version` command is needed. With a client version ≥ 6, 2.7.9 may append ` UN:<base64-user>` to the prompt when a username is preset. TunnelDeck never presets one. VERIFIED: management-notes example 10; `Changes.md` 2.7.9.
 - With an encrypted private key (certificate mode) `management-query-passwords` also prompts `>PASSWORD:Need 'Private Key' password`, answered with `password "Private Key" "..."`. VERIFIED: management-notes example 1; not lab-tested.
+- A passphrase-protected PKCS#12 bundle (`<pkcs12>` inline, base64) uses the same prompt: OpenVPN first tries an empty password and then asks through the private-key password callback, i.e. `>PASSWORD:Need 'Private Key' password`. The driver answers it with the profile's `keyPassphrase`, as for a PEM key. The prompt comes after `hold release`, when the TLS context is set up, before any packet is sent. VERIFIED: lab 2026-11-26 (`alpine:3.24.4`, `openvpn~2.7`): an openssl-made `.p12` with passphrase, inline as `<pkcs12>` with `base64 -w 64` content, gave `>PASSWORD:Need 'Private Key' password`; after `password "Private Key" "..."` OpenVPN went on to the UDP link (no server was contacted).
+- Static-key mode (`secret`, `<secret>`) is not supported (SPEC §17): the importer reports it as `static_key_unsupported` and extra options reject it.
 
 ### Rejected credentials
 

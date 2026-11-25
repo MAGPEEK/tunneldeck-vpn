@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"time"
 
 	"tunneldeck/internal/domain"
@@ -45,8 +46,11 @@ func (f failure) retryable() bool {
 type tunnel struct {
 	profileID string
 	driver    Driver
-	quit      chan struct{} // closed when the tunnel is discarded
-	stopping  bool
+	// remoteNetworks are routed through the tunnel while it is connected;
+	// they are read once per attempt, like every other profile setting.
+	remoteNetworks []netip.Prefix
+	quit           chan struct{} // closed when the tunnel is discarded
+	stopping       bool
 	// failure is set when the tunnel failed and must be stopped.
 	failure *failure
 }
@@ -336,7 +340,7 @@ func (l *loop) beginAttempt(p domain.Profile) {
 }
 
 func (l *loop) launch(p domain.Profile, driver Driver) {
-	t := &tunnel{profileID: p.ID, driver: driver, quit: make(chan struct{})}
+	t := &tunnel{profileID: p.ID, driver: driver, remoteNetworks: remoteNetworksOf(driver, p), quit: make(chan struct{})}
 	l.tunnel = t
 	go forwardEvents(l.post, t)
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)

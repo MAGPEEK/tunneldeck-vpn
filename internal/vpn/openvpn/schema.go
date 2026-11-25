@@ -24,8 +24,11 @@ func Describe() vpn.FormSchema {
 			field(KeyUsername, vpn.FieldText, required, visibleFor(passwordModes)),
 			field(SecretPassword, vpn.FieldSecret, required, visibleFor(passwordModes)),
 			field(KeyCACert, vpn.FieldTextarea, required, placeholder(pemPlaceholder)),
-			field(KeyClientCert, vpn.FieldTextarea, required, visibleFor(certificateModes), placeholder(pemPlaceholder)),
-			field(SecretClientKey, vpn.FieldSecret, required, multiline, visibleFor(certificateModes)),
+			// Certificate and key, or a PKCS#12 bundle instead: none of the
+			// three is required on its own, Validate checks the pair.
+			field(KeyClientCert, vpn.FieldTextarea, visibleFor(certificateModes), placeholder(pemPlaceholder)),
+			field(SecretClientKey, vpn.FieldSecret, multiline, visibleFor(certificateModes)),
+			field(SecretPKCS12, vpn.FieldSecret, multiline, visibleFor(certificateModes)),
 			field(SecretKeyPassphrase, vpn.FieldSecret, visibleFor(certificateModes)),
 		),
 		section("encryption",
@@ -39,7 +42,8 @@ func Describe() vpn.FormSchema {
 		),
 		section("advanced",
 			field(KeyResolveRetry, vpn.FieldText, defaultValue(DefaultResolveRetry)),
-			field(KeyKeepalive, vpn.FieldText, placeholder("10 60")),
+			field(KeyKeepalive, vpn.FieldText, placeholder("10 120")),
+			field(KeyRemoteNetworks, vpn.FieldStringList, placeholder("192.168.100.0/24")),
 			field(KeyExtraOptions, vpn.FieldStringList, placeholder("tun-mtu 1500")),
 		),
 	}}

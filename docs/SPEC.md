@@ -4,6 +4,8 @@ Working name: **TunnelDeck-VPN** (binary `tunneldeck`). A self-hosted VPN client
 
 ## 1. Goals
 
+**End result (owner, 2026-11-26):** a user sets up and establishes a VPN connection in the web UI and controls the traffic between the VPN and the internal LAN with a firewall (both directions, to the host and to any LAN device). Every task is judged against this.
+
 - Run a VPN client on **any Linux Docker host** (amd64 and arm64: servers, mini PCs, Raspberry Pi, NAS) and manage it entirely from a web UI: profiles, connect/disconnect, status, live log. Nothing may depend on a particular distribution or vendor; vendor-specific steps live only in `docs/` guides. The oldest supported environment is the first test device, a Synology DS723+ (DSM 7.2, Linux 4.4, iptables-legacy, no DCO), so every feature must also work on an old kernel without nftables.
 - Act as a gateway between the LAN and the VPN (stage 2) while never breaking the host's own connectivity.
 - Support several VPN methods through one driver interface. **OpenVPN is the first and, for now, only driver.** WireGuard and IPsec/IKEv2 must be addable without touching API, store or UI pages.
@@ -137,7 +139,8 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | POST | `/api/connection/connect` `{profileId}`, `/disconnect`, `/reconnect` | Control |
 | GET | `/api/logs?tail=N` | Last N lines of the in-memory ring buffer (2000 lines) |
 | GET | `/api/events` | SSE: `state`, `traffic` (every 2 s), `log` |
-| GET/PUT | `/api/host-access` | Host-access rules |
+| GET/PUT | `/api/firewall` | Firewall rules and settings (§16); `/api/host-access` answers 410 Gone |
+| POST | `/api/firewall/templates/ipsec` | Returns the rule set for an IPsec device (§16.2), not stored |
 | GET | `/api/system` | Version, self-check results, UI listen address |
 
 ## 10. Configuration (environment)
@@ -248,7 +251,7 @@ Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions 
 - Validation: one inbound rule per (protocol, publicPort) on the shared public address; the HTTP UI port can never be a public port; the remote-access HTTPS port is reserved; `destination` of inbound rules must be inside a LAN subnet of the host; ranges ≤ 1000 ports.
 - Requires `net.ipv4.ip_forward=1` on the host; the self-check reports it (Docker hosts normally have it on) and the docs explain how to enable it. Coexists with Docker's own `FORWARD`/`DOCKER-USER` chains by inserting the jump at position 1.
 
-Implementation notes (task 16): `ip rule` priorities 7100 (LAN exclusion, `lookup main`), 7190 (outbound rules), 7191 (replies of port-forward targets, `from <target> ipproto N [sport P] lookup 7194`, so masqueraded replies leave through the tunnel), 7194 (VPN source address). Drop/reject rules currently act on traffic to the host only (INPUT); exceptions for port forwards are expressed by the forward rule's `source`. Inbound `any` protocol only with drop/reject. The `nat` table is required.
+Implementation notes (task 16, task 20): `ip rule` priorities 7100 (LAN exclusion, `lookup main`), 7180 (a profile's remote networks while connected, `from all to <net> lookup 7194`; remote networks never overlap a LAN subnet), 7190 (outbound rules), 7191 (replies of port-forward targets, `from <target> ipproto N [sport P] lookup 7194`, so masqueraded replies leave through the tunnel), 7194 (VPN source address). Drop/reject rules currently act on traffic to the host only (INPUT); exceptions for port forwards are expressed by the forward rule's `source`. Inbound `any` protocol only with drop/reject. The `nat` table is required.
 
 ### 16.1a Adopted from the Teltonika RUT240 firewall
 

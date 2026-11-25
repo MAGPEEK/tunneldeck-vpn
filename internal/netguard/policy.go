@@ -17,6 +17,11 @@ const (
 	// lanExclusionPriority keeps traffic of policy-routed sources to the
 	// LAN, and traffic from the host's own addresses, in the main table.
 	lanExclusionPriority = 7100
+	// remoteNetworkPriority routes the host's traffic to the networks
+	// behind the VPN that the profile names (SPEC §17): "to <network>
+	// lookup 7194". Remote networks never overlap the LAN, so the
+	// exclusions above need no exception for them.
+	remoteNetworkPriority = 7180
 	// outboundPriority routes outbound rules: "from <source> to
 	// <destination> lookup 7194".
 	outboundPriority = 7190
@@ -31,7 +36,7 @@ const (
 const mainTable = "main"
 
 // ownedPriorities are the priorities whose rules syncPolicyRules manages.
-var ownedPriorities = []int{lanExclusionPriority, outboundPriority, replyPriority}
+var ownedPriorities = []int{lanExclusionPriority, remoteNetworkPriority, outboundPriority, replyPriority}
 
 // ipProtocolNames maps the names ip rule show may print to numbers.
 var ipProtocolNames = map[string]int{"tcp": 6, "udp": 17, "icmp": 1, "esp": 50, "gre": 47}
@@ -251,6 +256,37 @@ func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule 
 		}
 	}
 	return append(exclusions, routes...)
+}
+
+// policyRulesFor lists every policy rule of a routed tunnel: those of
+// firewall followed by one rule per remote network. A remote network that
+// overlaps the LAN is refused, as routing it into the tunnel would cut the
+// host off from that part of its LAN.
+func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress) ([]policyRule, error) {
+	for _, network := range remoteNetworks {
+		for _, addr := range lan {
+			if network.Overlaps(addr.subnet()) {
+				return nil, domain.NewValidationError("remoteNetworks",
+					network.String()+" overlaps a LAN subnet of this device: "+describeLAN(lan))
+			}
+		}
+	}
+	rules := wantedPolicyRules(firewall, lan)
+	for _, network := range remoteNetworks {
+		rules = appendPolicyRule(rules, newPolicyRule(remoteNetworkPriority, anyAddress, network, routingTable))
+	}
+	return rules, nil
+}
+
+// checkRemoteNetworks accepts IPv4 networks in canonical form that do not
+// cover every address.
+func checkRemoteNetworks(networks []netip.Prefix) error {
+	for _, network := range networks {
+		if !network.Addr().Is4() || network != network.Masked() || network.Bits() == 0 {
+			return domain.NewValidationError("remoteNetworks", "must be IPv4 networks of a prefix length from 1 to 32")
+		}
+	}
+	return nil
 }
 
 func replyRules(rule parsedRule) []policyRule {

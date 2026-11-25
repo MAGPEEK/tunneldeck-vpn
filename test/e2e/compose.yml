@@ -56,7 +56,7 @@ services:
 
   # Both backends work; a host firewall on nf_tables already drops TCP from
   # the tunnel, like ufw's "deny incoming". TunnelDeck must share that
-  # backend, otherwise its host-access rules could not open a port.
+  # backend, otherwise its firewall rules could not open a port.
   tunneldeck-shared:
     <<: *tunneldeck
     entrypoint:

@@ -68,6 +68,33 @@ func TestRenderGolden(t *testing.T) {
 			},
 			wantWarnings: []string{"explicit-exit-notify:ignored_for_tcp", "compress:compression_conflict"},
 		},
+		{
+			name: "certificate_pkcs12.golden",
+			settings: map[string]any{
+				KeyRemoteHost: "vpn.example.com",
+				KeyAuthMode:   AuthModeCertificate,
+				KeyCACert:     m.caPEM,
+				KeyKeepalive:  "10 120",
+			},
+			secrets: vpn.Secrets{
+				SecretPKCS12:        m.pkcs12,
+				SecretKeyPassphrase: "pkcs12 passphrase",
+				SecretTLSCryptKey:   m.tlsCryptKey,
+			},
+		},
+		{
+			// Remote networks are routed by netguard, never by OpenVPN: the
+			// config holds no route for them.
+			name: "remote_networks.golden",
+			settings: map[string]any{
+				KeyRemoteHost:     "198.51.100.7",
+				KeyAuthMode:       AuthModePassword,
+				KeyUsername:       "alice",
+				KeyCACert:         m.caPEM,
+				KeyRemoteNetworks: []string{"10.99.0.0/24", "192.0.2.0/25"},
+			},
+			secrets: vpn.Secrets{SecretPassword: "alice-password"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

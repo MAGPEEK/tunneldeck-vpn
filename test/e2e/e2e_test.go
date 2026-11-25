@@ -21,7 +21,7 @@ const (
 	// uiPort is TunnelDeck's plain-HTTP UI port; never reachable from the
 	// tunnel.
 	uiPort = 8194
-	// listenerPort is a dummy TCP service on the "host" that a host-access
+	// listenerPort is a dummy TCP service on the "host" that a firewall
 	// rule opens.
 	listenerPort = 9000
 	// remoteAccessPort is the HTTPS listener of SPEC §8.1.
@@ -89,11 +89,13 @@ func (sc *scenario) run(t *testing.T) {
 	vpnIP := sc.connect(t, id)
 	sc.checkTraffic(t)
 	sc.checkRouting(t, vpnIP)
+	sc.checkRemoteNetwork(t, true)
 	sc.checkHostProtection(t, vpnIP)
 	sc.checkRemoteAccess(t, vpnIP)
 
 	sc.td.disconnect(t)
 	sc.checkRoutingRestored(t)
+	sc.checkRemoteNetwork(t, false)
 
 	sc.connect(t, id)
 	sc.td.restart(t)
@@ -107,7 +109,7 @@ func (sc *scenario) run(t *testing.T) {
 func (sc *scenario) cleanUp(t *testing.T, profileID string) {
 	td := sc.td
 	_ = td.api.call(http.MethodPost, "/api/connection/disconnect", nil, nil)
-	_ = td.setHostAccess(nil)
+	_ = td.setFirewallRules(nil)
 	_ = td.api.call(http.MethodPut, "/api/remote-access", remoteAccess{Port: remoteAccessPort, CertificateSource: "selfSigned"}, nil)
 	_ = td.api.call(http.MethodDelete, "/api/profiles/"+profileID, nil, nil)
 	if !t.Failed() {
@@ -204,13 +206,34 @@ func (sc *scenario) checkRouting(t *testing.T, vpnIP netip.Addr) {
 	if len(removed) > 0 || !slices.Equal(added, []string{kernelRoute}) {
 		t.Errorf("main table changed: added %q, removed %q; want only %q added", added, removed, kernelRoute)
 	}
-	rule := fmt.Sprintf("7194: from %s lookup 7194", vpnIP)
-	if !slices.ContainsFunc(now.rules, func(line string) bool { return strings.HasPrefix(line, rule) }) {
-		t.Errorf("ip rule has no %q: %q", rule, now.rules)
+	wantRules := []string{fmt.Sprintf("7194: from %s lookup 7194", vpnIP)}
+	if sc.variant.remoteHost.IsValid() {
+		wantRules = append(wantRules, fmt.Sprintf("7180: from all to %s lookup 7194", remoteNetwork))
+	}
+	for _, rule := range wantRules {
+		if !slices.ContainsFunc(now.rules, func(line string) bool { return strings.HasPrefix(line, rule) }) {
+			t.Errorf("ip rule has no %q: %q", rule, now.rules)
+		}
 	}
 	table := lines(sc.td.exec(t, "ip", "-4", "route", "show", "table", "7194"))
 	if len(table) != 1 || !strings.HasPrefix(table[0], "default dev tdvpn0") {
 		t.Errorf("table 7194 = %q, want only the default route via tdvpn0", table)
+	}
+}
+
+// checkRemoteNetwork pings the server's address on the network behind it
+// (SPEC §17 remoteNetworks): reachable while connected, unreachable after
+// disconnect, as nothing routes it outside the tunnel. Variants without a
+// remote network are skipped.
+func (sc *scenario) checkRemoteNetwork(t *testing.T, connected bool) {
+	t.Helper()
+	host := sc.variant.remoteHost
+	if !host.IsValid() {
+		return
+	}
+	_, err := sc.stack.tryExec(sc.td.backend.service, "ping", "-c", "2", "-W", "2", host.String())
+	if reached := err == nil; reached != connected {
+		t.Errorf("ping %s behind the server (connected %v) succeeded = %v, want %v", host, connected, reached, connected)
 	}
 }
 
@@ -249,8 +272,8 @@ func (sc *scenario) checkFirewallInstalled(t *testing.T) {
 }
 
 // checkHostProtection: from the tunnel side neither the UI port nor a
-// listening host service answers until a host-access rule opens the
-// service; a rule for the UI port is refused.
+// listening host service answers until a firewall rule opens the service;
+// a rule for the UI port is refused.
 func (sc *scenario) checkHostProtection(t *testing.T, vpnIP netip.Addr) {
 	t.Helper()
 	sc.checkFirewallInstalled(t)
@@ -259,16 +282,14 @@ func (sc *scenario) checkHostProtection(t *testing.T, vpnIP netip.Addr) {
 	sc.expectReachable(t, vpnIP, uiPort, false)
 	sc.expectReachable(t, vpnIP, listenerPort, false)
 
-	uiRule := []hostAccessRule{{Protocol: "tcp", Port: uiPort, Enabled: true}}
-	if err := sc.td.setHostAccess(uiRule); !isValidationError(err) {
-		t.Errorf("host-access rule for the UI port: error %v, want validation_failed", err)
+	if err := sc.td.setFirewallRules([]firewallRule{hostRule(uiPort, "")}); !isValidationError(err) {
+		t.Errorf("firewall rule for the UI port: error %v, want validation_failed", err)
 	}
-	open := []hostAccessRule{{Protocol: "tcp", Port: listenerPort, Enabled: true, Comment: "e2e"}}
-	sc.td.must(t, sc.td.setHostAccess(open), "open the listener port")
+	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{hostRule(listenerPort, "e2e")}), "open the listener port")
 	sc.expectReachable(t, vpnIP, listenerPort, true)
 	sc.expectReachable(t, vpnIP, uiPort, false)
 
-	sc.td.must(t, sc.td.setHostAccess(nil), "remove the host-access rules")
+	sc.td.must(t, sc.td.setFirewallRules(nil), "remove the firewall rules")
 	sc.expectReachable(t, vpnIP, listenerPort, false)
 }
 
