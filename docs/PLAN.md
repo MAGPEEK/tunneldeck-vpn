@@ -24,9 +24,9 @@ Implement `internal/vpn` `Driver`, `FormSchema`, registry (SPEC §4.1) and in `i
 
 ## [ ] 6. OpenVPN supervisor and management — heavy — after: 5
 
-Implement process supervision and the management client in `internal/vpn/openvpn` (`Start`, `Stop`, `Events`) and `vpn.ConnectionManager` (SPEC §4.1–4.2): state machine, credentials over management, byte counts → rates, log ring buffer feed, backoff retry with stop-on-auth-failure, scheduled daily reconnect (SPEC §4.3, injected clock), persisted desired state and reconnect on start, calls into a `netguard`-shaped interface on connect/disconnect. Process and socket behind interfaces; tests with a fake management server and fake process covering races (stop during connect, process crash, double connect, shutdown).
+Implement process supervision and the management client in `internal/vpn/openvpn` (`Start`, `Stop`, `Events`) and `vpn.ConnectionManager` (SPEC §4.1–4.2): state machine, credentials over management, byte counts → rates, log ring buffer feed, backoff retry with stop-on-auth-failure, scheduled daily reconnect (SPEC §4.3, injected clock), persisted desired state and reconnect on start, calls into a `netguard`-shaped interface on connect/disconnect: `InstallFirewall` is re-run before every connect (other software may have reordered the host chains) and a failure refuses the connect; `RouteThroughTunnel` after the VPN IP is known; `ClearTunnelRouting` on disconnect. Process and socket behind interfaces; tests with a fake management server and fake process covering races (stop during connect, process crash, double connect, shutdown).
 
-## [ ] 7. Netguard host protection — careful — after: 3
+## [x] 7. Netguard host protection — careful — after: 3
 
 Implement `internal/netguard` per SPEC §6: backend detection, idempotent chain install/update/remove, policy routing add/remove, startup self-check. All commands through `CommandRunner`; tests assert exact command sequences and idempotency with a fake runner; one integration test (build tag `integration`) meant to run in a Linux container with NET_ADMIN.
 

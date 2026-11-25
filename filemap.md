@@ -17,7 +17,7 @@
 - `internal/domain/` — core types: Profile (generic Settings plus Secrets), PublicProfile/hasValue, DailyReconnect, HostAccessRule, events, DesiredConnection, AdminAccount, sentinel errors and ValidationError, NewID
 - `internal/vpn/` — `Driver` interface, registry, `ConnectionManager` (doc only)
 - `internal/vpn/openvpn/` — OpenVPN driver (doc only)
-- `internal/netguard/` — iptables chains and policy routing via `CommandRunner` (doc only)
+- `internal/netguard/` — CommandRunner/ExecRunner (`runner.go`), Guard and backend detection (`guard.go`), iptables chains (`firewall.go`), policy routing table 7194 (`routing.go`), startup self-check (`selfcheck.go`), error types (`errors.go`); integration test behind `integration && linux`
 - `internal/store/` — settings.json and profiles.json with atomic writes, a mutex, schemaVersion migrations (`document.go`) and a file-system seam (`atomic.go`)
 - `internal/secret/` — AES-256-GCM `enc:v1:` Cipher; `secret.key` load/create and `TUNNELDECK_SECRET_KEY` override
 - `internal/auth/` — admin setup/reset, argon2id hashing (`password.go`), in-memory sessions (`session.go`), login rate limit (`ratelimit.go`), session cookie helpers (`cookie.go`); `service.go` is the entry point
