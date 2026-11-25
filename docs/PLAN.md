@@ -38,6 +38,10 @@ Implement `Advisories(profile)` in `internal/vpn/openvpn` and the current-practi
 
 Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. `tunneldeck reset-admin` runs in a second process (`docker exec`), so it must ask the running server to call `auth.Service.ResetAdmin` over a root-only unix control socket (`/run/tunneldeck/control.sock`); if no server is running it edits the store directly. `TUNNELDECK_RESET_ADMIN=1` resets at start. The API also enforces that a host-access rule never opens the UI port. Handler tests with `httptest` and fakes for every endpoint and auth rule.
 
+## [ ] 14. Remote access over HTTPS — careful — after: 8
+
+Implement SPEC §8.1: settings + store fields (schema stays v1 if additive with defaults, otherwise migration), self-signed certificate generation and renewal, upload validation, second HTTPS listener with live enable/disable/port change, `Secure` cookie and HSTS on that listener, stricter login limit for tunnel clients, netguard accept rule for the port, API endpoints. Tests: certificate generation/renewal with injected clock, upload validation (mismatched key, expired, garbage), listener lifecycle, cookie/HSTS headers, port-collision validation, netguard command sequence.
+
 ## [x] 9. Frontend shell and login — medium — after: 1
 
 Implement in `web/`: design tokens and base styles, light/dark theme, app shell with sidebar (SPEC §11), routing, typed API client (CSRF header, error mapping), session handling, setup and login pages, i18n (de/en) scaffolding, shared components (Button, Card, Field, StatePill, EmptyState, Table). Component tests. Works against the API contract in SPEC §9 with mocked fetch.
