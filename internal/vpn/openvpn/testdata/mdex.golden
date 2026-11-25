@@ -1,0 +1,44 @@
+# rendered by TunnelDeck - do not edit
+client
+dev tdvpn0
+dev-type tun
+remote publicip20.mdex.de 1194 udp
+resolv-retry infinite
+nobind
+persist-tun
+disable-dco
+
+# data channel
+data-ciphers none:CHACHA20-POLY1305
+data-ciphers-fallback none
+auth none
+
+# server verification
+remote-cert-tls server
+<ca>
+<CA PEM>
+</ca>
+
+# credentials over management, never in this file
+auth-user-pass
+auth-retry none
+
+# extra options
+tun-mtu 1500
+fragment 1448
+mssfix
+float
+reneg-sec 86400
+tls-version-min 1.2
+explicit-exit-notify 2
+
+# routing is owned by TunnelDeck
+route-noexec
+route-nopull
+pull-filter ignore "ifconfig-ipv6"
+
+# management
+management /run/tunneldeck/mgmt.sock unix
+management-hold
+management-query-passwords
+verb 3

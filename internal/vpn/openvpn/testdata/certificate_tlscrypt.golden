@@ -1,0 +1,45 @@
+# rendered by TunnelDeck - do not edit
+client
+dev tdvpn0
+dev-type tun
+remote vpn.example.com 1194 udp
+resolv-retry infinite
+nobind
+persist-tun
+disable-dco
+
+# data channel
+data-ciphers AES-256-GCM:CHACHA20-POLY1305
+
+# server verification
+remote-cert-tls server
+<ca>
+<CA PEM>
+</ca>
+<cert>
+<CLIENT CERT PEM>
+</cert>
+<key>
+<CLIENT KEY PEM>
+</key>
+<tls-crypt>
+<TLS CRYPT KEY>
+</tls-crypt>
+
+# credentials over management, never in this file
+auth-retry none
+
+# extra options
+verify-x509-name "vpn server" name
+tls-version-min 1.3
+
+# routing is owned by TunnelDeck
+route-noexec
+route-nopull
+pull-filter ignore "ifconfig-ipv6"
+
+# management
+management /run/tunneldeck/mgmt.sock unix
+management-hold
+management-query-passwords
+verb 3

@@ -120,7 +120,7 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | GET | `/api/drivers` | Protocols with their `FormSchema` |
 | GET/POST | `/api/profiles` | List / create |
 | GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete refused while active and connected) |
-| POST | `/api/profiles/import` | Parse `.ovpn` text → draft profile + warnings (not saved) |
+| POST | `/api/profiles/import` | Parse `.ovpn` text → draft profile + warnings (not saved). The draft echoes the secrets contained in the uploaded text back to the same client so the form can submit them with the create request — the only response that carries secret values, and never from storage |
 | GET | `/api/connection` | State, active profile, VPN IP, remote, since, bytes in/out, rates |
 | POST | `/api/connection/connect` `{profileId}`, `/disconnect`, `/reconnect` | Control |
 | GET | `/api/logs?tail=N` | Last N lines of the in-memory ring buffer (2000 lines) |

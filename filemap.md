@@ -16,8 +16,8 @@
 - `cmd/tunneldeck/` — entry point: listen address, `/api/system`, embedded SPA, graceful shutdown
 - `internal/config/` — environment → typed config (doc only)
 - `internal/domain/` — core types: Profile (generic Settings plus Secrets), PublicProfile/hasValue, DailyReconnect, HostAccessRule, events, DesiredConnection, AdminAccount, sentinel errors and ValidationError, NewID
-- `internal/vpn/` — `Driver` interface, registry, `ConnectionManager` (doc only)
-- `internal/vpn/openvpn/` — OpenVPN driver (doc only)
+- `internal/vpn/` — `Driver` and `Secrets` (`driver.go`), `FormSchema` (`schema.go`), driver `Registry` (`registry.go`)
+- `internal/vpn/openvpn/` — keys and `Validate` (`settings.go`), `Render` (`render.go`), `ImportOVPN` (`importer.go`), `Describe` (`schema.go`), `Warning` (`warning.go`), tokenizer (`directive.go`), denylist (`classify.go`, `extra.go`), PEM/static-key checks (`pem.go`); golden files in `testdata/`
 - `internal/netguard/` — CommandRunner/ExecRunner (`runner.go`), Guard and backend detection (`guard.go`), iptables chains (`firewall.go`), policy routing table 7194 (`routing.go`), startup self-check (`selfcheck.go`), error types (`errors.go`); integration test behind `integration && linux`
 - `internal/store/` — settings.json and profiles.json with atomic writes, a mutex, schemaVersion migrations (`document.go`) and a file-system seam (`atomic.go`)
 - `internal/secret/` — AES-256-GCM `enc:v1:` Cipher; `secret.key` load/create and `TUNNELDECK_SECRET_KEY` override

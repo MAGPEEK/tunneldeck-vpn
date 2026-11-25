@@ -1,0 +1,47 @@
+# rendered by TunnelDeck - do not edit
+client
+dev tdvpn0
+dev-type tun
+remote 198.51.100.7 443 tcp
+resolv-retry 60
+nobind
+persist-tun
+disable-dco
+keepalive 10 60
+
+# data channel
+auth SHA256
+comp-lzo
+
+# server verification
+<ca>
+<CA PEM>
+</ca>
+<cert>
+<CLIENT CERT PEM>
+</cert>
+<key>
+<CLIENT KEY PEM>
+</key>
+key-direction 1
+<tls-auth>
+<TLS AUTH KEY>
+</tls-auth>
+
+# credentials over management, never in this file
+auth-user-pass
+auth-retry none
+
+# extra options
+connect-retry 5
+
+# routing is owned by TunnelDeck
+route-noexec
+route-nopull
+pull-filter ignore "ifconfig-ipv6"
+
+# management
+management /run/tunneldeck/mgmt.sock unix
+management-hold
+management-query-passwords
+verb 3

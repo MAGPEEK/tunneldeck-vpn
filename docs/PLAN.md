@@ -18,7 +18,7 @@ Implement `internal/domain` (types and errors from SPEC §4, §5 fields, §6 `Ho
 
 Implement `internal/auth` per SPEC §8: setup-once admin creation, argon2id hashing with stored parameters, in-memory sessions (hashed tokens, idle timeout, logout), login rate limiter with injected clock, admin reset (function used by the `reset-admin` subcommand and `TUNNELDECK_RESET_ADMIN`; the CLI/env wiring itself lands in task 8). No HTTP here except small helpers for cookie read/write. Tests for every rule in §8.
 
-## [ ] 5. Driver interface and OpenVPN config — careful — after: 2, 3
+## [x] 5. Driver interface and OpenVPN config — careful — after: 2, 3
 
 Implement `internal/vpn` `Driver`, `FormSchema`, registry (SPEC §4.1) and in `internal/vpn/openvpn`: `Describe()` schema, `Validate`, config renderer (profile → config text, following `docs/openvpn-notes.md`), extra-option validation with the denylist (SPEC §5), `.ovpn` importer with warnings. Pure functions, golden-file tests incl. the mdex reference profile and hostile inputs (script directives, inline blocks, CRLF, comments, quoted args).
 

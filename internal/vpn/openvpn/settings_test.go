@@ -1,0 +1,168 @@
+package openvpn
+
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"tunneldeck/internal/domain"
+	"tunneldeck/internal/vpn"
+)
+
+func TestValidateAcceptsEveryAuthMode(t *testing.T) {
+	m := testMaterial()
+	tests := []struct {
+		name     string
+		settings map[string]any
+		secrets  vpn.Secrets
+	}{
+		{name: "password", settings: mdexSettings(), secrets: mdexSecrets()},
+		{
+			name: "certificate",
+			settings: map[string]any{
+				KeyRemoteHost: "vpn.example.com", KeyAuthMode: AuthModeCertificate,
+				KeyCACert: m.caPEM, KeyClientCert: m.clientCertPEM,
+			},
+			secrets: vpn.Secrets{SecretClientKey: m.clientKeyPEM, SecretTLSCryptKey: m.tlsCryptKey},
+		},
+		{
+			name: "certificate+password",
+			settings: map[string]any{
+				KeyRemoteHost: "2001:db8::1", KeyAuthMode: AuthModeCertificateAndPassword,
+				KeyUsername: "alice", KeyCACert: m.caPEM, KeyClientCert: m.clientCertPEM,
+			},
+			secrets: vpn.Secrets{
+				SecretPassword: "pw", SecretClientKey: m.rsaKeyPEM,
+				SecretKeyPassphrase: "phrase", SecretTLSAuthKey: m.tlsAuthKey,
+			},
+		},
+		{
+			name:     "defaults only",
+			settings: map[string]any{KeyRemoteHost: "vpn.example.com.", KeyUsername: "u", KeyCACert: m.caPEM},
+			secrets:  vpn.Secrets{SecretPassword: "pw"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Validate(newProfile(t, tt.settings, tt.secrets)); err != nil {
+				t.Errorf("Validate: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRejects(t *testing.T) {
+	m := testMaterial()
+	certificateMode := func(s map[string]any) {
+		s[KeyAuthMode] = AuthModeCertificate
+		s[KeyClientCert] = m.clientCertPEM
+	}
+	tests := []struct {
+		name      string
+		change    func(s map[string]any, secrets vpn.Secrets)
+		wantField string
+	}{
+		{"missing remote host", func(s map[string]any, _ vpn.Secrets) { delete(s, KeyRemoteHost) }, KeyRemoteHost},
+		{"remote host with space", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteHost] = "a b" }, KeyRemoteHost},
+		{"remote host with option", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteHost] = "x\nup /bin/sh" }, KeyRemoteHost},
+		{"remote host label dash", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteHost] = "-x.example" }, KeyRemoteHost},
+		{"remote host too long", func(s map[string]any, _ vpn.Secrets) {
+			s[KeyRemoteHost] = strings.Repeat("a.", 120) + "de"
+		}, KeyRemoteHost},
+		{"remote host not a string", func(s map[string]any, _ vpn.Secrets) { s[KeyRemoteHost] = 7 }, KeyRemoteHost},
+		{"port zero", func(s map[string]any, _ vpn.Secrets) { s[KeyPort] = 0 }, KeyPort},
+		{"port too big", func(s map[string]any, _ vpn.Secrets) { s[KeyPort] = 65536 }, KeyPort},
+		{"port as string", func(s map[string]any, _ vpn.Secrets) { s[KeyPort] = "1194" }, KeyPort},
+		{"proto icmp", func(s map[string]any, _ vpn.Secrets) { s[KeyProto] = "icmp" }, KeyProto},
+		{"compression lz4", func(s map[string]any, _ vpn.Secrets) { s[KeyCompression] = "lz4" }, KeyCompression},
+		{"auth mode unknown", func(s map[string]any, _ vpn.Secrets) { s[KeyAuthMode] = "token" }, KeyAuthMode},
+		{"key direction 2", func(s map[string]any, _ vpn.Secrets) { s[KeyKeyDirection] = "2" }, KeyKeyDirection},
+		{"missing username", func(s map[string]any, _ vpn.Secrets) { delete(s, KeyUsername) }, KeyUsername},
+		{"username with newline", func(s map[string]any, _ vpn.Secrets) { s[KeyUsername] = "a\nb" }, KeyUsername},
+		{"missing password", func(_ map[string]any, sec vpn.Secrets) { delete(sec, SecretPassword) }, SecretPassword},
+		{"password with CR", func(_ map[string]any, sec vpn.Secrets) { sec[SecretPassword] = "a\rb" }, SecretPassword},
+		{"password with NUL", func(_ map[string]any, sec vpn.Secrets) { sec[SecretPassword] = "a\x00b" }, SecretPassword},
+		{"password too long", func(_ map[string]any, sec vpn.Secrets) {
+			sec[SecretPassword] = strings.Repeat("p", 256)
+		}, SecretPassword},
+		{"missing CA", func(s map[string]any, _ vpn.Secrets) { delete(s, KeyCACert) }, KeyCACert},
+		{"garbage CA", func(s map[string]any, _ vpn.Secrets) { s[KeyCACert] = "not a certificate" }, KeyCACert},
+		{"key as CA", func(s map[string]any, _ vpn.Secrets) { s[KeyCACert] = m.clientKeyPEM }, KeyCACert},
+		{"missing client cert", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			delete(s, KeyClientCert)
+			sec[SecretClientKey] = m.clientKeyPEM
+		}, KeyClientCert},
+		{"missing client key", func(s map[string]any, _ vpn.Secrets) { certificateMode(s) }, SecretClientKey},
+		{"certificate as client key", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			sec[SecretClientKey] = m.caPEM
+		}, SecretClientKey},
+		{"passphrase with LF", func(s map[string]any, sec vpn.Secrets) {
+			certificateMode(s)
+			sec[SecretClientKey] = m.clientKeyPEM
+			sec[SecretKeyPassphrase] = "a\nb"
+		}, SecretKeyPassphrase},
+		{"tls-auth and tls-crypt", func(_ map[string]any, sec vpn.Secrets) {
+			sec[SecretTLSAuthKey] = m.tlsAuthKey
+			sec[SecretTLSCryptKey] = m.tlsCryptKey
+		}, SecretTLSCryptKey},
+		{"bad tls-auth key", func(_ map[string]any, sec vpn.Secrets) { sec[SecretTLSAuthKey] = "abc" }, SecretTLSAuthKey},
+		{"cipher with space", func(s map[string]any, _ vpn.Secrets) { s[KeyCipher] = "AES 256" }, KeyCipher},
+		{"cipher too long", func(s map[string]any, _ vpn.Secrets) { s[KeyCipher] = strings.Repeat("A", 201) }, KeyCipher},
+		{"digest with quote", func(s map[string]any, _ vpn.Secrets) { s[KeyAuthDigest] = `SHA"1` }, KeyAuthDigest},
+		{"resolve retry words", func(s map[string]any, _ vpn.Secrets) { s[KeyResolveRetry] = "forever" }, KeyResolveRetry},
+		{"keepalive one number", func(s map[string]any, _ vpn.Secrets) { s[KeyKeepalive] = "10" }, KeyKeepalive},
+		{"keepalive zero", func(s map[string]any, _ vpn.Secrets) { s[KeyKeepalive] = "0 60" }, KeyKeepalive},
+		{"verify not bool", func(s map[string]any, _ vpn.Secrets) { s[KeyVerifyServerCertUsage] = "yes" }, KeyVerifyServerCertUsage},
+		{"extra options not a list", func(s map[string]any, _ vpn.Secrets) { s[KeyExtraOptions] = "float" }, KeyExtraOptions},
+		{"extra option runs code", func(s map[string]any, _ vpn.Secrets) {
+			s[KeyExtraOptions] = []string{"float", "--up /bin/sh"}
+		}, KeyExtraOptions},
+		{"unknown setting", func(s map[string]any, _ vpn.Secrets) { s["script"] = "x" }, "script"},
+		{"unknown secret", func(_ map[string]any, sec vpn.Secrets) { sec["token"] = "x" }, "token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, secrets := mdexSettings(), mdexSecrets()
+			tt.change(settings, secrets)
+			err := Validate(newProfile(t, settings, secrets))
+			if !errors.Is(err, domain.ErrValidation) {
+				t.Fatalf("Validate error = %v, want a validation error", err)
+			}
+			if _, ok := validationFields(t, err)[tt.wantField]; !ok {
+				t.Errorf("error %v does not name field %q", err, tt.wantField)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsOtherProtocol(t *testing.T) {
+	p := newProfile(t, mdexSettings(), mdexSecrets())
+	p.Protocol = "wireguard"
+	if _, ok := validationFields(t, Validate(p))["protocol"]; !ok {
+		t.Error("wrong protocol accepted")
+	}
+}
+
+func TestValidateRejectsInvalidJSONTypes(t *testing.T) {
+	p := newProfile(t, mdexSettings(), mdexSecrets())
+	p.Settings[KeyExtraOptions] = json.RawMessage(`null`)
+	if _, ok := validationFields(t, Validate(p))[KeyExtraOptions]; !ok {
+		t.Error("null extraOptions accepted")
+	}
+}
+
+func TestValidateMessagesNeverEchoValues(t *testing.T) {
+	const secret = "Hunter2-very-secret"
+	settings, secrets := mdexSettings(), mdexSecrets()
+	settings[KeyRemoteHost] = secret + " x"
+	settings[KeyExtraOptions] = []string{secret + " up"}
+	secrets[SecretPassword] = secret + "\n"
+	secrets[SecretTLSAuthKey] = secret
+	err := Validate(newProfile(t, settings, secrets))
+	if err == nil || strings.Contains(err.Error(), "unter2") {
+		t.Errorf("Validate error = %v, must exist and not echo values", err)
+	}
+}
