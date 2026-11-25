@@ -30,8 +30,12 @@ func (s *Server) putHostAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	s.hostAccessMu.Lock()
-	defer s.hostAccessMu.Unlock()
+	s.portsMu.Lock()
+	defer s.portsMu.Unlock()
+	if err := s.checkRemoteAccessPort(rules); err != nil {
+		writeError(w, r, err)
+		return
+	}
 	previous := s.deps.HostAccess.HostAccessRules()
 	stored, err := s.deps.HostAccess.SetHostAccessRules(rules)
 	if err != nil {
@@ -69,6 +73,22 @@ func (s *Server) validateHostAccess(rules []domain.HostAccessRule) error {
 	for i, rule := range rules {
 		if rule.Port == s.deps.System.UIPort {
 			v.Add(fmt.Sprintf("rules[%d].port", i), "must not be the web UI port")
+		}
+	}
+	return v.OrNil()
+}
+
+// checkRemoteAccessPort rejects enabled TCP rules on the port of enabled
+// remote access (SPEC §8.1). The caller holds s.portsMu.
+func (s *Server) checkRemoteAccessPort(rules []domain.HostAccessRule) error {
+	remote := s.deps.RemoteAccess.RemoteAccess()
+	if !remote.Enabled {
+		return nil
+	}
+	v := &domain.ValidationError{}
+	for i, rule := range rules {
+		if rule.Enabled && rule.Protocol == domain.TransportTCP && rule.Port == remote.Port {
+			v.Add(fmt.Sprintf("rules[%d].port", i), "is the port of remote access")
 		}
 	}
 	return v.OrNil()

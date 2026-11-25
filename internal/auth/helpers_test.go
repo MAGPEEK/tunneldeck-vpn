@@ -123,7 +123,7 @@ func newSetUpService(t *testing.T) *testService {
 
 func (ts *testService) mustLogin(t *testing.T) string {
 	t.Helper()
-	token, err := ts.Login(testUsername, testPassword, testIP)
+	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard)
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"tunneldeck/internal/domain"
 )
 
 // DeviceName is the tunnel interface every VPN driver must create.
@@ -29,6 +31,17 @@ type Guard struct {
 	mu         sync.Mutex
 	backend    string   // detected iptables binary, empty until detected
 	stateMatch []string // detected match for ESTABLISHED,RELATED, nil until detected
+	// remoteAccessPort is the TCP port of the HTTPS listener that tunnel
+	// traffic may reach, 0 while remote access is off.
+	remoteAccessPort int
+	// installed holds the arguments of the last successful InstallFirewall,
+	// nil while the firewall is not installed.
+	installed *installation
+}
+
+type installation struct {
+	rules  []domain.HostAccessRule
+	uiPort int
 }
 
 // New returns a Guard that runs every command through runner.

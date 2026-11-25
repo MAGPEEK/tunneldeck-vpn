@@ -115,12 +115,13 @@ func (s *Service) Setup(username, password string) error {
 	return nil
 }
 
-// Login checks the credentials and returns a new session token. It fails
-// with *RateLimitError while clientIP is locked out and with
+// Login checks the credentials and returns a new session token. limit
+// selects how many failures lock clientIP out. It fails with
+// *RateLimitError while clientIP is locked out and with
 // ErrInvalidCredentials for a wrong username or password; both cases cost
 // the same password hash computation.
-func (s *Service) Login(username, password, clientIP string) (string, error) {
-	if retryAfter, allowed := s.limiter.begin(clientIP, s.now()); !allowed {
+func (s *Service) Login(username, password, clientIP string, limit LoginLimit) (string, error) {
+	if retryAfter, allowed := s.limiter.begin(clientIP, limit, s.now()); !allowed {
 		return "", &RateLimitError{RetryAfter: retryAfter}
 	}
 	valid, err := s.checkCredentials(username, password)

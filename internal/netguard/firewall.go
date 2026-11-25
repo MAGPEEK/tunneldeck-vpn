@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -59,12 +60,46 @@ var (
 // chain. Misplaced jumps are moved behind a temporary "-i/-o tdvpn0 -j DROP"
 // guard in the parent chain. A failure therefore leaves DROP in place and is
 // returned; FORWARD is still attempted when INPUT fails.
+//
+// While a remote-access port is set (SetRemoteAccessPort), TUNNELDECK-INPUT
+// also accepts TCP to that port.
 func (g *Guard) InstallFirewall(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error {
 	if err := validateRules(rules, uiPort); err != nil {
 		return err
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.install(ctx, rules, uiPort)
+}
+
+// SetRemoteAccessPort sets the TCP port of the HTTPS listener that tunnel
+// traffic may reach (SPEC §8.1); 0 closes it. An installed firewall is
+// re-installed at once with the rules of its last installation. Otherwise
+// the port is opened by the next InstallFirewall, which precedes every
+// tunnel. The port must never be the web UI port.
+func (g *Guard) SetRemoteAccessPort(ctx context.Context, port int) error {
+	if port != 0 && (port < domain.MinPort || port > domain.MaxPort) {
+		return domain.NewValidationError("remoteAccess.port", "must be between 1 and 65535")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.installed == nil {
+		g.remoteAccessPort = port
+		return nil
+	}
+	if port != 0 && port == g.installed.uiPort {
+		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
+	}
+	g.remoteAccessPort = port
+	return g.install(ctx, g.installed.rules, g.installed.uiPort)
+}
+
+// install fills both chains and remembers the arguments on success. The
+// caller holds g.mu and has validated rules.
+func (g *Guard) install(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error {
+	if g.remoteAccessPort != 0 && g.remoteAccessPort == uiPort {
+		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
+	}
 	if _, err := g.detectBackend(ctx); err != nil {
 		return fmt.Errorf("install firewall: %w", err)
 	}
@@ -74,7 +109,11 @@ func (g *Guard) InstallFirewall(ctx context.Context, rules []domain.HostAccessRu
 	forwardErr := g.installChain(ctx, forwardSpec, func(ctx context.Context) error {
 		return g.appendRule(ctx, forwardChain, "-j", "DROP")
 	})
-	return errors.Join(inputErr, forwardErr)
+	if err := errors.Join(inputErr, forwardErr); err != nil {
+		return err
+	}
+	g.installed = &installation{rules: slices.Clone(rules), uiPort: uiPort}
+	return nil
 }
 
 // RemoveFirewall deletes the jumps and both chains. Objects that are
@@ -82,6 +121,7 @@ func (g *Guard) InstallFirewall(ctx context.Context, rules []domain.HostAccessRu
 func (g *Guard) RemoveFirewall(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.installed = nil
 	specs := []chainSpec{inputSpec, forwardSpec}
 	for _, spec := range specs {
 		for _, match := range spec.jumps {
@@ -211,6 +251,12 @@ func (g *Guard) appendInputContent(ctx context.Context, rules []domain.HostAcces
 			continue
 		}
 		if err := g.appendRule(ctx, inputChain, acceptRule(rule)...); err != nil {
+			return err
+		}
+	}
+	if g.remoteAccessPort != 0 {
+		remoteAccess := accept([]string{"-p", "tcp", "--dport", strconv.Itoa(g.remoteAccessPort)})
+		if err := g.appendRule(ctx, inputChain, remoteAccess...); err != nil {
 			return err
 		}
 	}

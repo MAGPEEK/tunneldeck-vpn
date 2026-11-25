@@ -20,6 +20,9 @@ type Deps struct {
 	HostAccess HostAccessRules
 	Firewall   Firewall
 	System     System
+
+	RemoteAccess         RemoteAccessSettings
+	RemoteAccessListener RemoteAccessListener
 }
 
 // Options tune the API; zero values select the defaults.
@@ -30,8 +33,8 @@ type Options struct {
 	Heartbeat time.Duration
 }
 
-// Server serves /api/*. Build one per listener, because the session cookie
-// depends on the listener (Secure only over HTTPS).
+// Server serves /api/* on both listeners; wrap the handler of the HTTPS
+// listener with SecureListener so cookies get Secure and HSTS is sent.
 type Server struct {
 	deps      Deps
 	now       func() time.Time
@@ -39,9 +42,10 @@ type Server struct {
 	mux       *http.ServeMux
 	handler   http.Handler
 
-	// hostAccessMu serialises host-access updates so a rollback never
-	// overwrites a newer change.
-	hostAccessMu sync.Mutex
+	// portsMu serialises host-access and remote-access updates: their ports
+	// are checked against each other, and a rollback never overwrites a
+	// newer change.
+	portsMu sync.Mutex
 
 	closeOnce sync.Once
 	closed    chan struct{} // closed by CloseStreams
@@ -102,6 +106,10 @@ func (s *Server) routes() {
 	s.private("GET /api/host-access", s.getHostAccess)
 	s.private("PUT /api/host-access", s.putHostAccess)
 	s.private("GET /api/system", s.getSystem)
+
+	s.private("GET /api/remote-access", s.getRemoteAccess)
+	s.private("PUT /api/remote-access", s.putRemoteAccess)
+	s.private("POST /api/remote-access/certificate", s.uploadCertificate)
 
 	s.mux.HandleFunc("/api/", s.unmatched)
 }

@@ -26,6 +26,7 @@ const (
 	CodeRateLimited        = "rate_limited"
 	CodeInternal           = "internal"
 	CodeFirewallFailed     = "firewall_failed"
+	CodeRemoteAccessFailed = "remote_access_failed"
 	CodeUnavailable        = "unavailable"
 )
 

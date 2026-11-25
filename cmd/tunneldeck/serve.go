@@ -18,6 +18,7 @@ import (
 	"tunneldeck/internal/control"
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/netguard"
+	"tunneldeck/internal/remoteaccess"
 	"tunneldeck/internal/secret"
 	"tunneldeck/internal/store"
 	"tunneldeck/internal/vpn"
@@ -47,6 +48,8 @@ type host struct {
 	runner      netguard.CommandRunner
 	network     network
 	controlPath string
+	// sockets opens the HTTPS listener of remote access.
+	sockets remoteaccess.SocketListener
 }
 
 // app is the wired server. Fields are set in startup order.
@@ -60,15 +63,19 @@ type app struct {
 	guard    *netguard.Guard
 	checks   []api.CheckResult
 	manager  *vpn.ConnectionManager
-	control  *control.Server
+	remote   *remoteaccess.Manager
 	api      *api.Server
+	router   http.Handler
+	control  *control.Server
 	listener net.Listener
 	server   *http.Server
 }
 
 // serveCommand runs the server until ctx ends.
 func serveCommand(ctx context.Context, cfg config.Config) error {
-	a, err := startApp(ctx, cfg, host{runner: netguard.ExecRunner{}, network: systemNetwork{}, controlPath: controlSocketPath()})
+	a, err := startApp(ctx, cfg, host{
+		runner: netguard.ExecRunner{}, network: systemNetwork{}, controlPath: controlSocketPath(), sockets: &net.ListenConfig{},
+	})
 	if err != nil {
 		return err
 	}
@@ -77,11 +84,13 @@ func serveCommand(ctx context.Context, cfg config.Config) error {
 
 // startApp wires and starts everything up to the bound HTTP listener, in
 // this order: listen address, key and store, admin reset, auth, host
-// protection, drivers and connection manager, control socket, HTTP.
+// protection, drivers and connection manager, control socket, HTTP, and
+// the HTTPS listener of remote access.
 func startApp(ctx context.Context, cfg config.Config, h host) (*app, error) {
 	a := &app{cfg: cfg, host: h}
 	steps := []func(context.Context) error{
 		a.resolveListen, a.openStore, a.resetAdminFromEnv, a.protectHost, a.startManager, a.listenControl, a.listenHTTP,
+		a.startRemoteAccess,
 	}
 	for _, step := range steps {
 		if err := step(ctx); err != nil {
@@ -170,22 +179,32 @@ func (a *app) startManager(ctx context.Context) error {
 	if err := a.manager.Start(ctx); err != nil {
 		slog.Error("restore the desired connection", "error", err)
 	}
-	a.api = api.New(a.apiDeps(registry, sessionCookies{secure: false}), api.Options{})
+	// The HTTPS listener serves the router built below; it starts serving
+	// only in startRemoteAccess, after a.router is set.
+	a.remote = remoteaccess.New(remoteaccess.Config{
+		Handler:  api.SecureListener(http.HandlerFunc(a.serveRouter)),
+		KeyPairs: a.store, Firewall: a.guard, Listener: a.host.sockets,
+		ReadHeaderTimeout: readHeaderTimeout, IdleTimeout: idleTimeout,
+	})
+	a.api = api.New(a.apiDeps(registry), api.Options{})
+	a.router = newRouter(a.api, web.Handler())
 	return nil
 }
 
-// apiDeps wires the API for one listener; a second (HTTPS) listener gets
-// its own api.Server with secure cookies.
-func (a *app) apiDeps(registry *vpn.Registry, cookies api.SessionCookies) api.Deps {
+// apiDeps wires the API; one api.Server serves both listeners.
+func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 	return api.Deps{
-		Auth: authAdapter{a.auth}, Cookies: cookies, Profiles: a.store, Drivers: registry,
+		Auth: authAdapter{a.auth}, Cookies: sessionCookies{}, Profiles: a.store, Drivers: registry,
 		Importer: profileImporter{}, Connection: a.manager, HostAccess: a.store, Firewall: a.guard,
 		System: api.System{
 			Version: version, ListenAddress: a.listen, UIPort: a.uiPort, TimeZone: a.cfg.TimeZone,
 			Checks: func() []api.CheckResult { return a.checks },
 		},
+		RemoteAccess: a.store, RemoteAccessListener: a.remote,
 	}
 }
+
+func (a *app) serveRouter(w http.ResponseWriter, r *http.Request) { a.router.ServeHTTP(w, r) }
 
 // listenControl opens the control socket for "tunneldeck reset-admin". A
 // failure is logged; the server works without it.
@@ -208,11 +227,27 @@ func (a *app) listenHTTP(context.Context) error {
 	}
 	a.listener = listener
 	a.server = &http.Server{
-		Handler:           newRouter(a.api, web.Handler()),
+		Handler:           a.router,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 	a.server.RegisterOnShutdown(a.api.CloseStreams)
+	return nil
+}
+
+// startRemoteAccess starts the HTTPS listener when remote access is on; it
+// runs after the firewall install. A failure is logged and reported on the
+// remote-access page; the server keeps running.
+func (a *app) startRemoteAccess(ctx context.Context) error {
+	settings := a.store.RemoteAccess()
+	if !settings.Enabled {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+	if err := a.remote.Apply(ctx, settings); err != nil {
+		slog.Error("start remote access", "error", err)
+	}
 	return nil
 }
 
@@ -239,12 +274,21 @@ func (a *app) run(ctx context.Context) error {
 	return errors.Join(err, a.shutdown())
 }
 
-// shutdown stops HTTP, the tunnel, the firewall and the control socket, in
-// that order. Parts that were never started are skipped.
+// shutdown stops HTTPS, HTTP, the tunnel, the firewall and the control
+// socket, in that order. Event streams are ended first so neither listener
+// waits for them. Parts that were never started are skipped.
 func (a *app) shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	var errs []error
+	if a.api != nil {
+		a.api.CloseStreams()
+	}
+	if a.remote != nil {
+		if err := a.remote.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("shut down remote access: %w", err))
+		}
+	}
 	if a.server != nil {
 		if err := a.server.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("shut down http server: %w", err))

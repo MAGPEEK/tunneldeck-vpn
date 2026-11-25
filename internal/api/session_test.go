@@ -96,11 +96,11 @@ func TestLogin(t *testing.T) {
 			}
 			assertStatus(t, rec, tt.status)
 			cookie := rec.Header().Get("Set-Cookie")
-			if !strings.Contains(cookie, testCookie+"=new-token") {
+			if !strings.Contains(cookie, testCookie+"=new-token") || strings.Contains(cookie, "Secure") {
 				t.Errorf("Set-Cookie = %q", cookie)
 			}
-			if env.auth.loginIP != "192.0.2.1" {
-				t.Errorf("client IP = %q, want the RemoteAddr host 192.0.2.1", env.auth.loginIP)
+			if env.auth.loginClient != (LoginClient{IP: "192.0.2.1"}) {
+				t.Errorf("client = %+v, want the RemoteAddr host 192.0.2.1 with the standard limit", env.auth.loginClient)
 			}
 		})
 	}
@@ -110,8 +110,8 @@ func TestLoginIgnoresForwardedFor(t *testing.T) {
 	env := newTestEnv(t)
 	env.do(t, http.MethodPost, "/api/login", `{"username":"admin","password":"x"}`, anonymous,
 		withHeader("X-Forwarded-For", "203.0.113.9"))
-	if env.auth.loginIP != "192.0.2.1" {
-		t.Errorf("client IP = %q, want 192.0.2.1", env.auth.loginIP)
+	if env.auth.loginClient.IP != "192.0.2.1" {
+		t.Errorf("client = %+v, want IP 192.0.2.1", env.auth.loginClient)
 	}
 }
 

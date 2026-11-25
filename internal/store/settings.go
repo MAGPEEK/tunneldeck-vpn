@@ -14,6 +14,9 @@ type settingsDocument struct {
 	Language          domain.Language          `json:"language"`
 	HostAccessRules   []domain.HostAccessRule  `json:"hostAccessRules"`
 	DesiredConnection domain.DesiredConnection `json:"desiredConnection"`
+	// RemoteAccess was added within schema version 1; files without it get
+	// the defaults.
+	RemoteAccess remoteAccessRecord `json:"remoteAccess"`
 }
 
 func defaultSettings() settingsDocument {
@@ -21,6 +24,7 @@ func defaultSettings() settingsDocument {
 		SchemaVersion:   settingsSchemaVersion,
 		Language:        domain.DefaultLanguage,
 		HostAccessRules: []domain.HostAccessRule{},
+		RemoteAccess:    remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
 	}
 }
 
@@ -47,6 +51,9 @@ func (s *Store) loadSettings() error {
 	}
 	if !doc.Language.Valid() {
 		return fmt.Errorf("%s is corrupted: unsupported language", SettingsFileName)
+	}
+	if err := s.checkRemoteAccess(&doc.RemoteAccess); err != nil {
+		return err
 	}
 	s.settings = doc.clone()
 	return nil

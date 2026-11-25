@@ -21,6 +21,8 @@ type testEnv struct {
 	connection *fakeConnection
 	hostAccess *fakeHostAccess
 	firewall   *fakeFirewall
+	remote     *fakeRemoteAccess
+	listener   *fakeListener
 	server     *Server
 }
 
@@ -36,6 +38,8 @@ func newTestEnv(t *testing.T) *testEnv {
 		connection: &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},
 		hostAccess: &fakeHostAccess{},
 		firewall:   &fakeFirewall{},
+		remote:     newFakeRemoteAccess(),
+		listener:   &fakeListener{},
 	}
 	env.server = New(Deps{
 		Auth:       env.auth,
@@ -50,6 +54,8 @@ func newTestEnv(t *testing.T) *testEnv {
 			Version: "1.2.3", ListenAddress: "192.168.1.10:8194", UIPort: testUIPort, TimeZone: "Europe/Berlin",
 			Checks: func() []CheckResult { return []CheckResult{{ID: "tun-device", OK: true, Detail: "present"}} },
 		},
+		RemoteAccess:         env.remote,
+		RemoteAccessListener: env.listener,
 	}, Options{Now: func() time.Time { return testNow }, Heartbeat: 20 * time.Millisecond})
 	return env
 }
@@ -101,6 +107,9 @@ func assertNoSecret(t *testing.T, path, body string) {
 	t.Helper()
 	if path != "/api/profiles/import" && strings.Contains(body, testSecret) {
 		t.Errorf("%s: response contains the secret: %s", path, body)
+	}
+	if strings.Contains(body, "PRIVATE KEY") {
+		t.Errorf("%s: response contains key material: %s", path, body)
 	}
 }
 

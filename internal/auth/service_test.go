@@ -159,7 +159,7 @@ func TestLogin(t *testing.T) {
 				}
 			}
 			calls := ts.deriver.calls.Load()
-			token, err := ts.Login(tt.username, tt.password, testIP)
+			token, err := ts.Login(tt.username, tt.password, testIP, LoginLimitStandard)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Login: err = %v, want %v", err, tt.wantErr)
 			}
@@ -198,7 +198,7 @@ func TestLoginWithCorruptedHash(t *testing.T) {
 	ts := newTestService(t)
 	corrupted := "$argon2id$v=19$m=64,t=1,p=1$not-base64!$x"
 	ts.store.account = &domain.AdminAccount{Username: testUsername, PasswordHash: corrupted}
-	_, err := ts.Login(testUsername, testPassword, testIP)
+	_, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard)
 	if err == nil || errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("Login: err = %v, want an internal error", err)
 	}
@@ -213,7 +213,7 @@ func TestLoginErrorsDoNotLeakPassword(t *testing.T) {
 	ts := newSetUpService(t)
 	wrong := "wrong password 1234"
 	for range maxFailures + 1 {
-		_, err := ts.Login(testUsername, wrong, testIP)
+		_, err := ts.Login(testUsername, wrong, testIP, LoginLimitStandard)
 		if err == nil || strings.Contains(err.Error(), wrong) {
 			t.Fatalf("Login: err = %v", err)
 		}

@@ -15,8 +15,12 @@ import (
 // authAdapter translates the auth errors into the ones the API maps.
 type authAdapter struct{ *auth.Service }
 
-func (a authAdapter) Login(username, password, clientIP string) (string, error) {
-	token, err := a.Service.Login(username, password, clientIP)
+func (a authAdapter) Login(username, password string, client api.LoginClient) (string, error) {
+	limit := auth.LoginLimitStandard
+	if client.Remote {
+		limit = auth.LoginLimitStrict
+	}
+	token, err := a.Service.Login(username, password, client.IP, limit)
 	var rateLimit *auth.RateLimitError
 	switch {
 	case errors.As(err, &rateLimit):
@@ -27,15 +31,15 @@ func (a authAdapter) Login(username, password, clientIP string) (string, error) 
 	return token, err
 }
 
-// sessionCookies sets the auth session cookie; secure is true only on an
+// sessionCookies sets the auth session cookie; the API passes secure on the
 // HTTPS listener.
-type sessionCookies struct{ secure bool }
+type sessionCookies struct{}
 
-func (c sessionCookies) Set(w http.ResponseWriter, token string) {
-	auth.SetSessionCookie(w, token, c.secure)
+func (sessionCookies) Set(w http.ResponseWriter, token string, secure bool) {
+	auth.SetSessionCookie(w, token, secure)
 }
 
-func (c sessionCookies) Clear(w http.ResponseWriter) { auth.ClearSessionCookie(w, c.secure) }
+func (sessionCookies) Clear(w http.ResponseWriter, secure bool) { auth.ClearSessionCookie(w, secure) }
 
 func (sessionCookies) Token(r *http.Request) string { return auth.TokenFromRequest(r) }
 

@@ -5,19 +5,41 @@ import (
 	"time"
 )
 
-// Login rate limit (SPEC §8): maxFailures failed logins per client within
-// failureWindow lock the client out. Each further lockout doubles, from
-// baseLockout up to maxLockout. A client's record is forgotten after
-// forgetAfter without failures, which also resets the backoff; it is longer
-// than maxLockout so a client that keeps failing stays at the cap.
+// Login rate limit (SPEC §8, §8.1): maxFailures failed logins per client
+// within failureWindow lock the client out, strictMaxFailures for clients
+// under LoginLimitStrict. Each further lockout doubles, from baseLockout up to
+// maxLockout. A client's record is forgotten after forgetAfter without
+// failures, which also resets the backoff; it is longer than maxLockout so a
+// client that keeps failing stays at the cap.
 const (
 	maxFailures       = 5
+	strictMaxFailures = 3
 	failureWindow     = time.Minute
 	baseLockout       = time.Minute
 	maxLockout        = 15 * time.Minute
 	forgetAfter       = 2 * maxLockout
 	maxTrackedClients = 10000
 )
+
+// LoginLimit selects how many failed logins a client may make per minute.
+type LoginLimit int
+
+// Login limits.
+const (
+	// LoginLimitStandard allows 5 failures per minute.
+	LoginLimitStandard LoginLimit = iota
+	// LoginLimitStrict allows 3 failures per minute; it is meant for clients
+	// reaching the UI from outside the local network.
+	LoginLimitStrict
+)
+
+// maxFailures returns the failures that start a lockout under l.
+func (l LoginLimit) maxFailures() int {
+	if l == LoginLimitStrict {
+		return strictMaxFailures
+	}
+	return maxFailures
+}
 
 type clientRecord struct {
 	windowStart time.Time
@@ -46,9 +68,9 @@ func newLoginLimiter() *loginLimiter {
 	}
 }
 
-// begin registers a login attempt by clientIP. It returns false and the
-// remaining lockout when the client is locked out.
-func (l *loginLimiter) begin(clientIP string, now time.Time) (time.Duration, bool) {
+// begin registers a login attempt by clientIP under limit. It returns false
+// and the remaining lockout when the client is locked out.
+func (l *loginLimiter) begin(clientIP string, limit LoginLimit, now time.Time) (time.Duration, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.purgeStale(now, false)
@@ -63,7 +85,7 @@ func (l *loginLimiter) begin(clientIP string, now time.Time) (time.Duration, boo
 	if !ok {
 		record = l.track(clientIP, now)
 	}
-	record.countFailure(now)
+	record.countFailure(limit.maxFailures(), now)
 	return 0, true
 }
 
@@ -117,15 +139,15 @@ func (l *loginLimiter) evictLeastRecent() {
 }
 
 // countFailure records a failed attempt and starts a lockout when the
-// window holds maxFailures failures.
-func (r *clientRecord) countFailure(now time.Time) {
+// window holds limit failures.
+func (r *clientRecord) countFailure(limit int, now time.Time) {
 	if now.Sub(r.windowStart) >= failureWindow {
 		r.windowStart = now
 		r.failures = 0
 	}
 	r.failures++
 	r.lastFailure = now
-	if r.failures >= maxFailures {
+	if r.failures >= limit {
 		r.lockedUntil = now.Add(lockoutDuration(r.lockouts))
 		r.lockouts++
 		r.failures = 0

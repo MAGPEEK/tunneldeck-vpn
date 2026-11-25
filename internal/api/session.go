@@ -41,17 +41,17 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	token, err := s.deps.Auth.Login(body.Username, body.Password, clientIP(r))
+	token, err := s.deps.Auth.Login(body.Username, body.Password, loginClient(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	s.deps.Cookies.Set(w, token)
+	s.deps.Cookies.Set(w, token, isSecureListener(r))
 	writeNoContent(w)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.deps.Auth.Logout(s.deps.Cookies.Token(r))
-	s.deps.Cookies.Clear(w)
+	s.deps.Cookies.Clear(w, isSecureListener(r))
 	writeNoContent(w)
 }

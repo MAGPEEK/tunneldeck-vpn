@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"tunneldeck/internal/domain"
+	"tunneldeck/internal/remoteaccess"
 	"tunneldeck/internal/vpn"
 )
 
@@ -24,6 +25,15 @@ func (e *RateLimitError) Error() string {
 	return fmt.Sprintf("too many failed logins, retry after %s", e.RetryAfter)
 }
 
+// LoginClient describes who attempts a login.
+type LoginClient struct {
+	IP string
+	// Remote is true for a client outside the private, loopback and
+	// link-local ranges on the HTTPS listener; it gets the stricter login
+	// limit (SPEC §8.1).
+	Remote bool
+}
+
 // Auth manages the admin account and sessions.
 type Auth interface {
 	SetupRequired() bool
@@ -32,15 +42,16 @@ type Auth interface {
 	Setup(username, password string) error
 	// Login returns a session token. It fails with ErrInvalidCredentials or
 	// *RateLimitError.
-	Login(username, password, clientIP string) (token string, err error)
+	Login(username, password string, client LoginClient) (token string, err error)
 	Authenticate(token string) (username string, ok bool)
 	Logout(token string)
 }
 
 // SessionCookies carries the session token between client and server.
+// secure is true on the HTTPS listener.
 type SessionCookies interface {
-	Set(w http.ResponseWriter, token string)
-	Clear(w http.ResponseWriter)
+	Set(w http.ResponseWriter, token string, secure bool)
+	Clear(w http.ResponseWriter, secure bool)
 	Token(r *http.Request) string
 }
 
@@ -107,6 +118,25 @@ type HostAccessRules interface {
 // Firewall applies the host-access rules.
 type Firewall interface {
 	InstallFirewall(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error
+}
+
+// RemoteAccessSettings persists the remote-access setting and its
+// certificates; *store.Store implements it. Nothing here returns a key.
+type RemoteAccessSettings interface {
+	RemoteAccess() domain.RemoteAccess
+	SetRemoteAccess(settings domain.RemoteAccess) error
+	// RemoteAccessCertificate returns the PEM chain stored for source.
+	RemoteAccessCertificate(source domain.CertificateSource) (certificatePEM string, ok bool)
+	SetRemoteAccessKeyPair(source domain.CertificateSource, pair domain.KeyPair) error
+}
+
+// RemoteAccessListener runs the HTTPS listener; *remoteaccess.Manager
+// implements it.
+type RemoteAccessListener interface {
+	// Apply starts, stops or moves the listener and opens its port in the
+	// firewall.
+	Apply(ctx context.Context, settings domain.RemoteAccess) error
+	Status() remoteaccess.Status
 }
 
 // CheckResult is one line of the startup self-check.

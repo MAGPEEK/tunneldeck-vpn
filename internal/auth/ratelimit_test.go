@@ -13,7 +13,7 @@ import (
 func (ts *testService) failLogins(t *testing.T, clientIP string, n int) {
 	t.Helper()
 	for i := range n {
-		if _, err := ts.Login(testUsername, "wrong password!", clientIP); !errors.Is(err, ErrInvalidCredentials) {
+		if _, err := ts.Login(testUsername, "wrong password!", clientIP, LoginLimitStandard); !errors.Is(err, ErrInvalidCredentials) {
 			t.Fatalf("failed login %d: err = %v, want ErrInvalidCredentials", i+1, err)
 		}
 	}
@@ -23,7 +23,7 @@ func (ts *testService) failLogins(t *testing.T, clientIP string, n int) {
 func (ts *testService) requireLockedOut(t *testing.T, clientIP string, want time.Duration) {
 	t.Helper()
 	calls := ts.deriver.calls.Load()
-	_, err := ts.Login(testUsername, testPassword, clientIP)
+	_, err := ts.Login(testUsername, testPassword, clientIP, LoginLimitStandard)
 	var limited *RateLimitError
 	if !errors.As(err, &limited) || !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("Login: err = %v, want *RateLimitError", err)
@@ -46,6 +46,32 @@ func TestRateLimitLocksAfterFiveFailures(t *testing.T) {
 	ts.mustLogin(t)
 }
 
+func TestRateLimitPerLoginLimit(t *testing.T) {
+	tests := []struct {
+		name         string
+		limit        LoginLimit
+		failuresLeft int
+	}{
+		{name: "standard", limit: LoginLimitStandard, failuresLeft: 5},
+		{name: "strict", limit: LoginLimitStrict, failuresLeft: 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := newSetUpService(t)
+			for i := range tt.failuresLeft {
+				if _, err := ts.Login(testUsername, "wrong password!", testIP, tt.limit); !errors.Is(err, ErrInvalidCredentials) {
+					t.Fatalf("failure %d: err = %v, want ErrInvalidCredentials", i+1, err)
+				}
+			}
+			_, err := ts.Login(testUsername, testPassword, testIP, tt.limit)
+			var limited *RateLimitError
+			if !errors.As(err, &limited) || limited.RetryAfter != time.Minute {
+				t.Fatalf("after %d failures: err = %v, want a one-minute lockout", tt.failuresLeft, err)
+			}
+		})
+	}
+}
+
 func TestRateLimitCountsFailuresPerWindow(t *testing.T) {
 	ts := newSetUpService(t)
 	ts.failLogins(t, testIP, maxFailures-1)
@@ -58,7 +84,7 @@ func TestRateLimitIsPerClientIP(t *testing.T) {
 	ts := newSetUpService(t)
 	ts.failLogins(t, "192.0.2.1", maxFailures)
 	ts.requireLockedOut(t, "192.0.2.1", time.Minute)
-	if _, err := ts.Login(testUsername, testPassword, "192.0.2.2"); err != nil {
+	if _, err := ts.Login(testUsername, testPassword, "192.0.2.2", LoginLimitStandard); err != nil {
 		t.Fatalf("login from another IP: %v", err)
 	}
 }
@@ -134,7 +160,7 @@ func TestRateLimitHoldsUnderParallelLogins(t *testing.T) {
 	)
 	for range attempts {
 		wg.Go(func() {
-			_, err := ts.Login(testUsername, "wrong password!", testIP)
+			_, err := ts.Login(testUsername, "wrong password!", testIP, LoginLimitStandard)
 			if errors.Is(err, ErrInvalidCredentials) {
 				mu.Lock()
 				checked++

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tunneldeck/internal/domain"
+	"tunneldeck/internal/remoteaccess"
 	"tunneldeck/internal/vpn"
 )
 
@@ -34,7 +35,7 @@ type fakeAuth struct {
 	setupDone   bool
 	tokens      map[string]string
 	retryAfter  time.Duration // locks logins out when > 0
-	loginIP     string
+	loginClient LoginClient
 	setupCalled bool
 }
 
@@ -62,10 +63,10 @@ func (a *fakeAuth) Setup(_, password string) error {
 	return nil
 }
 
-func (a *fakeAuth) Login(username, password, clientIP string) (string, error) {
+func (a *fakeAuth) Login(username, password string, client LoginClient) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.loginIP = clientIP
+	a.loginClient = client
 	if a.retryAfter > 0 {
 		return "", &RateLimitError{RetryAfter: a.retryAfter}
 	}
@@ -91,12 +92,12 @@ func (a *fakeAuth) Logout(token string) {
 
 type fakeCookies struct{}
 
-func (fakeCookies) Set(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{Name: testCookie, Value: token, Path: "/", HttpOnly: true})
+func (fakeCookies) Set(w http.ResponseWriter, token string, secure bool) {
+	http.SetCookie(w, &http.Cookie{Name: testCookie, Value: token, Path: "/", HttpOnly: true, Secure: secure})
 }
 
-func (fakeCookies) Clear(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: testCookie, Path: "/", MaxAge: -1})
+func (fakeCookies) Clear(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{Name: testCookie, Path: "/", MaxAge: -1, Secure: secure})
 }
 
 func (fakeCookies) Token(r *http.Request) string {
@@ -375,6 +376,92 @@ func (f *fakeFirewall) InstallFirewall(_ context.Context, rules []domain.HostAcc
 	f.applied = append(f.applied, rules)
 	f.uiPort = uiPort
 	return f.err
+}
+
+// fakeRemoteAccess is an in-memory remote-access store; keys are kept to
+// prove they never reach a response.
+type fakeRemoteAccess struct {
+	mu       sync.Mutex
+	settings domain.RemoteAccess
+	pairs    map[domain.CertificateSource]domain.KeyPair
+	failSet  error
+}
+
+func newFakeRemoteAccess() *fakeRemoteAccess {
+	return &fakeRemoteAccess{settings: domain.DefaultRemoteAccess(), pairs: map[domain.CertificateSource]domain.KeyPair{}}
+}
+
+func (f *fakeRemoteAccess) RemoteAccess() domain.RemoteAccess {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.settings
+}
+
+func (f *fakeRemoteAccess) SetRemoteAccess(settings domain.RemoteAccess) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failSet != nil {
+		return f.failSet
+	}
+	f.settings = settings
+	return nil
+}
+
+func (f *fakeRemoteAccess) RemoteAccessCertificate(source domain.CertificateSource) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pair, ok := f.pairs[source]
+	return pair.CertificatePEM, ok
+}
+
+func (f *fakeRemoteAccess) SetRemoteAccessKeyPair(source domain.CertificateSource, pair domain.KeyPair) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failSet != nil {
+		return f.failSet
+	}
+	f.pairs[source] = pair
+	return nil
+}
+
+func (f *fakeRemoteAccess) pair(source domain.CertificateSource) (domain.KeyPair, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pair, ok := f.pairs[source]
+	return pair, ok
+}
+
+// fakeListener records applied settings; failOnce fails the next Apply.
+type fakeListener struct {
+	mu       sync.Mutex
+	applied  []domain.RemoteAccess
+	failOnce error
+	status   remoteaccess.Status
+}
+
+func (l *fakeListener) Apply(_ context.Context, settings domain.RemoteAccess) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.applied = append(l.applied, settings)
+	if err := l.failOnce; err != nil {
+		l.failOnce = nil
+		l.status.LastError = err.Error()
+		return err
+	}
+	l.status = remoteaccess.Status{Listening: settings.Enabled}
+	return nil
+}
+
+func (l *fakeListener) Status() remoteaccess.Status {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.status
+}
+
+func (l *fakeListener) calls() []domain.RemoteAccess {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.applied)
 }
 
 var errBoom = errors.New("boom: internal detail")
