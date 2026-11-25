@@ -14,12 +14,12 @@
 - `docs/reference/original-compose.yml` — original Alpine/OpenVPN compose this project replaces
 - `cmd/tunneldeck/` — entry point: listen address, `/api/system`, embedded SPA, graceful shutdown
 - `internal/config/` — environment → typed config (doc only)
-- `internal/domain/` — core types and sentinel errors (doc only)
+- `internal/domain/` — core types: Profile (generic Settings plus Secrets), PublicProfile/hasValue, DailyReconnect, HostAccessRule, events, DesiredConnection, AdminAccount, sentinel errors and ValidationError, NewID
 - `internal/vpn/` — `Driver` interface, registry, `ConnectionManager` (doc only)
 - `internal/vpn/openvpn/` — OpenVPN driver (doc only)
 - `internal/netguard/` — iptables chains and policy routing via `CommandRunner` (doc only)
-- `internal/store/` — JSON persistence with atomic writes (doc only)
-- `internal/secret/` — AES-256-GCM secret fields and key file (doc only)
+- `internal/store/` — settings.json and profiles.json with atomic writes, a mutex, schemaVersion migrations (`document.go`) and a file-system seam (`atomic.go`)
+- `internal/secret/` — AES-256-GCM `enc:v1:` Cipher; `secret.key` load/create and `TUNNELDECK_SECRET_KEY` override
 - `internal/auth/` — admin account, sessions, login rate limit (doc only)
 - `internal/api/` — REST handlers, SSE, middleware (doc only)
 - `internal/web/` — `go:embed all:dist` of the SPA with fallback to `index.html`
