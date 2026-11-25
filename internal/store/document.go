@@ -25,7 +25,7 @@ type migrations map[int]migration
 // current schema version and register the step from the previous version
 // here, keyed by that previous version.
 var (
-	settingsMigrations = migrations{}
+	settingsMigrations = migrations{1: migrateSettingsV1ToV2}
 	profilesMigrations = migrations{}
 )
 

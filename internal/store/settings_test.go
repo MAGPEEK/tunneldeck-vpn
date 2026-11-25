@@ -61,62 +61,72 @@ func TestLanguage(t *testing.T) {
 	}
 }
 
-func TestHostAccessRules(t *testing.T) {
+// hostRule is a valid inbound TCP rule to this device on port.
+func hostRule(port int) domain.FirewallRule {
+	return domain.HostAccessRule{Protocol: domain.TransportTCP, Port: port, Enabled: true}.FirewallRule()
+}
+
+func TestFirewall(t *testing.T) {
 	s, dir := newTestStore(t)
-	rules := []domain.HostAccessRule{
-		{Protocol: domain.TransportTCP, Port: 22, Enabled: true, Comment: "ssh"},
-		{ID: "keep-me", Protocol: domain.TransportUDP, Port: 161, SourceCIDR: "10.8.0.0/24"},
+	kept := hostRule(161)
+	kept.ID = "keep-me"
+	firewall := domain.Firewall{
+		FirewallSettings: domain.FirewallSettings{DropInvalid: true, PingLimit: true},
+		Rules:            []domain.FirewallRule{hostRule(22), kept},
 	}
-	stored, err := s.SetHostAccessRules(rules)
+	stored, err := s.SetFirewall(firewall)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored[0].ID == "" || stored[1].ID != "keep-me" {
-		t.Fatalf("IDs = %q, %q; want generated and kept", stored[0].ID, stored[1].ID)
+	if stored.Rules[0].ID == "" || stored.Rules[1].ID != "keep-me" {
+		t.Fatalf("IDs = %q, %q; want generated and kept", stored.Rules[0].ID, stored.Rules[1].ID)
 	}
-	if rules[0].ID != "" {
-		t.Fatal("SetHostAccessRules modified the caller's slice")
-	}
-
-	reloaded := openTestStore(t, dir, newCipher(t, 1)).HostAccessRules()
-	if len(reloaded) != 2 || reloaded[0] != stored[0] || reloaded[1] != stored[1] {
-		t.Fatalf("reloaded rules = %+v, want %+v", reloaded, stored)
+	if firewall.Rules[0].ID != "" {
+		t.Fatal("SetFirewall modified the caller's slice")
 	}
 
-	stored[0].Port = 9999
-	got := s.HostAccessRules()
-	got[1].Port = 9999
-	if again := s.HostAccessRules(); again[0].Port != 22 || again[1].Port != 161 {
-		t.Fatalf("callers mutated stored rules: %+v", again)
+	reloaded := openTestStore(t, dir, newCipher(t, 1)).Firewall()
+	if reloaded.FirewallSettings != firewall.FirewallSettings || len(reloaded.Rules) != 2 ||
+		reloaded.Rules[0] != stored.Rules[0] || reloaded.Rules[1] != stored.Rules[1] {
+		t.Fatalf("reloaded firewall = %+v, want %+v", reloaded, stored)
 	}
 
-	if cleared, err := s.SetHostAccessRules(nil); err != nil || cleared == nil || len(cleared) != 0 {
-		t.Fatalf("SetHostAccessRules(nil) = %#v, %v; want empty list", cleared, err)
+	stored.Rules[0].Name = "changed"
+	got := s.Firewall()
+	got.Rules[1].Name = "changed"
+	if again := s.Firewall(); again.Rules[0].Name == "changed" || again.Rules[1].Name == "changed" {
+		t.Fatalf("callers mutated stored rules: %+v", again.Rules)
+	}
+
+	if cleared, err := s.SetFirewall(domain.Firewall{}); err != nil || cleared.Rules == nil || len(cleared.Rules) != 0 {
+		t.Fatalf("SetFirewall without rules = %#v, %v; want an empty list", cleared, err)
 	}
 }
 
-func TestHostAccessRulesValidation(t *testing.T) {
+func TestFirewallValidation(t *testing.T) {
 	s, _ := newTestStore(t)
-	valid := []domain.HostAccessRule{{Protocol: domain.TransportTCP, Port: 22}}
-	if _, err := s.SetHostAccessRules(valid); err != nil {
+	valid := domain.Firewall{Rules: []domain.FirewallRule{hostRule(22)}}
+	if _, err := s.SetFirewall(valid); err != nil {
 		t.Fatal(err)
 	}
+	unnamed := hostRule(23)
+	unnamed.Name = ""
 	tests := []struct {
 		name  string
-		rules []domain.HostAccessRule
+		rules []domain.FirewallRule
 	}{
-		{"duplicate", []domain.HostAccessRule{{Protocol: domain.TransportTCP, Port: 22}, {Protocol: domain.TransportTCP, Port: 22}}},
-		{"host bits in source", []domain.HostAccessRule{{Protocol: domain.TransportTCP, Port: 22, SourceCIDR: "192.168.1.5/24"}}},
-		{"bad port", []domain.HostAccessRule{{Protocol: domain.TransportUDP, Port: 70000}}},
+		{"duplicate", []domain.FirewallRule{hostRule(22), hostRule(22)}},
+		{"no name", []domain.FirewallRule{unnamed}},
+		{"bad port", []domain.FirewallRule{hostRule(70000)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := s.SetHostAccessRules(tt.rules); !errors.Is(err, domain.ErrValidation) {
+			if _, err := s.SetFirewall(domain.Firewall{Rules: tt.rules}); !errors.Is(err, domain.ErrValidation) {
 				t.Fatalf("err = %v, want ErrValidation", err)
 			}
 		})
 	}
-	if got := s.HostAccessRules(); len(got) != 1 || got[0].Port != 22 {
+	if got := s.Firewall().Rules; len(got) != 1 || got[0].DestinationPort.From != 22 {
 		t.Fatalf("rejected changes altered the rules: %+v", got)
 	}
 }
@@ -207,7 +217,7 @@ func TestSettingsWriteFailureKeepsState(t *testing.T) {
 		"language": func() error { return s.SetLanguage(domain.LanguageEnglish) },
 		"admin":    func() error { return s.CreateAdminAccount(domain.AdminAccount{Username: "a", PasswordHash: "h"}) },
 		"rules": func() error {
-			_, err := s.SetHostAccessRules([]domain.HostAccessRule{{Protocol: domain.TransportTCP, Port: 22}})
+			_, err := s.SetFirewall(domain.Firewall{Rules: []domain.FirewallRule{hostRule(22)}})
 			return err
 		},
 		"desired": func() error { return s.SetDesiredConnection(domain.DesiredConnection{}) },
@@ -217,7 +227,7 @@ func TestSettingsWriteFailureKeepsState(t *testing.T) {
 			t.Errorf("%s: err = %v, want injected failure", name, err)
 		}
 	}
-	if s.Language() != domain.LanguageGerman || len(s.HostAccessRules()) != 0 {
+	if s.Language() != domain.LanguageGerman || len(s.Firewall().Rules) != 0 {
 		t.Fatal("memory changed after failed writes")
 	}
 	if _, ok := s.AdminAccount(); ok {

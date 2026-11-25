@@ -11,15 +11,15 @@ const defaultHeartbeat = 20 * time.Second
 
 // Deps are the services the API uses. All are required.
 type Deps struct {
-	Auth       Auth
-	Cookies    SessionCookies
-	Profiles   Profiles
-	Drivers    Drivers
-	Importer   Importer
-	Connection Connection
-	HostAccess HostAccessRules
-	Firewall   Firewall
-	System     System
+	Auth          Auth
+	Cookies       SessionCookies
+	Profiles      Profiles
+	Drivers       Drivers
+	Importer      Importer
+	Connection    Connection
+	FirewallStore FirewallStore
+	Firewall      Firewall
+	System        System
 
 	RemoteAccess         RemoteAccessSettings
 	RemoteAccessListener RemoteAccessListener

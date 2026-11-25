@@ -79,7 +79,7 @@ func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
 func (l *loop) installFirewall() error {
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
-	return l.cfg.Guard.InstallFirewall(ctx, l.cfg.HostAccess.HostAccessRules(), l.cfg.UIPort)
+	return l.cfg.Guard.InstallFirewall(ctx, l.cfg.Firewall.Firewall(), l.cfg.UIPort)
 }
 
 func (l *loop) routeThroughTunnel(vpnIP string) error {

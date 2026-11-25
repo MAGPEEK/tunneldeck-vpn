@@ -15,14 +15,16 @@ type fakeResult struct {
 }
 
 // fakeRunner records every command line and answers from per-command
-// queues. A command without a queued answer succeeds with empty output.
+// queues, then from standing answers. A command without either succeeds
+// with empty output.
 type fakeRunner struct {
-	calls   []string
-	scripts map[string][]fakeResult
+	calls    []string
+	scripts  map[string][]fakeResult
+	standing map[string]fakeResult
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{scripts: make(map[string][]fakeResult)}
+	return &fakeRunner{scripts: make(map[string][]fakeResult), standing: make(map[string]fakeResult)}
 }
 
 // on queues results for the exact command line cmd.
@@ -31,12 +33,19 @@ func (f *fakeRunner) on(cmd string, results ...fakeResult) *fakeRunner {
 	return f
 }
 
+// always answers cmd with result whenever no queued result is left.
+func (f *fakeRunner) always(cmd string, result fakeResult) *fakeRunner {
+	f.standing[cmd] = result
+	return f
+}
+
 func (f *fakeRunner) Run(_ context.Context, name string, args ...string) (string, error) {
 	cmd := strings.Join(append([]string{name}, args...), " ")
 	f.calls = append(f.calls, cmd)
 	queue := f.scripts[cmd]
 	if len(queue) == 0 {
-		return "", nil
+		result := f.standing[cmd]
+		return result.stdout, withCommand(result.err, name, args)
 	}
 	f.scripts[cmd] = queue[1:]
 	return queue[0].stdout, withCommand(queue[0].err, name, args)
@@ -81,10 +90,23 @@ const (
 )
 
 // newLegacyGuard returns a Guard forced to the legacy backend, so tests of
-// the chain handling see a short, fixed detection (detectLegacy).
+// the chain handling see a short, fixed detection (detectLegacy), on a host
+// whose LAN is lanListing.
 func newLegacyGuard(f *fakeRunner) *Guard {
+	f.always(addrShow, ok(lanListing))
 	return New(f, WithBackend(BackendLegacy))
 }
+
+// addrShow lists the host's addresses; lanListing is a host with LAN
+// 192.168.2.0/24 on eth0 (address .10) next to loopback, Docker and the
+// tunnel.
+const (
+	addrShow   = "ip -4 -o addr show"
+	lanListing = "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n" +
+		"2: eth0    inet 192.168.2.10/24 brd 192.168.2.255 scope global eth0\\       valid_lft forever preferred_lft forever\n" +
+		"3: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\\       valid_lft forever preferred_lft forever\n" +
+		"7: tdvpn0    inet 10.8.0.2/24 scope global tdvpn0\\       valid_lft forever preferred_lft forever\n"
+)
 
 // detectLegacy is the detection of newLegacyGuard.
 var detectLegacy = []string{"iptables-legacy -w -t filter -S", "iptables-legacy -w -t nat -S"}

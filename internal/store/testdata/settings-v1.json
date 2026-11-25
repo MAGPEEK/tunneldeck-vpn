@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "admin": {
+    "username": "admin",
+    "passwordHash": "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA"
+  },
+  "language": "de",
+  "hostAccessRules": [
+    {
+      "id": "r-dsm",
+      "protocol": "tcp",
+      "port": 5001,
+      "sourceCidr": "",
+      "enabled": true,
+      "comment": "DSM over HTTPS"
+    },
+    {
+      "id": "r-snmp",
+      "protocol": "udp",
+      "port": 161,
+      "sourceCidr": "10.8.0.0/24",
+      "enabled": false,
+      "comment": ""
+    }
+  ],
+  "desiredConnection": {
+    "activeProfileId": "",
+    "wantConnected": false
+  },
+  "remoteAccess": {
+    "enabled": false,
+    "port": 8443,
+    "certificateSource": "selfSigned"
+  }
+}

@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `settings.json` schema version 2. The host-access rules become firewall rules (SPEC §16): each one is migrated on start to an inbound rule to "This device" named like "Host port 5001/tcp", and the global firewall protections are switched on. The migrated file is written on the next settings change; older TunnelDeck-VPN versions refuse to start with it, so keep a copy of `/data` before upgrading if you may roll back.
+- The firewall now has two directions and four chains: `TUNNELDECK-INPUT` and `TUNNELDECK-FORWARD` (filter), `TUNNELDECK-PREROUTING` and `TUNNELDECK-POSTROUTING` (nat), each jumped to from position 1 of its built-in chain. The firewall API and page follow in the next changes; `/api/host-access` keeps working and shows and edits the inbound rules to this device on one tcp or udp port, leaving all other rules untouched.
+
+### Added
+
+- Firewall rules (backend): inbound rules to this device (accept, drop or reject; tcp, udp, tcp+udp, icmp with optional type, esp, gre; port ranges, source address and source port), port forwards to other LAN devices (DNAT with optional public port or shifted port range, masquerade unless the source address is kept, esp and gre forwarding), and outbound rules that route LAN devices through the tunnel (policy rules at priorities 7100–7191, masquerade on `tdvpn0`) with a kill switch that drops their traffic while the tunnel is down.
+- Global firewall protections, all on by default: drop invalid packets, clamp the TCP MSS to the path MTU, limit new TCP connections from the tunnel (25/s, burst 50 per source) and pings from the tunnel (5/s, burst 10).
+- Self-checks `ip-forward` (reads `net.ipv4.ip_forward`, never changes it) and `lan-subnets` (the host's LAN subnets, which port-forward targets must lie in).
+
 ## [0.1.0-alpha.1] - 2026-11-25
 
 ### Added

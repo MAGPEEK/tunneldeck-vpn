@@ -335,45 +335,67 @@ func (c *fakeConnection) cancelCount() int {
 	return c.cancelled
 }
 
-type fakeHostAccess struct {
-	mu      sync.Mutex
-	rules   []domain.HostAccessRule
-	failSet error
+// fakeFirewallStore is an in-memory FirewallStore.
+type fakeFirewallStore struct {
+	mu       sync.Mutex
+	firewall domain.Firewall
+	failSet  error
 }
 
-func (h *fakeHostAccess) HostAccessRules() []domain.HostAccessRule {
+func (h *fakeFirewallStore) Firewall() domain.Firewall {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return slices.Clone(h.rules)
+	return cloneTestFirewall(h.firewall)
 }
 
-func (h *fakeHostAccess) SetHostAccessRules(rules []domain.HostAccessRule) ([]domain.HostAccessRule, error) {
+func (h *fakeFirewallStore) SetFirewall(firewall domain.Firewall) (domain.Firewall, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.failSet != nil {
-		return nil, h.failSet
+		return domain.Firewall{}, h.failSet
 	}
-	stored := slices.Clone(rules)
-	for i := range stored {
-		if stored[i].ID == "" {
-			stored[i].ID = fmt.Sprintf("r%d", i+1)
+	stored := cloneTestFirewall(firewall)
+	for i := range stored.Rules {
+		if stored.Rules[i].ID == "" {
+			stored.Rules[i].ID = fmt.Sprintf("r%d", i+1)
 		}
 	}
-	h.rules = stored
-	return slices.Clone(stored), nil
+	h.firewall = stored
+	return cloneTestFirewall(stored), nil
+}
+
+// setRules stores rules directly, bypassing validation.
+func (h *fakeFirewallStore) setRules(rules ...domain.FirewallRule) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.firewall.Rules = rules
+}
+
+// setHostRules stores host-access rules as firewall rules.
+func (h *fakeFirewallStore) setHostRules(rules ...domain.HostAccessRule) {
+	converted := make([]domain.FirewallRule, len(rules))
+	for i, rule := range rules {
+		converted[i] = rule.FirewallRule()
+	}
+	h.setRules(converted...)
+}
+
+func cloneTestFirewall(f domain.Firewall) domain.Firewall {
+	f.Rules = slices.Clone(f.Rules)
+	return f
 }
 
 type fakeFirewall struct {
 	mu      sync.Mutex
 	err     error
-	applied [][]domain.HostAccessRule
+	applied []domain.Firewall
 	uiPort  int
 }
 
-func (f *fakeFirewall) InstallFirewall(_ context.Context, rules []domain.HostAccessRule, uiPort int) error {
+func (f *fakeFirewall) InstallFirewall(_ context.Context, firewall domain.Firewall, uiPort int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.applied = append(f.applied, rules)
+	f.applied = append(f.applied, firewall)
 	f.uiPort = uiPort
 	return f.err
 }

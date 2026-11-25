@@ -11,7 +11,9 @@ const (
 	SettingsFileName = "settings.json"
 	ProfilesFileName = "profiles.json"
 
-	settingsSchemaVersion = 1
+	// settingsSchemaVersion 2 replaced hostAccessRules by firewall (SPEC
+	// §16.3).
+	settingsSchemaVersion = 2
 	profilesSchemaVersion = 1
 )
 

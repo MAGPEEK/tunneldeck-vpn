@@ -115,22 +115,22 @@ func TestPutRemoteAccess(t *testing.T) {
 			name: "enabled TCP host-access port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`,
 			status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantField: "port",
 			prepare: func(e *testEnv) {
-				e.hostAccess.rules = []domain.HostAccessRule{{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true}}
+				e.hostAccess.setHostRules(domain.HostAccessRule{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true})
 			},
 		},
 		{
 			name: "disabled or UDP host-access port", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
 			prepare: func(e *testEnv) {
-				e.hostAccess.rules = []domain.HostAccessRule{
-					{ID: "a", Protocol: domain.TransportTCP, Port: 8443, Enabled: false},
-					{ID: "b", Protocol: domain.TransportUDP, Port: 8443, Enabled: true},
-				}
+				e.hostAccess.setHostRules(
+					domain.HostAccessRule{ID: "a", Protocol: domain.TransportTCP, Port: 8443, Enabled: false},
+					domain.HostAccessRule{ID: "b", Protocol: domain.TransportUDP, Port: 8443, Enabled: true},
+				)
 			},
 		},
 		{
 			name: "host-access port while disabled", body: `{"enabled":false,"port":8443,"certificateSource":"selfSigned"}`, status: http.StatusOK,
 			prepare: func(e *testEnv) {
-				e.hostAccess.rules = []domain.HostAccessRule{{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true}}
+				e.hostAccess.setHostRules(domain.HostAccessRule{ID: "r", Protocol: domain.TransportTCP, Port: 8443, Enabled: true})
 			},
 		},
 		{name: "unknown field", body: `{"enabled":true,"port":8443,"certificateSource":"selfSigned","x":1}`, status: http.StatusBadRequest, code: CodeBadRequest},

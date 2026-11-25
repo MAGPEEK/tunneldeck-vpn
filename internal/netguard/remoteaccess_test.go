@@ -11,43 +11,39 @@ import (
 
 const remotePort = 8443
 
-// reinstallInputCalls is the TUNNELDECK-INPUT refill for testRules over the
-// state scriptInstalled describes, with extra accepts before the DROP.
-func reinstallInputCalls(extra ...string) []string {
-	lines := []string{
-		"-S TUNNELDECK-INPUT",
-		"-S INPUT",
-		"-A TUNNELDECK-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
-		"-A TUNNELDECK-INPUT -p tcp --dport 22 -j ACCEPT",
-		"-A TUNNELDECK-INPUT -p udp --dport 51820 -s 192.168.1.0/24 -j ACCEPT",
+const remoteAccept = "-p tcp --dport 8443 -j ACCEPT"
+
+// remoteInput is TUNNELDECK-INPUT of testFirewall with the remote-access
+// accept before the DROP.
+var remoteInput = inputWith("-p tcp --dport 22 -j ACCEPT", "-p udp --dport 51820 -s 192.168.1.0/24 -j ACCEPT", remoteAccept)
+
+func installedGuard(t *testing.T, f *fakeRunner) *Guard {
+	t.Helper()
+	scriptFresh(f)
+	g := newLegacyGuard(f)
+	if err := g.InstallFirewall(context.Background(), testFirewall, uiPort); err != nil {
+		t.Fatalf("install: %v", err)
 	}
-	lines = append(lines, extra...)
-	lines = append(lines, "-A TUNNELDECK-INPUT -j DROP",
-		"-D TUNNELDECK-INPUT 1", "-D TUNNELDECK-INPUT 1", "-D TUNNELDECK-INPUT 1", "-D TUNNELDECK-INPUT 1")
-	return prefixed(legacy, lines...)
+	f.takeCalls()
+	return g
 }
 
 func TestSetRemoteAccessPortReinstallsAnInstalledFirewall(t *testing.T) {
 	f := newFakeRunner()
-	scriptFresh(f)
-	g := newLegacyGuard(f)
-	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	f.takeCalls()
+	g := installedGuard(t, f)
+	state := installedState{input: 1, forward: 1}
 
-	scriptInstalled(f)
+	scriptState(f, state)
 	if err := g.SetRemoteAccessPort(context.Background(), remotePort); err != nil {
 		t.Fatalf("open port: %v", err)
 	}
-	assertCalls(t, f.takeCalls(), slices.Concat(
-		reinstallInputCalls("-A TUNNELDECK-INPUT -p tcp --dport 8443 -j ACCEPT"), reinstallForwardCalls))
+	assertCalls(t, f.takeCalls(), reinstallCalls(state, remoteInput, testForward, nil, nil))
 
-	scriptInstalled(f)
+	scriptState(f, state)
 	if err := g.SetRemoteAccessPort(context.Background(), 0); err != nil {
 		t.Fatalf("close port: %v", err)
 	}
-	assertCalls(t, f.takeCalls(), slices.Concat(reinstallInputCalls(), reinstallForwardCalls))
+	assertCalls(t, f.takeCalls(), reinstallCalls(state, testInput, testForward, nil, nil))
 }
 
 func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {
@@ -60,46 +56,55 @@ func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {
 		t.Fatalf("commands without an installed firewall: %v", calls)
 	}
 	scriptFresh(f)
-	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
+	if err := g.InstallFirewall(context.Background(), testFirewall, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	want := slices.Concat(detectLegacy, freshInputCalls, freshForwardCalls)
-	accept := legacy + "-A TUNNELDECK-INPUT -p tcp --dport 8443 -j ACCEPT"
-	finalDrop := slices.Index(want, legacy+"-D TUNNELDECK-INPUT 1") - 1
-	want = slices.Insert(want, finalDrop, accept)
-	assertCalls(t, f.takeCalls(), want)
+	assertCalls(t, f.takeCalls(), freshCalls(remoteInput, testForward, nil, nil))
 }
 
 func TestSetRemoteAccessPortValidation(t *testing.T) {
 	f := newFakeRunner()
-	scriptFresh(f)
 	g := newLegacyGuard(f)
 	for _, port := range []int{-1, 65536} {
 		if err := g.SetRemoteAccessPort(context.Background(), port); !errors.Is(err, domain.ErrValidation) {
 			t.Errorf("port %d: err = %v, want ErrValidation", port, err)
 		}
 	}
-	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
+	scriptFresh(f)
+	if err := g.InstallFirewall(context.Background(), testFirewall, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	f.takeCalls()
-	if err := g.SetRemoteAccessPort(context.Background(), uiPort); !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("UI port: err = %v, want ErrValidation", err)
+	for _, port := range []int{uiPort, 22} {
+		if err := g.SetRemoteAccessPort(context.Background(), port); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("port %d: err = %v, want ErrValidation", port, err)
+		}
 	}
 	if calls := f.takeCalls(); len(calls) != 0 {
 		t.Fatalf("commands for a rejected port: %v", calls)
 	}
+	if g.remoteAccessPort != 0 {
+		t.Errorf("a rejected port was kept: %d", g.remoteAccessPort)
+	}
 }
 
-func TestInstallFirewallRejectsRemoteAccessOnTheUIPort(t *testing.T) {
+func TestInstallFirewallRejectsRemoteAccessConflicts(t *testing.T) {
 	f := newFakeRunner()
 	g := newLegacyGuard(f)
 	if err := g.SetRemoteAccessPort(context.Background(), uiPort); err != nil {
 		t.Fatalf("SetRemoteAccessPort before install: %v", err)
 	}
-	if err := g.InstallFirewall(context.Background(), nil, uiPort); !errors.Is(err, domain.ErrValidation) {
+	if err := g.InstallFirewall(context.Background(), domain.Firewall{}, uiPort); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("err = %v, want ErrValidation", err)
 	}
+	if err := g.SetRemoteAccessPort(context.Background(), remotePort); err != nil {
+		t.Fatal(err)
+	}
+	forward := rulesOnly(changed(portForward(domain.ProtocolTCP, "192.168.2.2", domain.SinglePort(443)), func(r *domain.FirewallRule) {
+		r.PublicPort = domain.SinglePort(remotePort)
+	}))
+	err := g.InstallFirewall(context.Background(), forward, uiPort)
+	assertValidationField(t, err, "rules[0].publicPort")
 	if calls := f.takeCalls(); len(calls) != 0 {
 		t.Fatalf("commands for a rejected install: %v", calls)
 	}
@@ -107,14 +112,7 @@ func TestInstallFirewallRejectsRemoteAccessOnTheUIPort(t *testing.T) {
 
 func TestRemoveFirewallForgetsTheInstallation(t *testing.T) {
 	f := newFakeRunner()
-	scriptFresh(f)
-	g := newLegacyGuard(f)
-	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	f.on(legacy+"-C INPUT -i tdvpn0 -j TUNNELDECK-INPUT", fail(badRule)).
-		on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
-		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
+	g := installedGuard(t, f)
 	if err := g.RemoveFirewall(context.Background()); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -129,14 +127,13 @@ func TestRemoveFirewallForgetsTheInstallation(t *testing.T) {
 
 func TestSetRemoteAccessPortReportsAFailedReinstall(t *testing.T) {
 	f := newFakeRunner()
-	scriptFresh(f)
-	g := newLegacyGuard(f)
-	if err := g.InstallFirewall(context.Background(), testRules, uiPort); err != nil {
-		t.Fatalf("install: %v", err)
-	}
+	g := installedGuard(t, f)
 	scriptInstalled(f)
-	f.on(legacy+"-A TUNNELDECK-INPUT -p tcp --dport 8443 -j ACCEPT", fail(noPermission))
+	f.on(legacy+"-A TUNNELDECK-INPUT "+remoteAccept, fail(noPermission))
 	if err := g.SetRemoteAccessPort(context.Background(), remotePort); err == nil {
 		t.Fatal("SetRemoteAccessPort succeeded despite a failing command")
+	}
+	if calls := f.takeCalls(); !slices.Contains(calls, legacy+"-A TUNNELDECK-INPUT "+remoteAccept) {
+		t.Errorf("the port was not opened: %v", calls)
 	}
 }

@@ -109,15 +109,16 @@ type Connection interface {
 	Subscribe() (<-chan domain.Event, func())
 }
 
-// HostAccessRules persists the host-access rules.
-type HostAccessRules interface {
-	HostAccessRules() []domain.HostAccessRule
-	SetHostAccessRules(rules []domain.HostAccessRule) ([]domain.HostAccessRule, error)
+// FirewallStore persists the firewall settings and rules; *store.Store
+// implements it. SetFirewall fails with a *domain.ValidationError.
+type FirewallStore interface {
+	Firewall() domain.Firewall
+	SetFirewall(firewall domain.Firewall) (domain.Firewall, error)
 }
 
-// Firewall applies the host-access rules.
+// Firewall applies the firewall; *netguard.Guard implements it.
 type Firewall interface {
-	InstallFirewall(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error
+	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
 }
 
 // RemoteAccessSettings persists the remote-access setting and its

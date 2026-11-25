@@ -160,7 +160,7 @@ func (a *app) protectHost(ctx context.Context) error {
 	}
 	a.checks = toCheckResults(results)
 	logBackend(a.guard)
-	if err := a.guard.InstallFirewall(ctx, a.store.HostAccessRules(), a.uiPort); err != nil {
+	if err := a.guard.InstallFirewall(ctx, a.store.Firewall(), a.uiPort); err != nil {
 		slog.Error("install firewall; connecting is refused until it works", "error", err)
 	}
 	return nil
@@ -187,7 +187,7 @@ func (a *app) startManager(ctx context.Context) error {
 		return fmt.Errorf("register drivers: %w", err)
 	}
 	a.manager = vpn.NewConnectionManager(vpn.ManagerConfig{
-		Registry: registry, Profiles: a.store, Desired: a.store, HostAccess: a.store, Guard: a.guard, UIPort: a.uiPort,
+		Registry: registry, Profiles: a.store, Desired: a.store, Firewall: a.store, Guard: a.guard, UIPort: a.uiPort,
 	})
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -210,7 +210,7 @@ func (a *app) startManager(ctx context.Context) error {
 func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 	return api.Deps{
 		Auth: authAdapter{a.auth}, Cookies: sessionCookies{}, Profiles: a.store, Drivers: registry,
-		Importer: profileImporter{}, Connection: a.manager, HostAccess: a.store, Firewall: a.guard,
+		Importer: profileImporter{}, Connection: a.manager, FirewallStore: a.store, Firewall: a.guard,
 		System: api.System{
 			Version: version, ListenAddress: a.listen, UIPort: a.uiPort, TimeZone: a.cfg.TimeZone,
 			Checks: func() []api.CheckResult { return a.checks },

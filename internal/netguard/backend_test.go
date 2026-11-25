@@ -222,7 +222,7 @@ func TestBackendUnavailable(t *testing.T) {
 			}
 			g := guardWith(f, tt.preference)
 			for _, op := range []func() error{
-				func() error { return g.InstallFirewall(context.Background(), testRules, uiPort) },
+				func() error { return g.InstallFirewall(context.Background(), testFirewall, uiPort) },
 				func() error { return g.RemoveFirewall(context.Background()) },
 			} {
 				var noBackend *NoBackendError
@@ -252,7 +252,7 @@ func TestBackendIsDetectedOnce(t *testing.T) {
 		switch {
 		case strings.Contains(call, " -t filter -S") || call == plainVersion:
 			detections++
-		case call != ruleShow && !strings.HasPrefix(call, "iptables-nft -w "):
+		case call != ruleShow && call != addrShow && !strings.HasPrefix(call, "iptables-nft -w "):
 			t.Errorf("call %q: want the detected iptables-nft", call)
 		}
 	}

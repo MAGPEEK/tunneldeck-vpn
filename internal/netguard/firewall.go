@@ -4,79 +4,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-	"strconv"
-	"strings"
 
 	"tunneldeck/internal/domain"
 )
 
-// Chain names owned by netguard.
-const (
-	inputChain   = "TUNNELDECK-INPUT"
-	forwardChain = "TUNNELDECK-FORWARD"
-)
-
-// maxDuplicateRules bounds the delete loop for duplicate rules so a
-// misbehaving iptables cannot spin forever.
-const maxDuplicateRules = 64
-
-// chainSpec describes one of our chains and the jumps leading to it.
-type chainSpec struct {
-	name   string
-	parent string     // built-in chain holding the jumps
-	jumps  [][]string // match of each jump, in order from position 1
-}
-
-var (
-	inputSpec = chainSpec{
-		name:   inputChain,
-		parent: "INPUT",
-		jumps:  [][]string{{"-i", DeviceName}},
-	}
-	forwardSpec = chainSpec{
-		name:   forwardChain,
-		parent: "FORWARD",
-		jumps:  [][]string{{"-i", DeviceName}, {"-o", DeviceName}},
-	}
-)
-
-// Matches for "established or related" traffic: conntrack is preferred, the
-// older state match is the fallback for kernels without xt_conntrack.
-var (
-	conntrackMatch = []string{"-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED"}
-	stateMatch     = []string{"-m", "state", "--state", "ESTABLISHED,RELATED"}
-)
-
-// InstallFirewall creates or updates TUNNELDECK-INPUT and TUNNELDECK-FORWARD
-// and puts their jumps at the top of INPUT and FORWARD (SPEC §6). Calling it
-// again with the same rules yields the same state.
+// InstallFirewall creates or updates the four chains of SPEC §16 and puts
+// their jumps at position 1 of the built-in chains: TUNNELDECK-INPUT
+// (filter INPUT, -i tdvpn0) accepts inbound rules to this device;
+// TUNNELDECK-FORWARD (filter FORWARD, -i/-o tdvpn0 plus one kill-switch
+// jump per outbound source and destination) accepts port forwards and
+// outbound rules and drops outbound traffic that would bypass the tunnel;
+// TUNNELDECK-PREROUTING (nat PREROUTING, -i tdvpn0) translates port
+// forwards; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
+// forwards on the LAN side and outbound traffic on the tunnel. The global
+// settings add their rules at the top of the filter chains (buildRuleset).
+// Rules are installed in list order. Calling it again with the same
+// configuration yields the same state.
 //
-// Refill strategy ("append, then trim"): every chain always ends with DROP
-// before its jump exists. New content is appended behind the old content and
-// the old rules are then deleted from the top. Until the old trailing DROP is
-// deleted it shadows the new rules, and its deletion switches atomically to
-// the complete new content, so tunnel traffic is never accepted by a partial
-// chain. Misplaced jumps are moved behind a temporary "-i/-o tdvpn0 -j DROP"
-// guard in the parent chain. A failure therefore leaves DROP in place and is
-// returned; FORWARD is still attempted when INPUT fails.
+// Refill strategy ("append, then trim", installChain): every filter chain
+// always ends with DROP before its jumps exist, and misplaced jumps are
+// moved behind temporary DROP guards, so a failure leaves DROP in place;
+// the other chains are still attempted and all errors are returned.
 //
-// While a remote-access port is set (SetRemoteAccessPort), TUNNELDECK-INPUT
-// also accepts TCP to that port.
-func (g *Guard) InstallFirewall(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error {
-	if err := validateRules(rules, uiPort); err != nil {
-		return err
-	}
+// The LAN subnets are detected anew on every call; enabled port forwards
+// must target one of them. While a remote-access port is set
+// (SetRemoteAccessPort), TUNNELDECK-INPUT also accepts TCP to that port.
+// While the tunnel is routed (RouteThroughTunnel), the policy rules follow
+// the new rules at once.
+func (g *Guard) InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.install(ctx, rules, uiPort)
+	if err := validateFirewall(firewall.Rules, uiPort, g.remoteAccessPort); err != nil {
+		return err
+	}
+	return g.install(ctx, firewall, uiPort)
 }
 
 // SetRemoteAccessPort sets the TCP port of the HTTPS listener that tunnel
 // traffic may reach (SPEC §8.1); 0 closes it. An installed firewall is
-// re-installed at once with the rules of its last installation. Otherwise
-// the port is opened by the next InstallFirewall, which precedes every
-// tunnel. The port must never be the web UI port.
+// re-installed at once with the configuration of its last installation.
+// Otherwise the port is opened by the next InstallFirewall, which precedes
+// every tunnel. The port must never be the web UI port nor a public port
+// of an enabled inbound TCP rule.
 func (g *Guard) SetRemoteAccessPort(ctx context.Context, port int) error {
 	if port != 0 && (port < domain.MinPort || port > domain.MaxPort) {
 		return domain.NewValidationError("remoteAccess.port", "must be between 1 and 65535")
@@ -90,278 +59,88 @@ func (g *Guard) SetRemoteAccessPort(ctx context.Context, port int) error {
 	if port != 0 && port == g.installed.uiPort {
 		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
 	}
+	if err := domain.CheckReservedPorts(g.installed.firewall.Rules, 0, port); err != nil {
+		return err
+	}
 	g.remoteAccessPort = port
-	return g.install(ctx, g.installed.rules, g.installed.uiPort)
+	return g.install(ctx, g.installed.firewall, g.installed.uiPort)
 }
 
-// install fills both chains and remembers the arguments on success. The
-// caller holds g.mu and has validated rules.
-func (g *Guard) install(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error {
+// validateFirewall applies the checks that need no command: the rules on
+// their own and the reserved ports.
+func validateFirewall(rules []domain.FirewallRule, uiPort, remoteAccessPort int) error {
+	v := &domain.ValidationError{}
+	for _, err := range []error{
+		domain.ValidateFirewallRules(rules),
+		domain.CheckReservedPorts(rules, uiPort, remoteAccessPort),
+	} {
+		var fields *domain.ValidationError
+		switch {
+		case errors.As(err, &fields):
+			v.Merge("", fields)
+		case err != nil:
+			return err
+		}
+	}
+	return v.OrNil()
+}
+
+// install fills all chains and remembers the configuration on success. The
+// caller holds g.mu and has validated the rules.
+func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort int) error {
 	if g.remoteAccessPort != 0 && g.remoteAccessPort == uiPort {
 		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
 	}
 	if _, err := g.detectBackend(ctx); err != nil {
 		return fmt.Errorf("install firewall: %w", err)
 	}
-	inputErr := g.installChain(ctx, inputSpec, func(ctx context.Context) error {
-		return g.appendInputContent(ctx, rules)
-	})
-	forwardErr := g.installChain(ctx, forwardSpec, func(ctx context.Context) error {
-		return g.appendRule(ctx, forwardChain, "-j", "DROP")
-	})
-	if err := errors.Join(inputErr, forwardErr); err != nil {
+	lan, err := g.detectLAN(ctx)
+	if err != nil {
+		return fmt.Errorf("install firewall: %w", err)
+	}
+	if err := domain.CheckLANDestinations(firewall.Rules, subnets(lan)); err != nil {
 		return err
 	}
-	g.installed = &installation{rules: slices.Clone(rules), uiPort: uiPort}
+	var errs []error
+	for _, chain := range buildRuleset(firewall, g.remoteAccessPort, subnets(lan)).chainContent() {
+		errs = append(errs, g.installChain(ctx, chain.spec, chain.content))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
+	g.installed = &installation{firewall: cloneFirewall(firewall), uiPort: uiPort}
+	if !g.routed {
+		return nil
+	}
+	if err := g.syncInstalledPolicy(ctx, lan); err != nil {
+		return fmt.Errorf("install firewall: update policy routing: %w", err)
+	}
 	return nil
 }
 
-// RemoveFirewall deletes the jumps and both chains. Objects that are
-// already absent are skipped.
+func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error {
+	listing, err := g.listPolicyRules(ctx)
+	if err != nil {
+		return err
+	}
+	return g.syncPolicyRules(ctx, listing.owned, wantedPolicyRules(g.installed.firewall, lan))
+}
+
+// RemoveFirewall deletes every jump to the four chains, then the chains.
+// Objects that are already absent are skipped.
 func (g *Guard) RemoveFirewall(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.installed = nil
-	specs := []chainSpec{inputSpec, forwardSpec}
-	for _, spec := range specs {
-		for _, match := range spec.jumps {
-			if err := g.deleteAll(ctx, spec.parent, jumpRule(match, spec.name)); err != nil {
-				return fmt.Errorf("remove firewall: %w", err)
-			}
-		}
-	}
-	for _, spec := range specs {
-		if err := g.removeChain(ctx, spec.name); err != nil {
+	for _, spec := range allChainSpecs(nil) {
+		if err := g.removeChainAndJumps(ctx, spec); err != nil {
 			return fmt.Errorf("remove firewall: %w", err)
 		}
 	}
 	return nil
 }
 
-// validateRules applies the domain rules plus the ban on the UI port.
-func validateRules(rules []domain.HostAccessRule, uiPort int) error {
-	v := &domain.ValidationError{}
-	if err := domain.ValidateHostAccessRules(rules); err != nil {
-		var ruleErrs *domain.ValidationError
-		if !errors.As(err, &ruleErrs) {
-			return err
-		}
-		v.Merge("", ruleErrs)
-	}
-	for i, rule := range rules {
-		if rule.Port == uiPort {
-			v.Add(fmt.Sprintf("rules[%d].port", i), "must not be the web UI port")
-		}
-	}
-	return v.OrNil()
-}
-
-func (g *Guard) installChain(ctx context.Context, spec chainSpec, appendContent func(context.Context) error) error {
-	oldCount, err := g.ensureSealedChain(ctx, spec.name)
-	if err == nil {
-		err = g.ensureJumps(ctx, spec)
-	}
-	if err == nil {
-		err = appendContent(ctx)
-	}
-	if err == nil {
-		err = g.deleteLeadingRules(ctx, spec.name, oldCount)
-	}
-	if err != nil {
-		return fmt.Errorf("install %s: %w", spec.name, err)
-	}
-	return nil
-}
-
-// ensureSealedChain creates chain if missing and makes sure its last rule is
-// DROP. It returns the number of rules now in the chain.
-func (g *Guard) ensureSealedChain(ctx context.Context, chain string) (int, error) {
-	rules, err := g.listRules(ctx, chain)
-	if isAbsent(err) {
-		if _, err := g.iptables(ctx, "-N", chain); err != nil {
-			return 0, err
-		}
-	} else if err != nil {
-		return 0, err
-	}
-	if len(rules) > 0 && rules[len(rules)-1] == "-A "+chain+" -j DROP" {
-		return len(rules), nil
-	}
-	if err := g.appendRule(ctx, chain, "-j", "DROP"); err != nil {
-		return 0, err
-	}
-	return len(rules) + 1, nil
-}
-
-// ensureJumps leaves exactly one copy of each jump at the top of the parent
-// chain, in spec order. When they are misplaced, guard rules drop tunnel
-// traffic while the jumps are moved.
-func (g *Guard) ensureJumps(ctx context.Context, spec chainSpec) error {
-	rules, err := g.listRules(ctx, spec.parent)
-	if err != nil {
-		return err
-	}
-	if jumpsInPlace(rules, spec) {
-		return nil
-	}
-	for _, match := range spec.jumps {
-		if err := g.insertFirst(ctx, spec.parent, guardRule(match)); err != nil {
-			return err
-		}
-	}
-	for _, match := range spec.jumps {
-		if err := g.deleteAll(ctx, spec.parent, jumpRule(match, spec.name)); err != nil {
-			return err
-		}
-	}
-	for i := len(spec.jumps) - 1; i >= 0; i-- {
-		if err := g.insertFirst(ctx, spec.parent, jumpRule(spec.jumps[i], spec.name)); err != nil {
-			return err
-		}
-	}
-	for _, match := range spec.jumps {
-		if _, err := g.iptables(ctx, append([]string{"-D", spec.parent}, guardRule(match)...)...); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// jumpsInPlace reports whether the parent chain starts with the jumps in
-// order and holds no further copy of them.
-func jumpsInPlace(rules []string, spec chainSpec) bool {
-	if len(rules) < len(spec.jumps) {
-		return false
-	}
-	for i, match := range spec.jumps {
-		want := ruleLine(spec.parent, jumpRule(match, spec.name))
-		if rules[i] != want || countOf(rules, want) != 1 {
-			return false
-		}
-	}
-	return true
-}
-
-func (g *Guard) appendInputContent(ctx context.Context, rules []domain.HostAccessRule) error {
-	if err := g.appendEstablishedAccept(ctx); err != nil {
-		return err
-	}
-	for _, rule := range rules {
-		if !rule.Enabled {
-			continue
-		}
-		if err := g.appendRule(ctx, inputChain, acceptRule(rule)...); err != nil {
-			return err
-		}
-	}
-	if g.remoteAccessPort != 0 {
-		remoteAccess := accept([]string{"-p", "tcp", "--dport", strconv.Itoa(g.remoteAccessPort)})
-		if err := g.appendRule(ctx, inputChain, remoteAccess...); err != nil {
-			return err
-		}
-	}
-	return g.appendRule(ctx, inputChain, "-j", "DROP")
-}
-
-// appendEstablishedAccept appends the ESTABLISHED,RELATED accept, detecting
-// on first use whether the conntrack match works or state is needed.
-func (g *Guard) appendEstablishedAccept(ctx context.Context) error {
-	if g.stateMatch != nil {
-		return g.appendRule(ctx, inputChain, accept(g.stateMatch)...)
-	}
-	var errs []error
-	for _, match := range [][]string{conntrackMatch, stateMatch} {
-		err := g.appendRule(ctx, inputChain, accept(match)...)
-		if err == nil {
-			g.stateMatch = match
-			return nil
-		}
-		errs = append(errs, err)
-	}
-	return errors.Join(errs...)
-}
-
-func (g *Guard) deleteLeadingRules(ctx context.Context, chain string, count int) error {
-	for range count {
-		if _, err := g.iptables(ctx, "-D", chain, "1"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// deleteAll deletes every copy of rule from chain; a missing rule or chain
-// is not an error.
-func (g *Guard) deleteAll(ctx context.Context, chain string, rule []string) error {
-	for range maxDuplicateRules {
-		_, err := g.iptables(ctx, append([]string{"-C", chain}, rule...)...)
-		if isAbsent(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := g.iptables(ctx, append([]string{"-D", chain}, rule...)...); err != nil {
-			return err
-		}
-	}
-	return fmt.Errorf("%s still holds %q after %d deletions", chain, ruleLine(chain, rule), maxDuplicateRules)
-}
-
-// removeChain flushes and deletes chain; a missing chain is not an error.
-func (g *Guard) removeChain(ctx context.Context, chain string) error {
-	_, err := g.iptables(ctx, "-F", chain)
-	if isAbsent(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	_, err = g.iptables(ctx, "-X", chain)
-	return err
-}
-
-func (g *Guard) appendRule(ctx context.Context, chain string, rule ...string) error {
-	_, err := g.iptables(ctx, append([]string{"-A", chain}, rule...)...)
-	return err
-}
-
-func (g *Guard) insertFirst(ctx context.Context, chain string, rule []string) error {
-	_, err := g.iptables(ctx, append([]string{"-I", chain, "1"}, rule...)...)
-	return err
-}
-
-func acceptRule(rule domain.HostAccessRule) []string {
-	args := []string{"-p", string(rule.Protocol), "--dport", strconv.Itoa(rule.Port)}
-	if rule.SourceCIDR != "" {
-		args = append(args, "-s", rule.SourceCIDR)
-	}
-	return accept(args)
-}
-
-func accept(match []string) []string {
-	return append(append([]string{}, match...), "-j", "ACCEPT")
-}
-
-func jumpRule(match []string, chain string) []string {
-	return append(append([]string{}, match...), "-j", chain)
-}
-
-func guardRule(match []string) []string {
-	return append(append([]string{}, match...), "-j", "DROP")
-}
-
-// ruleLine renders rule the way iptables -S prints it.
-func ruleLine(chain string, rule []string) string {
-	return "-A " + chain + " " + strings.Join(rule, " ")
-}
-
-func countOf(lines []string, want string) int {
-	n := 0
-	for _, line := range lines {
-		if line == want {
-			n++
-		}
-	}
-	return n
+func cloneFirewall(f domain.Firewall) domain.Firewall {
+	f.Rules = append([]domain.FirewallRule(nil), f.Rules...)
+	return f
 }

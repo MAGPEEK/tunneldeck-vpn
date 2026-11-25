@@ -132,8 +132,8 @@ func (s *Server) validateRemoteAccess(settings domain.RemoteAccess) error {
 	if settings.Port == s.deps.System.UIPort {
 		v.Add("port", "must not be the web UI port")
 	}
-	if settings.Enabled && s.usedByHostAccess(settings.Port) {
-		v.Add("port", "is opened by an enabled host-access rule")
+	if settings.Enabled && s.usedByFirewall(settings.Port) {
+		v.Add("port", "is opened by an enabled firewall rule")
 	}
 	if settings.CertificateSource == domain.CertificateUploaded {
 		if _, ok := s.deps.RemoteAccess.RemoteAccessCertificate(domain.CertificateUploaded); !ok {
@@ -143,13 +143,10 @@ func (s *Server) validateRemoteAccess(settings domain.RemoteAccess) error {
 	return v.OrNil()
 }
 
-func (s *Server) usedByHostAccess(port int) bool {
-	for _, rule := range s.deps.HostAccess.HostAccessRules() {
-		if rule.Enabled && rule.Protocol == domain.TransportTCP && rule.Port == port {
-			return true
-		}
-	}
-	return false
+// usedByFirewall reports whether an enabled inbound TCP rule accepts port
+// on the public address.
+func (s *Server) usedByFirewall(port int) bool {
+	return domain.CheckReservedPorts(s.deps.FirewallStore.Firewall().Rules, 0, port) != nil
 }
 
 func (s *Server) remoteAccessState() remoteAccessResponse {

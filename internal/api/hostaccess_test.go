@@ -13,7 +13,7 @@ func TestGetHostAccess(t *testing.T) {
 	if body := strings.TrimSpace(env.do(t, http.MethodGet, "/api/host-access", "").Body.String()); body != `{"rules":[]}` {
 		t.Errorf("empty body = %s", body)
 	}
-	env.hostAccess.rules = []domain.HostAccessRule{{ID: "r1", Protocol: domain.TransportTCP, Port: 22, Enabled: true}}
+	env.hostAccess.setHostRules(domain.HostAccessRule{ID: "r1", Protocol: domain.TransportTCP, Port: 22, Enabled: true})
 	rec := env.do(t, http.MethodGet, "/api/host-access", "")
 	assertStatus(t, rec, http.StatusOK)
 	if got := decode[hostAccessBody](t, rec); len(got.Rules) != 1 || got.Rules[0].Port != 22 {
@@ -66,16 +66,39 @@ func TestPutHostAccess(t *testing.T) {
 
 func TestPutHostAccessRollsBackWhenTheFirewallFails(t *testing.T) {
 	env := newTestEnv(t)
-	previous := []domain.HostAccessRule{{ID: "old", Protocol: domain.TransportTCP, Port: 22, Enabled: true}}
-	env.hostAccess.rules = previous
+	env.hostAccess.setHostRules(domain.HostAccessRule{ID: "old", Protocol: domain.TransportTCP, Port: 22, Enabled: true})
 	env.firewall.err = errBoom
 	rec := env.do(t, http.MethodPut, "/api/host-access", `{"rules":[{"protocol":"udp","port":53,"enabled":true}]}`)
 	p := assertProblem(t, rec, http.StatusInternalServerError, CodeFirewallFailed)
 	if strings.Contains(p.Detail, "boom") {
 		t.Errorf("detail leaks the error: %q", p.Detail)
 	}
-	if got := env.hostAccess.HostAccessRules(); len(got) != 1 || got[0].ID != "old" {
+	if got := env.hostAccess.Firewall().Rules; len(got) != 1 || got[0].ID != "old" {
 		t.Errorf("rules after rollback = %+v, want the previous rules", got)
+	}
+}
+
+func TestHostAccessKeepsOtherFirewallRules(t *testing.T) {
+	env := newTestEnv(t)
+	outbound := domain.FirewallRule{
+		ID: "out", Name: "LANCOM", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny,
+		Source: "192.168.2.2", Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: "0.0.0.0/0"}, Enabled: true,
+	}
+	ssh := domain.HostAccessRule{ID: "ssh", Protocol: domain.TransportTCP, Port: 22, Enabled: true}.FirewallRule()
+	env.hostAccess.setRules(outbound, ssh)
+
+	got := decode[hostAccessBody](t, env.do(t, http.MethodGet, "/api/host-access", ""))
+	if len(got.Rules) != 1 || got.Rules[0].ID != "ssh" {
+		t.Fatalf("GET rules = %+v, want only the host rule", got.Rules)
+	}
+	rec := env.do(t, http.MethodPut, "/api/host-access", `{"rules":[{"protocol":"udp","port":53,"enabled":true}]}`)
+	assertStatus(t, rec, http.StatusOK)
+	stored := env.hostAccess.Firewall().Rules
+	if len(stored) != 2 || stored[0].Name != "Host port 53/udp" || stored[1].ID != "out" {
+		t.Fatalf("stored rules = %+v, want the new host rule, then the outbound rule", stored)
+	}
+	if applied := env.firewall.applied; len(applied) != 1 || len(applied[0].Rules) != 2 {
+		t.Fatalf("applied = %+v", applied)
 	}
 }
 

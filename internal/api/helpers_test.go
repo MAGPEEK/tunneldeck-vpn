@@ -19,7 +19,7 @@ type testEnv struct {
 	auth       *fakeAuth
 	profiles   *fakeProfiles
 	connection *fakeConnection
-	hostAccess *fakeHostAccess
+	hostAccess *fakeFirewallStore
 	firewall   *fakeFirewall
 	remote     *fakeRemoteAccess
 	listener   *fakeListener
@@ -36,20 +36,20 @@ func newTestEnv(t *testing.T) *testEnv {
 		auth:       newFakeAuth(),
 		profiles:   &fakeProfiles{},
 		connection: &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},
-		hostAccess: &fakeHostAccess{},
+		hostAccess: &fakeFirewallStore{},
 		firewall:   &fakeFirewall{},
 		remote:     newFakeRemoteAccess(),
 		listener:   &fakeListener{},
 	}
 	env.server = New(Deps{
-		Auth:       env.auth,
-		Cookies:    fakeCookies{},
-		Profiles:   env.profiles,
-		Drivers:    registry,
-		Importer:   fakeImporter{},
-		Connection: env.connection,
-		HostAccess: env.hostAccess,
-		Firewall:   env.firewall,
+		Auth:          env.auth,
+		Cookies:       fakeCookies{},
+		Profiles:      env.profiles,
+		Drivers:       registry,
+		Importer:      fakeImporter{},
+		Connection:    env.connection,
+		FirewallStore: env.hostAccess,
+		Firewall:      env.firewall,
 		System: System{
 			Version: "1.2.3", ListenAddress: "192.168.1.10:8194", UIPort: testUIPort, TimeZone: "Europe/Berlin",
 			Checks: func() []CheckResult { return []CheckResult{{ID: "tun-device", OK: true, Detail: "present"}} },

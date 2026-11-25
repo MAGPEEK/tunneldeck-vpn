@@ -62,9 +62,9 @@ Finalise Dockerfile (pin the `openvpn` package to `~2.7`, non-root not possible 
 
 `test/e2e/`: compose file with a throwaway OpenVPN server (user/pass + cert variants, one `cipher none` variant) and TunnelDeck; script that drives the API: setup, create profile, connect, assert state/VPN IP/bytes, assert main routing table unchanged, assert host port closed then open after adding a rule, restart container and assert auto-reconnect. Document how to run it; run it if Docker is available. The stack runs on a generic Linux Docker host (not Synology-specific) and must pass with both the `iptables-nft` and `iptables-legacy` backends. Also write `docs/linux.md` + `docs/linux.de.md` (generic Linux host guide: `/dev/net/tun`, interplay with ufw/firewalld/Docker's own chains, reverse proxy for HTTPS, backup, update), linked first from the READMEs.
 
-# Stage 2 — Firewall (0.2.0), after the 0.1.0 field test
+# Stage 2 — Firewall (0.2.0)
 
-## [ ] 16. Firewall model, migration and netguard — careful — after: 0.1.0 field test
+## [x] 16. Firewall model, migration and netguard — careful — after: owner decided 2026-11-25 to build it before the field test
 
 SPEC §16.1, §16.3: `domain.FirewallRule` with validation; store schema v1 → v2 migration (host-access rules → inbound rules to "This device"); netguard: inbound accept for the host, DNAT + forward + optional masquerade for other LAN targets, ESP/GRE forwarding, outbound policy routing with LAN exclusion, masquerade on `tdvpn0`, kill switch; `ip_forward` and LAN-subnet detection in the self-check. Unit tests with the fake runner for every rule shape; integration test.
 
@@ -79,3 +79,7 @@ SPEC §16.4: Firewall page with inbound/outbound tabs, reordering, "This device"
 ## [ ] 19. Firewall end-to-end — careful — after: 18
 
 Extend `test/e2e`: inbound port forward to a LAN container (with and without keepSourceAddress), ESP + UDP 500/4500 forwarding to a strongSwan "LANCOM stand-in" that establishes IPsec with a peer on the VPN side, outbound policy routing from one LAN container, kill switch when the tunnel drops, migration from a v1 settings file. Docs: firewall section in `docs/linux*.md`, `docs/synology*.md`, LANCOM IPsec example.
+
+## [ ] 20. OpenVPN remote networks and PKCS#12 — careful — after: 16
+
+SPEC §17 "Adopt": profile setting `remoteNetworks` (form field, validation, `ip rule to <net> lookup 7194` while connected, usable as outbound firewall destination); inline/uploaded PKCS#12 as secret (importer maps `<pkcs12>`, renderer emits it inline); keep-alive placeholder; advisory/importer message for static-key mode. Tests incl. golden files; e2e: host reaches a network behind the test server.

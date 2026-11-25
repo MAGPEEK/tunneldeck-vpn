@@ -233,7 +233,7 @@ Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning
 
 ## 16. Firewall (0.2.0, replaces "Host access")
 
-Planned after the 0.1.0 field test. Owner's decisions of 2026-11-25. The single "Host access" list becomes a two-direction firewall that can target the host or any LAN device.
+Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions of 2026-11-25. The single "Host access" list becomes a two-direction firewall that can target the host or any LAN device.
 
 ### 16.1 Rule model
 
@@ -247,6 +247,19 @@ Planned after the 0.1.0 field test. Owner's decisions of 2026-11-25. The single 
 - Replies to established connections are always allowed in both directions (conntrack).
 - Validation: one inbound rule per (protocol, publicPort) on the shared public address; the HTTP UI port can never be a public port; the remote-access HTTPS port is reserved; `destination` of inbound rules must be inside a LAN subnet of the host; ranges ≤ 1000 ports.
 - Requires `net.ipv4.ip_forward=1` on the host; the self-check reports it (Docker hosts normally have it on) and the docs explain how to enable it. Coexists with Docker's own `FORWARD`/`DOCKER-USER` chains by inserting the jump at position 1.
+
+Implementation notes (task 16): `ip rule` priorities 7100 (LAN exclusion, `lookup main`), 7190 (outbound rules), 7191 (replies of port-forward targets, `from <target> ipproto N [sport P] lookup 7194`, so masqueraded replies leave through the tunnel), 7194 (VPN source address). Drop/reject rules currently act on traffic to the host only (INPUT); exceptions for port forwards are expressed by the forward rule's `source`. Inbound `any` protocol only with drop/reject. The `nat` table is required.
+
+### 16.1a Adopted from the Teltonika RUT240 firewall
+
+Compared with the RUT240 firewall (General settings, Port forwards, Traffic rules, NAT, Attack prevention), the following is adopted:
+
+- Every rule gets a `name` (required, 1–64 chars); `comment` stays optional.
+- `action: accept | drop | reject` per rule (default accept; reject answers TCP RST / ICMP port-unreachable). Port-forward rules (inbound to another device) are always accept. Drop/reject rules let a user carve exceptions above broader accept rules, since order matters.
+- Protocol adds `tcp+udp` (default for new inbound rules, as on the RUT240) and `icmp` (optional ICMP type, e.g. echo-request for ping to the host).
+- Optional `sourcePort` (port or range).
+- Global firewall settings (`settings.firewall`): `dropInvalid` (default on: drop conntrack INVALID on the tunnel), `mssClamp` (default on: clamp TCP MSS to PMTU for traffic forwarded through `tdvpn0`), `synFloodProtection` (default on: limit new TCP connections from the tunnel to 25/s burst 50 per source), `pingLimit` (default on: ICMP echo from the tunnel limited to 5/s burst 10).
+- Not adopted, with reason: raw custom iptables rules (security, clean code), DMZ / forward-everything (unsafe default), source-MAC matching (no MACs exist on a TUN tunnel), conntrack helpers (IPsec with NAT-T needs none; PPTP/SIP later if asked), NAT loopback (LAN clients reach mdex addresses over the internet anyway), per-zone logging (kernel log is not readable from the container). Planned later: time restrictions per rule, hit counters per rule, port-scan prevention.
 
 ### 16.2 Reference use case: IPsec from a LANCOM router via the mdex public address
 
@@ -264,6 +277,24 @@ A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels usi
 ### 16.4 UI
 
 Page "Firewall" replaces "Host access": two tabs "Inbound from VPN" and "Outbound to VPN"; table columns Source → Destination, Protocol, Public port (inbound), Destination port, Keep source address (inbound), Enabled, Comment; drag handle for order; destination picker with "This device" plus free IPv4; template button "IPsec device"; live hit counters per rule (from `iptables -L -v`) as a later addition.
+
+## 17. Compared with the Teltonika RUT240 VPN features
+
+Reviewed 2026-11-25 against the RUT240 VPN manual (OpenVPN client/server, GRE, IPsec, PPTP, SSTP, Stunnel, DMVPN, L2TP, L2TPv3, ZeroTier, WireGuard, Tinc).
+
+**Adopt for the OpenVPN client (0.2.0):**
+- `remoteNetworks` (list of IPv4 CIDRs, the RUT240's "Remote network IP address/netmask"): networks behind the VPN. While connected, the host itself routes them through table 7194 (`ip rule to <net> lookup 7194`), and outbound firewall rules (§16) can use them as destinations. Pushed routes stay ignored.
+- Inline PKCS#12 (`<pkcs12>` base64 block in `.ovpn`, or an upload field) as an alternative to separate certificate and key; stored as a secret.
+- Keep-alive placeholder `10 120` in the form (no default value, the server usually pushes it).
+
+**Not adopted, with reason:** "Static key" authentication (deprecated in OpenVPN 2.6/2.7 and insecure; the importer rejects `secret` and the advisories explain), TAP mode (bridging is out of scope), provider presets such as NordVPN/ExpressVPN (third-party brands, no maintenance), OpenVPN server mode (TunnelDeck-VPN is a client), legacy encryption defaults (the RUT240 defaults to AES-256-CBC with SHA1; TunnelDeck-VPN negotiates AEAD ciphers, §5), UDP6/TCP6 (IPv6 is a non-goal for now).
+
+**Roadmap for other methods**, in this order:
+1. WireGuard (0.3.0): interface private key (generate button), addresses, MTU 1280–1420, DNS; peers with public key, allowed IPs, optional pre-shared key, endpoint host:port (default 51820), persistent keepalive (default 25 behind NAT). Userspace `wireguard-go`.
+2. IPsec/IKEv2 client via strongSwan: IKEv2 only by default (IKEv1 opt-in for old peers), PSK or X.509, local/remote subnets, DPD, modern proposals by default (AES-GCM, SHA-256+, ECP256/MODP2048+). The RUT240's IPsec defaults (3DES, MD5, MODP768) count as insecure and only produce advisories if a peer requires them.
+3. GRE (alone or over IPsec), L2TP/IPsec client.
+
+Rejected: PPTP (broken encryption), SSTP, ZeroTier, Tinc, DMVPN, Stunnel, L2TPv3 (niche or covered by the above).
 
 ## 15. Roadmap and release
 

@@ -42,8 +42,8 @@ func TestManagerConnectAndDisconnect(t *testing.T) {
 	if calls := h.guard.recorded(); !slices.Equal(calls, []string{"install", "route 10.66.0.2"}) {
 		t.Errorf("netguard calls = %v", calls)
 	}
-	if h.guard.uiPort != testUIPort || len(h.guard.rules) != 1 {
-		t.Errorf("firewall got rules %v and UI port %d", h.guard.rules, h.guard.uiPort)
+	if h.guard.uiPort != testUIPort || len(h.guard.firewall.Rules) != 1 {
+		t.Errorf("firewall got rules %v and UI port %d", h.guard.firewall.Rules, h.guard.uiPort)
 	}
 
 	if err := h.m.Disconnect(ctx); err != nil {

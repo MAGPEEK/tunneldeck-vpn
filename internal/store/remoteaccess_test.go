@@ -19,11 +19,11 @@ func TestRemoteAccessDefaults(t *testing.T) {
 	if got := s.RemoteAccess(); got != domain.DefaultRemoteAccess() {
 		t.Fatalf("RemoteAccess = %+v, want the defaults", got)
 	}
-	writeFile(t, dir, SettingsFileName, `{"schemaVersion":1,"language":"de","hostAccessRules":[]}`)
+	writeFile(t, dir, SettingsFileName, `{"schemaVersion":2,"language":"de","firewall":{"rules":[]}}`)
 	if got := openTestStore(t, dir, newCipher(t, 1)).RemoteAccess(); got != domain.DefaultRemoteAccess() {
 		t.Fatalf("RemoteAccess of a file without remoteAccess = %+v", got)
 	}
-	writeFile(t, dir, SettingsFileName, `{"schemaVersion":1,"remoteAccess":{"enabled":true}}`)
+	writeFile(t, dir, SettingsFileName, `{"schemaVersion":2,"remoteAccess":{"enabled":true}}`)
 	want := domain.RemoteAccess{Enabled: true, Port: 8443, CertificateSource: domain.CertificateSelfSigned}
 	if got := openTestStore(t, dir, newCipher(t, 1)).RemoteAccess(); got != want {
 		t.Fatalf("RemoteAccess of a partial object = %+v, want %+v", got, want)
@@ -45,7 +45,7 @@ func TestSetRemoteAccess(t *testing.T) {
 	if got := s.RemoteAccess(); got != settings {
 		t.Fatalf("setting after a rejected change = %+v", got)
 	}
-	if !strings.Contains(string(readFile(t, dir, SettingsFileName)), `"schemaVersion": 1`) {
+	if !strings.Contains(string(readFile(t, dir, SettingsFileName)), `"schemaVersion": 2`) {
 		t.Error("schema version changed")
 	}
 }
@@ -125,7 +125,7 @@ func TestOpenRejectsBadRemoteAccess(t *testing.T) {
 	}
 	assertNoSecret(t, "error", err.Error())
 
-	writeFile(t, dir, SettingsFileName, `{"schemaVersion":1,"remoteAccess":{"port":70000}}`)
+	writeFile(t, dir, SettingsFileName, `{"schemaVersion":2,"remoteAccess":{"port":70000}}`)
 	if _, err := open(dir, newCipher(t, 1), testDependencies(osFileSystem{})); err == nil || !strings.Contains(err.Error(), "corrupted") {
 		t.Fatalf("open with an invalid port = %v, want a corrupted error", err)
 	}

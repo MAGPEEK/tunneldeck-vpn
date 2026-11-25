@@ -23,19 +23,19 @@ const fakeProtocol domain.Protocol = "fake"
 const testUIPort = 8194
 
 // fakeStore implements ProfileSource, DesiredStateStore and
-// HostAccessSource like store.Store does.
+// FirewallSource like store.Store does.
 type fakeStore struct {
 	mu         sync.Mutex
 	profiles   map[string]domain.Profile
 	desired    domain.DesiredConnection
-	rules      []domain.HostAccessRule
+	firewall   domain.Firewall
 	desiredErr error
 }
 
 func newFakeStore() *fakeStore {
 	s := &fakeStore{
 		profiles: map[string]domain.Profile{},
-		rules:    []domain.HostAccessRule{{ID: "r1", Protocol: domain.TransportTCP, Port: 22, Enabled: true}},
+		firewall: domain.Firewall{Rules: []domain.FirewallRule{{ID: "r1", Name: "SSH", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(22), Enabled: true}}},
 	}
 	for _, id := range []string{"a", "b"} {
 		s.profiles[id] = domain.Profile{
@@ -75,10 +75,10 @@ func (s *fakeStore) SetDesiredConnection(d domain.DesiredConnection) error {
 	return nil
 }
 
-func (s *fakeStore) HostAccessRules() []domain.HostAccessRule {
+func (s *fakeStore) Firewall() domain.Firewall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.Clone(s.rules)
+	return domain.Firewall{FirewallSettings: s.firewall.FirewallSettings, Rules: slices.Clone(s.firewall.Rules)}
 }
 
 func (s *fakeStore) update(f func(s *fakeStore)) {
@@ -99,18 +99,18 @@ func (s *fakeStore) setDaily(id string, daily domain.DailyReconnect) {
 type fakeGuard struct {
 	mu         sync.Mutex
 	calls      []string
-	rules      []domain.HostAccessRule
+	firewall   domain.Firewall
 	uiPort     int
 	installErr error
 	routeErr   error
 	clearErr   error
 }
 
-func (g *fakeGuard) InstallFirewall(_ context.Context, rules []domain.HostAccessRule, uiPort int) error {
+func (g *fakeGuard) InstallFirewall(_ context.Context, firewall domain.Firewall, uiPort int) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.calls = append(g.calls, "install")
-	g.rules, g.uiPort = rules, uiPort
+	g.firewall, g.uiPort = firewall, uiPort
 	return g.installErr
 }
 
@@ -333,7 +333,7 @@ func newManagerHarnessAt(t *testing.T, start time.Time) *managerHarness {
 		t.Fatalf("Register: %v", err)
 	}
 	h.m = NewConnectionManager(ManagerConfig{
-		Registry: registry, Profiles: h.store, Desired: h.store, HostAccess: h.store, Guard: h.guard,
+		Registry: registry, Profiles: h.store, Desired: h.store, Firewall: h.store, Guard: h.guard,
 		UIPort: testUIPort, Clock: h.clock, Random: func() float64 { return 0.5 },
 	})
 	events, _ := h.m.Subscribe()

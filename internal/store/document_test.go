@@ -17,8 +17,8 @@ func TestOpenWithoutFilesUsesDefaults(t *testing.T) {
 	if got := s.Language(); got != domain.DefaultLanguage {
 		t.Errorf("Language() = %q, want default", got)
 	}
-	if got := s.HostAccessRules(); got == nil || len(got) != 0 {
-		t.Errorf("HostAccessRules() = %#v, want empty list", got)
+	if got := s.Firewall(); got.Rules == nil || len(got.Rules) != 0 || got.FirewallSettings != domain.DefaultFirewallSettings() {
+		t.Errorf("Firewall() = %#v, want default settings and no rules", got)
 	}
 	if got := s.DesiredConnection(); got != (domain.DesiredConnection{}) {
 		t.Errorf("DesiredConnection() = %+v, want zero", got)
@@ -46,8 +46,8 @@ func TestOpenRejectsBadFiles(t *testing.T) {
 		{"wrong field type", ProfilesFileName, `{"schemaVersion":1,"profiles":{}}`, []string{ProfilesFileName, "corrupted"}, nil},
 		{"unsupported language", SettingsFileName, `{"schemaVersion":1,"language":"fr"}`, []string{SettingsFileName, "language"}, nil},
 		{
-			"newer settings", SettingsFileName, `{"schemaVersion":2}`,
-			[]string{SettingsFileName, "version 2", "up to 1"}, errSchemaTooNew,
+			"newer settings", SettingsFileName, `{"schemaVersion":3}`,
+			[]string{SettingsFileName, "version 3", "up to 2"}, errSchemaTooNew,
 		},
 		{
 			"newer profiles", ProfilesFileName, `{"schemaVersion":7,"profiles":[]}`,
@@ -107,6 +107,7 @@ func TestMigrationHook(t *testing.T) {
 			delete(doc, "lang")
 			return nil
 		},
+		1: migrateSettingsV1ToV2,
 	}
 	s, err := open(dir, newCipher(t, 1), deps)
 	if err != nil {
@@ -126,8 +127,8 @@ func TestMigrationHook(t *testing.T) {
 	if err := json.Unmarshal(readFile(t, dir, SettingsFileName), &written); err != nil {
 		t.Fatal(err)
 	}
-	if string(written[schemaVersionKey]) != "1" {
-		t.Fatalf("written schemaVersion = %s, want 1", written[schemaVersionKey])
+	if string(written[schemaVersionKey]) != "2" {
+		t.Fatalf("written schemaVersion = %s, want 2", written[schemaVersionKey])
 	}
 }
 

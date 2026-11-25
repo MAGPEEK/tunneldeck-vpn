@@ -25,27 +25,29 @@ type DesiredStateStore interface {
 	SetDesiredConnection(domain.DesiredConnection) error
 }
 
-// HostAccessSource lists the host-access rules the firewall opens.
-type HostAccessSource interface {
-	HostAccessRules() []domain.HostAccessRule
+// FirewallSource returns the firewall configuration to install.
+type FirewallSource interface {
+	Firewall() domain.Firewall
 }
 
-// NetGuard protects the host and routes replies through the tunnel;
-// netguard.Guard implements it.
+// NetGuard installs the firewall and routes through the tunnel;
+// netguard.Guard implements it. RouteThroughTunnel also installs the
+// policy routing of the firewall's outbound rules and port forwards;
+// ClearTunnelRouting removes it.
 type NetGuard interface {
-	InstallFirewall(ctx context.Context, rules []domain.HostAccessRule, uiPort int) error
+	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
 	RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr) error
 	ClearTunnelRouting(ctx context.Context) error
 }
 
 // ManagerConfig holds the dependencies of a ConnectionManager.
 type ManagerConfig struct {
-	Registry   *Registry
-	Profiles   ProfileSource
-	Desired    DesiredStateStore
-	HostAccess HostAccessSource
-	Guard      NetGuard
-	// UIPort is the web UI port, which a host-access rule never opens.
+	Registry *Registry
+	Profiles ProfileSource
+	Desired  DesiredStateStore
+	Firewall FirewallSource
+	Guard    NetGuard
+	// UIPort is the web UI port, which a firewall rule never opens.
 	UIPort int
 	// Clock defaults to SystemClock. Daily reconnects use its time zone.
 	Clock Clock

@@ -24,13 +24,13 @@ func TestConcurrentWriters(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_, err := s.SetHostAccessRules([]domain.HostAccessRule{{Protocol: domain.TransportTCP, Port: 1000 + i}})
+			_, err := s.SetFirewall(domain.Firewall{Rules: []domain.FirewallRule{hostRule(1000 + i)}})
 			errs <- err
 		}()
 		go func() {
 			defer wg.Done()
 			_ = s.ListProfiles()
-			_ = s.HostAccessRules()
+			_ = s.Firewall()
 			errs <- s.SetLanguage(domain.LanguageGerman)
 		}()
 	}
@@ -46,7 +46,7 @@ func TestConcurrentWriters(t *testing.T) {
 	if n := len(reopened.ListProfiles()); n != writers {
 		t.Fatalf("%d profiles on disk, want %d", n, writers)
 	}
-	if rules := reopened.HostAccessRules(); len(rules) != 1 {
+	if rules := reopened.Firewall().Rules; len(rules) != 1 {
 		t.Fatalf("rules on disk = %+v, want the last complete list", rules)
 	}
 	assertNoTempFiles(t, dir)

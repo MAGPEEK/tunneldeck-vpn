@@ -12,7 +12,7 @@ type settingsDocument struct {
 	SchemaVersion     int                      `json:"schemaVersion"`
 	Admin             *domain.AdminAccount     `json:"admin"`
 	Language          domain.Language          `json:"language"`
-	HostAccessRules   []domain.HostAccessRule  `json:"hostAccessRules"`
+	Firewall          domain.Firewall          `json:"firewall"`
 	DesiredConnection domain.DesiredConnection `json:"desiredConnection"`
 	// RemoteAccess was added within schema version 1; files without it get
 	// the defaults.
@@ -21,10 +21,10 @@ type settingsDocument struct {
 
 func defaultSettings() settingsDocument {
 	return settingsDocument{
-		SchemaVersion:   settingsSchemaVersion,
-		Language:        domain.DefaultLanguage,
-		HostAccessRules: []domain.HostAccessRule{},
-		RemoteAccess:    remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
+		SchemaVersion: settingsSchemaVersion,
+		Language:      domain.DefaultLanguage,
+		Firewall:      domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{}},
+		RemoteAccess:  remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
 	}
 }
 
@@ -34,11 +34,17 @@ func (d settingsDocument) clone() settingsDocument {
 		admin := *d.Admin
 		c.Admin = &admin
 	}
-	c.HostAccessRules = slices.Clone(d.HostAccessRules)
-	if c.HostAccessRules == nil {
-		c.HostAccessRules = []domain.HostAccessRule{}
-	}
+	c.Firewall = cloneFirewall(d.Firewall)
 	return c
+}
+
+// cloneFirewall copies the rule list; a nil list becomes empty.
+func cloneFirewall(f domain.Firewall) domain.Firewall {
+	f.Rules = slices.Clone(f.Rules)
+	if f.Rules == nil {
+		f.Rules = []domain.FirewallRule{}
+	}
+	return f
 }
 
 func (s *Store) loadSettings() error {
@@ -129,36 +135,35 @@ func (s *Store) SetLanguage(language domain.Language) error {
 	return s.commitSettings(next)
 }
 
-// HostAccessRules returns a copy of the host-access rules.
-func (s *Store) HostAccessRules() []domain.HostAccessRule {
+// Firewall returns a copy of the firewall settings and rules.
+func (s *Store) Firewall() domain.Firewall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.settings.clone().HostAccessRules
+	return cloneFirewall(s.settings.Firewall)
 }
 
-// SetHostAccessRules validates and replaces the whole rule list. Rules
-// without an ID get a new one. It returns the stored rules.
-func (s *Store) SetHostAccessRules(rules []domain.HostAccessRule) ([]domain.HostAccessRule, error) {
-	if err := domain.ValidateHostAccessRules(rules); err != nil {
-		return nil, err
+// SetFirewall validates and replaces the firewall settings and the whole
+// rule list (domain.ValidateFirewallRules). Rules without an ID get a new
+// one. It returns what was stored. Checks that need the host (LAN subnets,
+// reserved ports) are the caller's.
+func (s *Store) SetFirewall(firewall domain.Firewall) (domain.Firewall, error) {
+	if err := domain.ValidateFirewallRules(firewall.Rules); err != nil {
+		return domain.Firewall{}, err
 	}
-	stored := slices.Clone(rules)
-	if stored == nil {
-		stored = []domain.HostAccessRule{}
-	}
-	for i := range stored {
-		if stored[i].ID == "" {
-			stored[i].ID = domain.NewID()
+	stored := cloneFirewall(firewall)
+	for i := range stored.Rules {
+		if stored.Rules[i].ID == "" {
+			stored.Rules[i].ID = domain.NewID()
 		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := s.settings.clone()
-	next.HostAccessRules = stored
+	next.Firewall = stored
 	if err := s.commitSettings(next); err != nil {
-		return nil, err
+		return domain.Firewall{}, err
 	}
-	return slices.Clone(stored), nil
+	return cloneFirewall(stored), nil
 }
 
 // DesiredConnection returns the persisted desired connection state.

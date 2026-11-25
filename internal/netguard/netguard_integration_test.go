@@ -12,6 +12,7 @@ package netguard
 import (
 	"context"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,31 +26,59 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	t.Cleanup(func() { _, _ = runner.Run(ctx, "ip", "link", "del", DeviceName) })
 	mustRun(t, runner, "ip", "link", "set", DeviceName, "up")
 	mainBefore := mustRun(t, runner, "ip", "route", "show", "table", "main")
+	rulesBefore := mustRun(t, runner, "ip", "-4", "rule", "show")
 
 	g := New(runner)
-	rules := []domain.HostAccessRule{
-		{Protocol: domain.TransportTCP, Port: 22, Enabled: true},
-		{Protocol: domain.TransportUDP, Port: 51820, SourceCIDR: "192.168.1.0/24", Enabled: true},
+	lan, err := g.LANSubnets(ctx)
+	if err != nil || len(lan) == 0 {
+		t.Fatalf("LANSubnets = %v, %v; want the container's network", lan, err)
 	}
+	target := lanTarget(t, lan[0])
+	firewall := integrationFirewall(target)
 	for range 2 {
-		if err := g.InstallFirewall(ctx, rules, 8080); err != nil {
+		if err := g.InstallFirewall(ctx, firewall, 8080); err != nil {
 			t.Fatalf("InstallFirewall: %v", err)
 		}
 	}
-	assertJumpsOnTop(t, g, "INPUT", "-A INPUT -i tdvpn0 -j TUNNELDECK-INPUT")
-	assertJumpsOnTop(t, g, "FORWARD",
+	assertJumpsOnTop(t, g, filterTable, "INPUT", "-A INPUT -i tdvpn0 -j TUNNELDECK-INPUT")
+	assertJumpsOnTop(t, g, filterTable, "FORWARD",
 		"-A FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD",
-		"-A FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD")
-	chain := listRulesOrFail(t, g, inputChain)
-	if len(chain) != 4 || !strings.Contains(chain[1], "--dport 22") || chain[3] != "-A TUNNELDECK-INPUT -j DROP" {
-		t.Errorf("TUNNELDECK-INPUT = %q", chain)
+		"-A FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD",
+		"-A FORWARD -s "+target+"/32 -j TUNNELDECK-FORWARD")
+	assertJumpsOnTop(t, g, natTable, "PREROUTING", "-A PREROUTING -i tdvpn0 -j TUNNELDECK-PREROUTING")
+	assertJumpsOnTop(t, g, natTable, "POSTROUTING", "-A POSTROUTING -j TUNNELDECK-POSTROUTING")
+
+	input := listRulesOrFail(t, g, filterTable, inputChain)
+	if len(input) != 10 || !strings.Contains(input[4], "--dport 22") || input[len(input)-1] != "-A TUNNELDECK-INPUT -j DROP" {
+		t.Errorf("TUNNELDECK-INPUT = %q", input)
+	}
+	forward := listRulesOrFail(t, g, filterTable, forwardChain)
+	if forward[len(forward)-1] != "-A TUNNELDECK-FORWARD -j DROP" || !containsFragment(forward, "--ctstate DNAT") ||
+		!containsFragment(forward, "TCPMSS") {
+		t.Errorf("TUNNELDECK-FORWARD = %q", forward)
+	}
+	prerouting := listRulesOrFail(t, g, natTable, preroutingChain)
+	if len(prerouting) != 2 || !containsFragment(prerouting, "--to-destination "+target+":9000-9010/8000") {
+		t.Errorf("TUNNELDECK-PREROUTING = %q", prerouting)
+	}
+	postrouting := listRulesOrFail(t, g, natTable, postroutingChain)
+	if len(postrouting) != 2 || !containsFragment(postrouting, "MASQUERADE") {
+		t.Errorf("TUNNELDECK-POSTROUTING = %q", postrouting)
 	}
 
-	if err := g.InstallFirewall(ctx, rules[:1], 8080); err != nil {
+	if err := g.InstallFirewall(ctx, domain.Firewall{Rules: firewall.Rules[:1]}, 8080); err != nil {
 		t.Fatalf("InstallFirewall with changed rules: %v", err)
 	}
-	if chain := listRulesOrFail(t, g, inputChain); len(chain) != 3 {
+	if chain := listRulesOrFail(t, g, filterTable, inputChain); len(chain) != 3 {
 		t.Errorf("TUNNELDECK-INPUT after rule change = %q", chain)
+	}
+	assertJumpsOnTop(t, g, filterTable, "FORWARD",
+		"-A FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", "-A FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD")
+	if chain := listRulesOrFail(t, g, natTable, preroutingChain); len(chain) != 0 {
+		t.Errorf("TUNNELDECK-PREROUTING after rule change = %q", chain)
+	}
+	if err := g.InstallFirewall(ctx, firewall, 8080); err != nil {
+		t.Fatalf("InstallFirewall again: %v", err)
 	}
 
 	for _, ip := range []string{"10.99.0.2", "10.99.0.2", "10.99.0.3"} {
@@ -57,8 +86,20 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 			t.Fatalf("RouteThroughTunnel(%s): %v", ip, err)
 		}
 	}
-	if sources, err := g.policyRuleSources(ctx); err != nil || len(sources) != 1 || sources[0] != "10.99.0.3" {
-		t.Errorf("policy rules = %v, %v; want only 10.99.0.3", sources, err)
+	listing, err := g.listPolicyRules(ctx)
+	if err != nil || len(listing.vpnSources) != 1 || listing.vpnSources[0] != "10.99.0.3" {
+		t.Errorf("policy rules at 7194 = %v, %v; want only 10.99.0.3", listing.vpnSources, err)
+	}
+	// One LAN exclusion per LAN subnet, the outbound rule, the TCP range
+	// replies and the ESP replies; every listed rule must parse back
+	// into a wanted one, or the repeated calls above would have churned.
+	if want := len(lan) + 3; len(listing.owned) != want {
+		t.Errorf("owned policy rules = %v, want %d", listing.owned, want)
+	}
+	for _, rule := range listing.owned {
+		if _, ok := rule.parse(); !ok {
+			t.Errorf("policy rule %v does not parse", rule.tokens)
+		}
 	}
 	if routes := mustRun(t, runner, "ip", "route", "show", "table", routingTable); !strings.Contains(routes, "default dev tdvpn0") {
 		t.Errorf("table 7194 = %q", routes)
@@ -72,21 +113,63 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	if mainAfter := mustRun(t, runner, "ip", "route", "show", "table", "main"); mainAfter != mainBefore {
 		t.Errorf("main table changed:\nbefore %q\nafter  %q", mainBefore, mainAfter)
 	}
+	if rulesAfter := mustRun(t, runner, "ip", "-4", "rule", "show"); rulesAfter != rulesBefore {
+		t.Errorf("policy rules left behind:\nbefore %q\nafter  %q", rulesBefore, rulesAfter)
+	}
+	assertJumpsOnTop(t, g, filterTable, "FORWARD", "-A FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD",
+		"-A FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", "-A FORWARD -s "+target+"/32 -j TUNNELDECK-FORWARD")
 
 	for range 2 {
 		if err := g.RemoveFirewall(ctx); err != nil {
 			t.Fatalf("RemoveFirewall: %v", err)
 		}
 	}
-	if _, err := g.listRules(ctx, inputChain); !isAbsent(err) {
-		t.Errorf("TUNNELDECK-INPUT still present: %v", err)
+	for _, chain := range []struct {
+		table table
+		name  string
+	}{{filterTable, inputChain}, {filterTable, forwardChain}, {natTable, preroutingChain}, {natTable, postroutingChain}} {
+		if _, err := g.listRules(ctx, chain.table, chain.name); !isAbsent(err) {
+			t.Errorf("%s still present: %v", chain.name, err)
+		}
 	}
 
 	for _, r := range g.SelfCheck(ctx) {
-		if r.ID != CheckTunDevice && !r.OK {
+		if r.ID != CheckTunDevice && r.ID != CheckIPForward && !r.OK {
 			t.Errorf("self-check %s failed: %s", r.ID, r.Detail)
 		}
 	}
+}
+
+// integrationFirewall covers every chain: host rules, a shifted TCP range
+// and ESP forwarded to target, an outbound rule for target and every
+// global protection.
+func integrationFirewall(target string) domain.Firewall {
+	destination := domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: target}
+	return domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{
+		domain.HostAccessRule{Protocol: domain.TransportTCP, Port: 22, Enabled: true}.FirewallRule(),
+		{Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
+			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(51820), Enabled: true},
+		{Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",
+			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, Enabled: true},
+		{Name: "Range", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: destination,
+			DestinationPort: domain.PortRange{From: 9000, To: 9010}, PublicPort: domain.PortRange{From: 8000, To: 8010}, Enabled: true},
+		{Name: "ESP", Direction: domain.DirectionInbound, Protocol: domain.ProtocolESP, Destination: destination,
+			KeepSourceAddress: true, Enabled: true},
+		{Name: "Out", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny, Source: target,
+			Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: "0.0.0.0/0"}, Enabled: true},
+		{Name: "Reject telnet", Direction: domain.DirectionInbound, Action: domain.ActionReject, Protocol: domain.ProtocolTCPUDP,
+			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(23), Enabled: true},
+	}}
+}
+
+// lanTarget picks an address inside subnet that is not the container's.
+func lanTarget(t *testing.T, subnet netip.Prefix) string {
+	t.Helper()
+	addr := subnet.Addr().Next().Next().Next().Next().Next()
+	if !subnet.Contains(addr) {
+		t.Fatalf("subnet %s is too small for a target", subnet)
+	}
+	return addr.String()
 }
 
 func mustRun(t *testing.T, runner CommandRunner, name string, args ...string) string {
@@ -98,18 +181,18 @@ func mustRun(t *testing.T, runner CommandRunner, name string, args ...string) st
 	return out
 }
 
-func listRulesOrFail(t *testing.T, g *Guard, chain string) []string {
+func listRulesOrFail(t *testing.T, g *Guard, tbl table, chain string) []string {
 	t.Helper()
-	rules, err := g.listRules(context.Background(), chain)
+	rules, err := g.listRules(context.Background(), tbl, chain)
 	if err != nil {
 		t.Fatalf("list %s: %v", chain, err)
 	}
 	return rules
 }
 
-func assertJumpsOnTop(t *testing.T, g *Guard, chain string, jumps ...string) {
+func assertJumpsOnTop(t *testing.T, g *Guard, tbl table, chain string, jumps ...string) {
 	t.Helper()
-	rules := listRulesOrFail(t, g, chain)
+	rules := listRulesOrFail(t, g, tbl, chain)
 	if len(rules) < len(jumps) {
 		t.Fatalf("%s = %q, want the jumps %q on top", chain, rules, jumps)
 	}
@@ -118,4 +201,20 @@ func assertJumpsOnTop(t *testing.T, g *Guard, chain string, jumps ...string) {
 			t.Errorf("%s = %q, want exactly one %q at position %d", chain, rules, jump, i+1)
 		}
 	}
+	if extra := countJumpsTo(rules, jumps); extra != len(jumps) {
+		t.Errorf("%s = %q, want no other jump to TunnelDeck's chain", chain, rules)
+	}
+}
+
+func countJumpsTo(rules, jumps []string) int {
+	target := jumps[0][strings.LastIndex(jumps[0], " -j ")+4:]
+	return countJumps(rules, target)
+}
+
+func countOf(lines []string, want string) int {
+	return len(slices.DeleteFunc(slices.Clone(lines), func(line string) bool { return line != want }))
+}
+
+func containsFragment(lines []string, fragment string) bool {
+	return slices.ContainsFunc(lines, func(line string) bool { return strings.Contains(line, fragment) })
 }

@@ -14,14 +14,10 @@ const (
 	TransportUDP TransportProtocol = "udp"
 )
 
-// Port range of a host-access rule.
-const (
-	MinPort = 1
-	MaxPort = 65535
-)
-
 // HostAccessRule opens one host port to traffic arriving through the tunnel
-// (SPEC §6). An empty SourceCIDR matches any source.
+// (SPEC §6). An empty SourceCIDR matches any source. It is the shape of the
+// stage-1 API (/api/host-access); the firewall stores FirewallRule, and a
+// host-access rule is an inbound accepting rule to this device.
 type HostAccessRule struct {
 	ID         string            `json:"id"`
 	Protocol   TransportProtocol `json:"protocol"`
@@ -74,6 +70,50 @@ func ValidateHostAccessRules(rules []HostAccessRule) error {
 		seenID[rule.ID] = true
 	}
 	return v.OrNil()
+}
+
+// HostPortRuleName is the generated name of a rule converted from a
+// host-access rule, e.g. "Host port 5001/tcp".
+func HostPortRuleName(protocol TransportProtocol, port int) string {
+	return fmt.Sprintf("Host port %d/%s", port, protocol)
+}
+
+// FirewallRule converts r into the equivalent inbound rule to this device,
+// named by HostPortRuleName.
+func (r HostAccessRule) FirewallRule() FirewallRule {
+	return FirewallRule{
+		ID:              r.ID,
+		Name:            HostPortRuleName(r.Protocol, r.Port),
+		Direction:       DirectionInbound,
+		Action:          ActionAccept,
+		Protocol:        FirewallProtocol(r.Protocol),
+		Source:          r.SourceCIDR,
+		Destination:     FirewallDestination{Kind: DestinationHost},
+		DestinationPort: SinglePort(r.Port),
+		Enabled:         r.Enabled,
+		Comment:         r.Comment,
+	}
+}
+
+// HostAccessRule converts r back into a host-access rule. ok is false for
+// rules the host-access shape cannot express: anything but an inbound
+// accepting tcp or udp rule to this device on a single port without a
+// source port.
+func (r FirewallRule) HostAccessRule() (rule HostAccessRule, ok bool) {
+	if r.Direction != DirectionInbound || r.Destination.Kind != DestinationHost ||
+		r.EffectiveAction() != ActionAccept || (r.Protocol != ProtocolTCP && r.Protocol != ProtocolUDP) ||
+		!r.DestinationPort.IsSingle() || r.DestinationPort.IsZero() || !r.SourcePort.IsZero() ||
+		!r.PublicPorts().Equal(r.DestinationPort) || sourceCIDRProblem(r.Source) != "" {
+		return HostAccessRule{}, false
+	}
+	return HostAccessRule{
+		ID:         r.ID,
+		Protocol:   TransportProtocol(r.Protocol),
+		Port:       r.DestinationPort.From,
+		SourceCIDR: r.Source,
+		Enabled:    r.Enabled,
+		Comment:    r.Comment,
+	}, true
 }
 
 // sourceCIDRProblem returns why s is not an acceptable source, or "".

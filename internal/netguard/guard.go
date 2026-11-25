@@ -13,34 +13,36 @@ import (
 // DeviceName is the tunnel interface every VPN driver must create.
 const DeviceName = "tdvpn0"
 
-const (
-	routingTable = "7194"
-	rulePriority = "7194"
-)
+// routingTable is the policy routing table whose default route is the
+// tunnel. The main table is never modified.
+const routingTable = "7194"
 
-// Guard installs the host-protection chains and the tunnel policy routing.
-// All methods are safe for concurrent use; calls are serialised.
+// Guard installs the firewall chains and the tunnel policy routing. All
+// methods are safe for concurrent use; calls are serialised.
 type Guard struct {
 	runner     CommandRunner
-	root       fs.FS // file system the self-check looks for the TUN device in
+	root       fs.FS // file system the self-check reads /dev and /proc from
 	preference BackendPreference
 
 	mu sync.Mutex
 	// backend is the detected iptables backend, used for the process
 	// lifetime; nil until detected.
-	backend    *Backend
-	stateMatch []string // detected match for ESTABLISHED,RELATED, nil until detected
+	backend *Backend
+	ct      ctMatchKind // detected connection-tracking match
 	// remoteAccessPort is the TCP port of the HTTPS listener that tunnel
 	// traffic may reach, 0 while remote access is off.
 	remoteAccessPort int
 	// installed holds the arguments of the last successful InstallFirewall,
 	// nil while the firewall is not installed.
 	installed *installation
+	// routed is true between a successful RouteThroughTunnel and the next
+	// ClearTunnelRouting: the policy rules of the firewall are in place.
+	routed bool
 }
 
 type installation struct {
-	rules  []domain.HostAccessRule
-	uiPort int
+	firewall domain.Firewall
+	uiPort   int
 }
 
 // New returns a Guard that runs every command through runner.
@@ -53,18 +55,22 @@ func New(runner CommandRunner, opts ...Option) *Guard {
 }
 
 // iptables runs the detected iptables binary with -w (wait for the xtables
-// lock) and args.
-func (g *Guard) iptables(ctx context.Context, args ...string) (string, error) {
+// lock), the table unless it is filter, and args.
+func (g *Guard) iptables(ctx context.Context, t table, args ...string) (string, error) {
 	backend, err := g.detectBackend(ctx)
 	if err != nil {
 		return "", err
 	}
-	return g.runner.Run(ctx, backend.Binary, append([]string{"-w"}, args...)...)
+	prefix := []string{"-w"}
+	if t != filterTable {
+		prefix = append(prefix, "-t", string(t))
+	}
+	return g.runner.Run(ctx, backend.Binary, append(prefix, args...)...)
 }
 
 // listRules returns the "-A ..." lines of iptables -S for chain.
-func (g *Guard) listRules(ctx context.Context, chain string) ([]string, error) {
-	out, err := g.iptables(ctx, "-S", chain)
+func (g *Guard) listRules(ctx context.Context, t table, chain string) ([]string, error) {
+	out, err := g.iptables(ctx, t, "-S", chain)
 	if err != nil {
 		return nil, err
 	}
