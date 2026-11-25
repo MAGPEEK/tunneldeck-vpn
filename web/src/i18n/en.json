@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "TunnelDeck"
+  },
+  "nav": {
+    "label": "Main navigation",
+    "dashboard": "Dashboard",
+    "profiles": "Profiles",
+    "hostAccess": "Host access",
+    "system": "System"
+  },
+  "pages": {
+    "placeholderTitle": "Not available yet",
+    "dashboard": {
+      "title": "Dashboard",
+      "body": "Connection status, traffic and the live log will appear here."
+    },
+    "profiles": {
+      "title": "Profiles",
+      "body": "Your VPN profiles will be listed here."
+    },
+    "hostAccess": {
+      "title": "Host access",
+      "body": "Rules for reaching this host will be managed here."
+    },
+    "system": {
+      "title": "System",
+      "body": "Version and self-check results will appear here."
+    }
+  },
+  "language": {
+    "label": "Language",
+    "de": "Deutsch",
+    "en": "English"
+  },
+  "theme": {
+    "toggle": "Change theme (current: {{theme}})",
+    "system": "system",
+    "light": "light",
+    "dark": "dark"
+  },
+  "session": {
+    "loading": "Loading",
+    "signOut": "Sign out",
+    "unreachableTitle": "Can't reach the server",
+    "unreachableBody": "Check that TunnelDeck is running, then try again.",
+    "retry": "Try again"
+  },
+  "auth": {
+    "username": "Username",
+    "password": "Password"
+  },
+  "setup": {
+    "title": "Create the admin account",
+    "repeatPassword": "Repeat password",
+    "usernameHint": "3 to 32 characters",
+    "passwordHint": "At least 12 characters",
+    "submit": "Create account",
+    "usernameLength": "Use 3 to 32 characters.",
+    "passwordLength": "Use at least 12 characters.",
+    "passwordMismatch": "The passwords do not match."
+  },
+  "login": {
+    "title": "Sign in",
+    "submit": "Sign in",
+    "invalidCredentials": "Username or password is incorrect.",
+    "rateLimited_one": "Too many failed attempts. Try again in {{count}} second.",
+    "rateLimited_other": "Too many failed attempts. Try again in {{count}} seconds.",
+    "rateLimitedLater": "Too many failed attempts. Try again later."
+  },
+  "errors": {
+    "network": "Can't reach the server. Check your connection and try again.",
+    "unexpected": "Something went wrong. Try again."
+  }
+}

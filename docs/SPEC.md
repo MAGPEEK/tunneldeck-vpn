@@ -110,7 +110,7 @@ Writes are atomic (temp file + rename) and serialised by a mutex. The API never 
 
 ## 9. HTTP API
 
-JSON; errors as `{ "error": { "code": "...", "message": "...", "fields": {…} } }`.
+JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+json`): `{ "type": "about:blank", "title": "...", "status": 400, "detail": "...", "code": "validation_failed", "fields": { "name": "..." } }` — `code` (stable machine-readable string) and `fields` are extension members. 429 responses carry `Retry-After` (seconds).
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -194,7 +194,30 @@ Tone: calm, technical, uncluttered. Sentence case, no exclamation marks, verbs o
 - End-to-end: compose stack with a throwaway OpenVPN server (task 12).
 - Field test on the DS723+ with the real mdex profile is the release gate for `0.1.0`.
 
-## 14. Roadmap and release
+## 14. Standards
+
+Where an RFC covers something, follow it instead of inventing a format:
+
+| Area | Standard |
+|---|---|
+| HTTP semantics, methods, status codes, `Retry-After` | RFC 9110; 429 per RFC 6585 |
+| HTTP caching headers | RFC 9111 |
+| API errors | RFC 9457 (problem details) |
+| JSON | RFC 8259 |
+| Timestamps in API and files | RFC 3339, UTC |
+| Cookies (`HttpOnly`, `SameSite`, `Secure` when behind HTTPS) | RFC 6265 / 6265bis |
+| Origin check for CSRF | RFC 6454 |
+| Password hashing | Argon2id, RFC 9106 parameters |
+| Secret encryption | AES-GCM as AEAD, RFC 5116 |
+| Certificates and keys in profiles | PEM, RFC 7468; X.509, RFC 5280 |
+| IPv4 CIDR notation, private ranges | RFC 4632, RFC 1918 |
+| Language tags (`de`, `en`) | RFC 5646 |
+| TLS minimum for VPN control channels | TLS 1.2+ (RFC 5246 / 8446) |
+| Later: IKEv2 | RFC 7296 |
+
+Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning, Conventional Commits. OpenVPN and WireGuard have no RFC; their official documentation is the reference.
+
+## 15. Roadmap and release
 
 1. Stage 1 (this spec). Developed locally; nothing is pushed. Field test on the DS723+ with an image exported via `docker save` and imported in Container Manager.
 2. After a successful field test: public GitHub repository, image on GitHub Container Registry.

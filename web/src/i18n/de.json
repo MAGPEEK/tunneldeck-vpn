@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "TunnelDeck"
+  },
+  "nav": {
+    "label": "Hauptnavigation",
+    "dashboard": "Übersicht",
+    "profiles": "Profile",
+    "hostAccess": "Host-Zugriff",
+    "system": "System"
+  },
+  "pages": {
+    "placeholderTitle": "Noch nicht verfügbar",
+    "dashboard": {
+      "title": "Übersicht",
+      "body": "Verbindungsstatus, Datenverkehr und das Live-Protokoll erscheinen hier."
+    },
+    "profiles": {
+      "title": "Profile",
+      "body": "Ihre VPN-Profile werden hier aufgelistet."
+    },
+    "hostAccess": {
+      "title": "Host-Zugriff",
+      "body": "Regeln für den Zugriff auf diesen Host werden hier verwaltet."
+    },
+    "system": {
+      "title": "System",
+      "body": "Version und Ergebnisse des Selbsttests erscheinen hier."
+    }
+  },
+  "language": {
+    "label": "Sprache",
+    "de": "Deutsch",
+    "en": "English"
+  },
+  "theme": {
+    "toggle": "Design wechseln (aktuell: {{theme}})",
+    "system": "System",
+    "light": "hell",
+    "dark": "dunkel"
+  },
+  "session": {
+    "loading": "Wird geladen",
+    "signOut": "Abmelden",
+    "unreachableTitle": "Server nicht erreichbar",
+    "unreachableBody": "Prüfen Sie, ob TunnelDeck läuft, und versuchen Sie es erneut.",
+    "retry": "Erneut versuchen"
+  },
+  "auth": {
+    "username": "Benutzername",
+    "password": "Passwort"
+  },
+  "setup": {
+    "title": "Administratorkonto anlegen",
+    "repeatPassword": "Passwort wiederholen",
+    "usernameHint": "3 bis 32 Zeichen",
+    "passwordHint": "Mindestens 12 Zeichen",
+    "submit": "Konto anlegen",
+    "usernameLength": "Verwenden Sie 3 bis 32 Zeichen.",
+    "passwordLength": "Verwenden Sie mindestens 12 Zeichen.",
+    "passwordMismatch": "Die Passwörter stimmen nicht überein."
+  },
+  "login": {
+    "title": "Anmelden",
+    "submit": "Anmelden",
+    "invalidCredentials": "Benutzername oder Passwort ist falsch.",
+    "rateLimited_one": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunde erneut.",
+    "rateLimited_other": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunden erneut.",
+    "rateLimitedLater": "Zu viele Fehlversuche. Versuchen Sie es später erneut."
+  },
+  "errors": {
+    "network": "Server nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+    "unexpected": "Etwas ist schiefgelaufen. Versuchen Sie es erneut."
+  }
+}

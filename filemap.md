@@ -26,5 +26,14 @@
 - `internal/web/dist/` — Vite build output (git-ignored); only the committed `.gitkeep` is tracked, so `go build` works without a frontend build, and a Vite plugin re-creates it after each build
 - `web/` — React 19 + TypeScript + Vite app; `npm run build` writes to `internal/web/dist`
 - `web/src/` — app sources (`main.tsx`, `App.tsx`) and tests; `web/src/test/setup.ts` wires jest-dom into Vitest
+- `web/src/styles/` — design tokens (light/dark) and base styles
+- `web/src/api/` — `request()` wrapper, `ApiError` (RFC 9457), typed session/system calls
+- `web/src/session/` — query client (401 → signed out), session hooks, `SessionGate` routing
+- `web/src/i18n/` — i18next setup, `de.json`/`en.json`, language switch, key-parity test
+- `web/src/theme/` — theme storage and toggle
+- `web/src/layout/` — `AppShell` (sidebar/top bar), `AuthLayout`, `Page`
+- `web/src/components/` — shared Button, Card, Field, StatePill, EmptyState, Table
+- `web/src/pages/` — setup, login and placeholder pages per section
+- `web/src/test/` — Vitest setup, fetch mock, `renderApp` helper
 - `web/vite.config.ts` — build output, `/api` dev proxy to `127.0.0.1:8194`, Vitest config
 - `web/eslint.config.js` — ESLint flat config (typescript-eslint strict, react-hooks, prettier)

@@ -34,7 +34,7 @@ Implement `internal/netguard` per SPEC §6: backend detection, idempotent chain 
 
 Implement `internal/api` per SPEC §9 with middleware (session, CSRF, JSON errors, request logging), SSE hub, and wire everything in `cmd/tunneldeck` including config (SPEC §10), listen-address detection and graceful shutdown. Handler tests with `httptest` and fakes for every endpoint and auth rule.
 
-## [ ] 9. Frontend shell and login — medium — after: 1
+## [x] 9. Frontend shell and login — medium — after: 1
 
 Implement in `web/`: design tokens and base styles, light/dark theme, app shell with sidebar (SPEC §11), routing, typed API client (CSRF header, error mapping), session handling, setup and login pages, i18n (de/en) scaffolding, shared components (Button, Card, Field, StatePill, EmptyState, Table). Component tests. Works against the API contract in SPEC §9 with mocked fetch.
 
@@ -44,7 +44,7 @@ Implement Dashboard, Profiles (schema-driven form, import, secret fields), Host 
 
 ## [ ] 11. Image, compose, README — medium — after: 10
 
-Finalise Dockerfile (non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example, security model, roadmap (SPEC §14), versioning per SPEC §13 (version from `git describe` via build arg, OCI labels, release tagging steps in `docs/RELEASING.md`). Add a documented way to export the image as a `.tar` (`docker save`) for import in Synology Container Manager.
+Finalise Dockerfile (non-root not possible → document why; healthcheck; labels; amd64 + arm64), compose example for Synology (`/volume1/docker/tunneldeck:/data`), `README.md` + `README.de.md`: what it is, quick start, DS723+ walkthrough (Container Manager, TUN module, DSM firewall notes, reverse proxy for HTTPS), mdex example, security model, roadmap (SPEC §15), versioning per SPEC §13 (version from `git describe` via build arg, OCI labels, release tagging steps in `docs/RELEASING.md`). Add a documented way to export the image as a `.tar` (`docker save`) for import in Synology Container Manager.
 
 ## [ ] 12. End-to-end test — careful — after: 11
 

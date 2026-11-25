@@ -7,3 +7,4 @@ All notable changes to this project are documented in this file. The format foll
 ### Added
 
 - Project skeleton: Go backend serving `/api/system` and the embedded React app, Docker image definition, CI workflow.
+- Web UI shell: setup and sign-in pages, sidebar navigation, light and dark theme, German and English.
