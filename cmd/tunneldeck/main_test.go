@@ -197,12 +197,50 @@ func TestProfileImporter(t *testing.T) {
 		!slices.Contains(draft.Missing, "caCert") {
 		t.Errorf("draft = %+v", draft)
 	}
-	if _, err := (profileImporter{}).Import("wireguard", ""); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := (profileImporter{}).Import("ipsec", ""); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown protocol = %v", err)
 	}
 	var v *domain.ValidationError
 	if _, err := (profileImporter{}).Import(domain.ProtocolOpenVPN, "<ca>\n"); !errors.As(err, &v) {
 		t.Errorf("unclosed block = %v", err)
+	}
+}
+
+func TestProfileImporterWireGuard(t *testing.T) {
+	conf := "[Interface]\nPrivateKey = cGxhY2Vob2xkZXItcHJpdmF0ZS1rZXktMzItYnl0ZXM=\nAddress = 10.66.0.2/32\nDNS = 10.66.0.1\n" +
+		"[Peer]\nPublicKey = cGxhY2Vob2xkZXItcHVibGljLWtleS0zMi1ieXRlcyE=\nEndpoint = vpn.example.com:51820\nAllowedIPs = 0.0.0.0/0\n"
+	draft, err := profileImporter{}.Import(domain.ProtocolWireGuard, conf)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if endpoint, _ := draft.Settings.String("endpoint"); endpoint != "vpn.example.com:51820" || draft.Secrets["privateKey"] == "" ||
+		!slices.ContainsFunc(draft.Warnings, func(w api.ImportWarning) bool { return w.Code == "dns_ignored" && w.Line == 4 }) {
+		t.Errorf("draft = %+v", draft)
+	}
+	var v *domain.ValidationError
+	if _, err := (profileImporter{}).Import(domain.ProtocolWireGuard, "client\n"); !errors.As(err, &v) {
+		t.Errorf("not a config = %v", err)
+	}
+}
+
+func TestDriversServeOpenVPNAndWireGuard(t *testing.T) {
+	a := &app{host: host{runner: failingRunner{}}, guard: netguard.New(failingRunner{})}
+	registry, err := a.drivers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.Protocol{domain.ProtocolOpenVPN, domain.ProtocolWireGuard}
+	if got := registry.Protocols(); !slices.Equal(got, want) {
+		t.Fatalf("protocols = %v, want %v", got, want)
+	}
+	for _, protocol := range want {
+		factory, err := registry.Lookup(protocol)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := factory(); d.Protocol() != protocol || len(d.Describe().Sections) == 0 {
+			t.Errorf("driver of %s = %T", protocol, d)
+		}
 	}
 }
 

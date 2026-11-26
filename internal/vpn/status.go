@@ -13,16 +13,19 @@ import (
 // current tunnel ("none" for an unencrypted data channel); they are empty
 // when unknown and cleared with the VPN IP.
 type Status struct {
-	State          domain.ConnectionState `json:"state"`
-	Message        string                 `json:"message,omitempty"`
-	ProfileID      string                 `json:"profileId,omitempty"`
-	ProfileName    string                 `json:"profileName,omitempty"`
-	Protocol       domain.Protocol        `json:"protocol,omitempty"`
-	VPNIP          string                 `json:"vpnIp,omitempty"`
-	Remote         string                 `json:"remote,omitempty"`
-	Since          time.Time              `json:"since"`
-	DataCipher     string                 `json:"dataCipher,omitempty"`
-	ControlChannel string                 `json:"controlChannel,omitempty"`
+	State   domain.ConnectionState `json:"state"`
+	Message string                 `json:"message,omitempty"`
+	// MessageCode names Message for translation, for example a driver's
+	// hint that the server does not answer; empty for other messages.
+	MessageCode    string          `json:"messageCode,omitempty"`
+	ProfileID      string          `json:"profileId,omitempty"`
+	ProfileName    string          `json:"profileName,omitempty"`
+	Protocol       domain.Protocol `json:"protocol,omitempty"`
+	VPNIP          string          `json:"vpnIp,omitempty"`
+	Remote         string          `json:"remote,omitempty"`
+	Since          time.Time       `json:"since"`
+	DataCipher     string          `json:"dataCipher,omitempty"`
+	ControlChannel string          `json:"controlChannel,omitempty"`
 	// PublicIP is the public IPv4 address the internet sees for traffic
 	// through the connected tunnel, detected after every connect while the
 	// detection is on; empty when unknown, cleared with the VPN IP.

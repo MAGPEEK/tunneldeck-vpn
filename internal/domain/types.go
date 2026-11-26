@@ -3,8 +3,11 @@ package domain
 // Protocol names a VPN method. Each vpn.Driver serves exactly one protocol.
 type Protocol string
 
-// ProtocolOpenVPN is the protocol served by the OpenVPN driver.
-const ProtocolOpenVPN Protocol = "openvpn"
+// Protocols served by the drivers.
+const (
+	ProtocolOpenVPN   Protocol = "openvpn"
+	ProtocolWireGuard Protocol = "wireguard"
+)
 
 // ConnectionState is a state of the tunnel (SPEC §4.2).
 type ConnectionState string

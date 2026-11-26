@@ -16,6 +16,7 @@ import (
 var testNow = time.Date(2026, 11, 25, 8, 30, 0, 0, time.UTC)
 
 type testEnv struct {
+	drivers       *vpn.Registry
 	auth          *fakeAuth
 	profiles      *fakeProfiles
 	connection    *fakeConnection
@@ -35,6 +36,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("register: %v", err)
 	}
 	env := &testEnv{
+		drivers:       registry,
 		auth:          newFakeAuth(),
 		profiles:      &fakeProfiles{},
 		connection:    &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},

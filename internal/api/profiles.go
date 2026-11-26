@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 
@@ -11,10 +12,20 @@ import (
 )
 
 // profileView is a profile as the API returns it: secrets reduced to
-// hasValue, plus the driver's advisories.
+// hasValue, plus the driver's advisories and the values it derives from
+// the secrets for display, such as WireGuard's public key.
 type profileView struct {
 	domain.PublicProfile
-	Advisories []vpn.Advisory `json:"advisories"`
+	Advisories []vpn.Advisory    `json:"advisories"`
+	Derived    map[string]string `json:"derived,omitempty"`
+}
+
+// keyPairView is a freshly generated key pair. It is not stored: the
+// client sends the private key with the profile like a typed-in one, and
+// once stored it is never returned (SPEC §18).
+type keyPairView struct {
+	PrivateKey string `json:"privateKey"`
+	PublicKey  string `json:"publicKey"`
 }
 
 type profileRequest struct {
@@ -80,7 +91,46 @@ func (s *Server) advise(p domain.PublicProfile) []vpn.Advisory {
 }
 
 func (s *Server) view(p domain.PublicProfile) profileView {
-	return profileView{PublicProfile: p, Advisories: s.advise(p)}
+	return profileView{PublicProfile: p, Advisories: s.advise(p), Derived: s.derive(p)}
+}
+
+// derive returns what the driver of p computes from its stored secrets, or
+// nil when the driver computes nothing or the profile is gone.
+func (s *Server) derive(p domain.PublicProfile) map[string]string {
+	d, err := s.driver(p.Protocol)
+	if err != nil {
+		return nil
+	}
+	values, ok := d.(deriver)
+	if !ok {
+		return nil
+	}
+	stored, err := s.deps.Profiles.ProfileWithSecrets(p.ID)
+	if err != nil {
+		return nil
+	}
+	return values.Derive(stored)
+}
+
+// generateKeyPair answers POST /api/drivers/{protocol}/keypair with a new
+// key pair of the protocol; 404 for protocols without one.
+func (s *Server) generateKeyPair(w http.ResponseWriter, r *http.Request) {
+	d, err := s.driver(domain.Protocol(r.PathValue("protocol")))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	generator, ok := d.(keyPairGenerator)
+	if !ok {
+		writeError(w, r, fmt.Errorf("key pair of %q: %w", d.Protocol(), domain.ErrNotFound))
+		return
+	}
+	privateKey, publicKey, err := generator.GenerateKeyPair()
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, keyPairView{PrivateKey: privateKey, PublicKey: publicKey})
 }
 
 func (s *Server) listDrivers(w http.ResponseWriter, _ *http.Request) {

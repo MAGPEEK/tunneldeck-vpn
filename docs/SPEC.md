@@ -344,3 +344,12 @@ Decisions from the owner interview. No concrete counterpart yet: built generical
 - **Data channel:** the encryption row shows `ChaCha20-Poly1305` (WireGuard's fixed cipher); no control-channel value.
 - **Unchanged features:** daily disconnect, firewall, kill switch, remote access, public IP detection work for WireGuard profiles exactly as for OpenVPN.
 - **Tests:** unit tests for schema, validation, renderer, importer (fixtures incl. provider-style files), key generation, state machine with a fake device; e2e matrix case "D-wireguard" against a WireGuard server container on both iptables backends.
+
+Implementation decisions (task 25):
+
+- **Address:** one IPv4 address with prefix length (setting `address`; a plain address means /32), not a list: only the VPN IP gets the policy routing. Its network must not overlap a LAN subnet of the host. The importer takes the first IPv4 address and drops further ones with a warning.
+- **Key pair API:** `POST /api/drivers/{protocol}/keypair` returns a fresh `{ privateKey, publicKey }` to the requesting client and stores nothing, like the import draft; the form sends the private key with the profile as a typed-in secret. A stored private key is never returned; profile responses carry `derived.publicKey`, computed from it.
+- **Status note:** status and state events carry `messageCode` next to `message`; the 30 s note is `wireguard_no_handshake` (UI text `connection.messageCode.<code>`).
+- **Liveness:** the device is polled every 2 s (traffic events at the OpenVPN cadence). A connected tunnel counts as lost only when the last handshake is 180 s old and the device has sent something since, on two checks in a row, so an idle tunnel without keepalive stays `connected`. While no handshake is current, a keepalive is sent on every check (wireguard-go limits initiations to one per 5 s and would otherwise give up after 90 s) and the endpoint is resolved again every 180 s (IPv4 preferred, IPv6 if the name has none). `since` of `connected` is the handshake time: the manager takes a driver's connect time when it reports one.
+- **Import:** a file without `PersistentKeepalive` gets 25 s with an info note.
+- **Log:** wireguard-go's keepalive and worker-start lines are dropped (every 25 s / every start), its handshake and UAPI lines are `debug`, other lines `info`, errors `error`; hex keys in a line are replaced by `(hidden)`.

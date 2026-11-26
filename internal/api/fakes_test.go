@@ -644,3 +644,24 @@ func (f *fakePublicIPLookup) SetPublicIPLookup(settings domain.PublicIPLookup) e
 	f.settings = settings
 	return nil
 }
+
+const keyProtocol domain.Protocol = "fakekeys"
+
+// fakeKeyDriver generates a fixed key pair and derives "publicKey" from
+// the secret "privateKey", never echoing the secret.
+type fakeKeyDriver struct{ fakeDriver }
+
+func (fakeKeyDriver) Protocol() domain.Protocol { return keyProtocol }
+
+func (fakeKeyDriver) Validate(domain.Profile) error { return nil }
+
+func (fakeKeyDriver) GenerateKeyPair() (privateKey, publicKey string, err error) {
+	return "generated-private", "generated-public", nil
+}
+
+func (fakeKeyDriver) Derive(p domain.Profile) map[string]string {
+	if p.Secrets["privateKey"] == "" {
+		return nil
+	}
+	return map[string]string{"publicKey": "derived-public"}
+}

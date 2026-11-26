@@ -326,3 +326,58 @@ func TestImportProfile(t *testing.T) {
 	assertProblem(t, env.do(t, http.MethodPost, "/api/profiles/import", `{"protocol":"fakevpn","text":""}`),
 		http.StatusUnprocessableEntity, CodeValidationFailed)
 }
+
+func TestGenerateKeyPair(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.drivers.Register(keyProtocol, func() vpn.Driver { return fakeKeyDriver{} }); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := env.do(t, http.MethodPost, "/api/drivers/fakekeys/keypair", "")
+	assertStatus(t, rec, http.StatusOK)
+	if got := decode[keyPairView](t, rec); got.PrivateKey != "generated-private" || got.PublicKey != "generated-public" {
+		t.Errorf("key pair = %+v", got)
+	}
+	if len(env.profiles.ListProfiles()) != 0 {
+		t.Error("generating a key pair stored something")
+	}
+
+	assertProblem(t, env.do(t, http.MethodPost, "/api/drivers/fakevpn/keypair", ""), http.StatusNotFound, CodeNotFound)
+	assertProblem(t, env.do(t, http.MethodPost, "/api/drivers/unknown/keypair", ""), http.StatusNotFound, CodeNotFound)
+	assertStatus(t, env.do(t, http.MethodPost, "/api/drivers/fakekeys/keypair", "", withoutCSRF), http.StatusForbidden)
+}
+
+func TestProfileViewCarriesDerivedValues(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.drivers.Register(keyProtocol, func() vpn.Driver { return fakeKeyDriver{} }); err != nil {
+		t.Fatal(err)
+	}
+	withKey := env.profiles.add(domain.Profile{
+		Name: "Keyed", Protocol: keyProtocol, Secrets: map[string]string{"privateKey": testSecret},
+	})
+	env.storedProfile("Office")
+
+	rec := env.do(t, http.MethodGet, "/api/profiles", "")
+	assertStatus(t, rec, http.StatusOK)
+	assertNoSecret(t, "/api/profiles", rec.Body.String())
+	type derivedJSON struct {
+		ID      string            `json:"id"`
+		Derived map[string]string `json:"derived"`
+	}
+	list := decode[[]derivedJSON](t, rec)
+	if len(list) != 2 || list[0].Derived["publicKey"] != "derived-public" || list[1].Derived != nil {
+		t.Errorf("list = %+v", list)
+	}
+
+	rec = env.do(t, http.MethodPut, "/api/profiles/"+withKey.ID, `{"name":"Keyed","settings":{}}`)
+	assertStatus(t, rec, http.StatusOK)
+	if got := decode[derivedJSON](t, rec); got.Derived["publicKey"] != "derived-public" {
+		t.Errorf("update = %+v, want the derived key of the kept secret", got)
+	}
+
+	rec = env.do(t, http.MethodPost, "/api/profiles", `{"name":"New","protocol":"fakekeys","settings":{},"secrets":{"privateKey":"typed"}}`)
+	assertStatus(t, rec, http.StatusCreated)
+	if got := decode[derivedJSON](t, rec); got.Derived["publicKey"] != "derived-public" {
+		t.Errorf("create = %+v", got)
+	}
+}

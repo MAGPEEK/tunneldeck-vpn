@@ -14,6 +14,8 @@ export interface StatusError {
 export interface ConnectionStatus {
   state: ConnectionState;
   message?: string;
+  /** Names `message` for translation (`connection.messageCode.<code>`), e.g. a driver's hint while connecting. */
+  messageCode?: string;
   profileId?: string;
   profileName?: string;
   protocol?: Protocol;
@@ -49,6 +51,7 @@ export interface StateEvent {
   state: ConnectionState;
   code?: string;
   message?: string;
+  messageCode?: string;
   vpnIp?: string;
   remote?: string;
   since: string;

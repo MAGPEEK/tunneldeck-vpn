@@ -76,6 +76,19 @@ type Drivers interface {
 	Lookup(protocol domain.Protocol) (vpn.Factory, error)
 }
 
+// keyPairGenerator is implemented by drivers whose profiles hold a key
+// pair the server can generate (WireGuard). Nothing is stored.
+type keyPairGenerator interface {
+	GenerateKeyPair() (privateKey, publicKey string, err error)
+}
+
+// deriver is implemented by drivers that compute values for display from a
+// profile's secrets, such as WireGuard's public key. The values are never
+// secret.
+type deriver interface {
+	Derive(p domain.Profile) map[string]string
+}
+
 // ImportWarning reports a line of an imported file that was dropped,
 // rejected or mapped. File names a file the line refers to.
 type ImportWarning struct {

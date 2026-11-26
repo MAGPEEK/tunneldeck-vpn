@@ -10,6 +10,7 @@ import (
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/netguard"
 	"tunneldeck/internal/vpn/openvpn"
+	"tunneldeck/internal/vpn/wireguard"
 )
 
 // authAdapter translates the auth errors into the ones the API maps.
@@ -44,13 +45,20 @@ func (sessionCookies) Clear(w http.ResponseWriter, secure bool) { auth.ClearSess
 func (sessionCookies) Token(r *http.Request) string { return auth.TokenFromRequest(r) }
 
 // profileImporter imports configuration files of the drivers that support
-// it: OpenVPN .ovpn files.
+// it: OpenVPN .ovpn files and WireGuard wg-quick .conf files.
 type profileImporter struct{}
 
 func (profileImporter) Import(protocol domain.Protocol, text string) (api.ImportDraft, error) {
-	if protocol != domain.ProtocolOpenVPN {
-		return api.ImportDraft{}, fmt.Errorf("import %q: %w", protocol, domain.ErrNotFound)
+	switch protocol {
+	case domain.ProtocolOpenVPN:
+		return importOpenVPN(text)
+	case domain.ProtocolWireGuard:
+		return importWireGuard(text)
 	}
+	return api.ImportDraft{}, fmt.Errorf("import %q: %w", protocol, domain.ErrNotFound)
+}
+
+func importOpenVPN(text string) (api.ImportDraft, error) {
 	result, err := openvpn.ImportOVPN(text)
 	if err != nil {
 		return api.ImportDraft{}, err
@@ -59,6 +67,22 @@ func (profileImporter) Import(protocol domain.Protocol, text string) (api.Import
 	for i, w := range result.Warnings {
 		warnings[i] = api.ImportWarning{
 			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, File: w.File, Message: w.Message,
+		}
+	}
+	return api.ImportDraft{
+		Settings: result.Settings, Secrets: result.Secrets, Warnings: warnings, Missing: result.Missing,
+	}, nil
+}
+
+func importWireGuard(text string) (api.ImportDraft, error) {
+	result, err := wireguard.ImportConf(text)
+	if err != nil {
+		return api.ImportDraft{}, err
+	}
+	warnings := make([]api.ImportWarning, len(result.Warnings))
+	for i, w := range result.Warnings {
+		warnings[i] = api.ImportWarning{
+			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, Message: w.Message,
 		}
 	}
 	return api.ImportDraft{

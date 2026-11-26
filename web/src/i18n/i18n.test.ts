@@ -4,7 +4,7 @@ import en from './en.json';
 import driversDe from './drivers.de.json';
 import driversEn from './drivers.en.json';
 import { driverText } from './dynamic';
-import { OPENVPN_SCHEMA } from '../test/fixtures';
+import { OPENVPN_SCHEMA, WIREGUARD_SCHEMA } from '../test/fixtures';
 import { LANGUAGE_STORAGE_KEY, detectLanguage } from './index';
 
 function keyPaths(value: unknown, prefix = ''): string[] {
@@ -60,8 +60,11 @@ describe('driver texts', () => {
     expect(Object.keys(driversDe).sort()).toEqual(Object.keys(driversEn).sort());
   });
 
-  it('cover every label of the OpenVPN form schema', () => {
-    const keys = OPENVPN_SCHEMA.sections.flatMap((section) => [
+  it.each([
+    ['OpenVPN', OPENVPN_SCHEMA],
+    ['WireGuard', WIREGUARD_SCHEMA],
+  ])('cover every label of the %s form schema', (_name, schema) => {
+    const keys = schema.sections.flatMap((section) => [
       section.labelKey,
       ...section.fields.flatMap((field) => [
         field.labelKey,

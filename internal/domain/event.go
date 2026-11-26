@@ -47,14 +47,17 @@ const (
 )
 
 // StateEvent reports a connection state change. VPNIP, Remote and Since are
-// set while connected; Code is set in the error state.
+// set while connected; Code is set in the error state. MessageCode names
+// Message for translation when the message is a known note, such as a
+// driver's hint while connecting; the UI shows Message for other codes.
 type StateEvent struct {
-	State   ConnectionState `json:"state"`
-	Code    ErrorCode       `json:"code,omitempty"`
-	Message string          `json:"message,omitempty"`
-	VPNIP   string          `json:"vpnIp,omitempty"`
-	Remote  string          `json:"remote,omitempty"`
-	Since   time.Time       `json:"since"`
+	State       ConnectionState `json:"state"`
+	Code        ErrorCode       `json:"code,omitempty"`
+	Message     string          `json:"message,omitempty"`
+	MessageCode string          `json:"messageCode,omitempty"`
+	VPNIP       string          `json:"vpnIp,omitempty"`
+	Remote      string          `json:"remote,omitempty"`
+	Since       time.Time       `json:"since"`
 }
 
 // Kind returns EventKindState.

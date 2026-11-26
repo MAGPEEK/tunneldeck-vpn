@@ -281,6 +281,68 @@ func TestManagerRecordsTheNegotiatedChannel(t *testing.T) {
 	}
 }
 
+func TestManagerShowsTheDriversConnectingNote(t *testing.T) {
+	h := newManagerHarness(t)
+	h.connect("a")
+	d := h.nextDriver()
+	h.waitState(domain.StateConnecting)
+	since := h.m.Status().Since
+
+	d.emit(domain.StateEvent{State: domain.StateConnecting, Message: "no answer", MessageCode: "test_no_answer"})
+	e := h.events.next(t, "connecting note", func(e domain.Event) bool {
+		s, ok := e.(domain.StateEvent)
+		return ok && s.MessageCode == "test_no_answer"
+	}).(domain.StateEvent)
+	if e.State != domain.StateConnecting || e.Message != "no answer" {
+		t.Errorf("event = %+v", e)
+	}
+	if s := h.m.Status(); s.State != domain.StateConnecting || s.MessageCode != "test_no_answer" || !s.Since.Equal(since) {
+		t.Errorf("status = %+v, want the note with since %v", s, since)
+	}
+
+	d.emit(connectedEvent("10.66.0.2"))
+	h.waitState(domain.StateConnected)
+	if s := h.m.Status(); s.Message != "" || s.MessageCode != "" {
+		t.Errorf("status after connect = %+v, want the note cleared", s)
+	}
+
+	// A note that arrives while connected changes nothing.
+	d.emit(domain.StateEvent{State: domain.StateConnecting, Message: "late", MessageCode: "test_late"},
+		domain.LogEvent{Text: "marker"})
+	h.waitLog("marker")
+	if s := h.m.Status(); s.State != domain.StateConnected || s.MessageCode != "" {
+		t.Errorf("status = %+v, want connected without note", s)
+	}
+}
+
+func TestManagerTakesTheDriversConnectedTime(t *testing.T) {
+	tests := []struct {
+		name   string
+		offset time.Duration // driver time relative to the manager's clock; 0 = unset
+		want   time.Duration
+	}{
+		{"unset", 0, 0},
+		{"earlier", -3 * time.Second, -3 * time.Second},
+		{"in the future", time.Minute, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newManagerHarness(t)
+			h.connect("a")
+			d := h.nextDriver()
+			now := h.clock.Now().UTC()
+			e := connectedEvent("10.66.0.2")
+			if tt.offset != 0 {
+				e.Since = now.Add(tt.offset)
+			}
+			d.emit(e)
+			if got := h.waitState(domain.StateConnected).Since; !got.Equal(now.Add(tt.want)) {
+				t.Errorf("since = %v, want %v", got, now.Add(tt.want))
+			}
+		})
+	}
+}
+
 func TestManagerBackoffProgressionAndCap(t *testing.T) {
 	h := newManagerHarness(t)
 	h.connect("a")

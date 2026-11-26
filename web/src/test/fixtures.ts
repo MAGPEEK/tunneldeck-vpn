@@ -172,6 +172,56 @@ export const OPENVPN_SCHEMA: FormSchema = {
   ],
 };
 
+/** Mirrors internal/vpn/wireguard/schema.go Describe(). */
+export const WIREGUARD_SCHEMA: FormSchema = {
+  sections: [
+    {
+      key: 'interface',
+      labelKey: 'wireguard.section.interface',
+      fields: [
+        { key: 'privateKey', type: 'secret', labelKey: 'wireguard.privateKey', required: true },
+        {
+          key: 'address',
+          type: 'text',
+          labelKey: 'wireguard.address',
+          required: true,
+          placeholder: '10.66.0.2/32',
+        },
+        { key: 'mtu', type: 'number', labelKey: 'wireguard.mtu', required: true, default: 1420 },
+      ],
+    },
+    {
+      key: 'peer',
+      labelKey: 'wireguard.section.peer',
+      fields: [
+        { key: 'peerPublicKey', type: 'text', labelKey: 'wireguard.peerPublicKey', required: true },
+        { key: 'presharedKey', type: 'secret', labelKey: 'wireguard.presharedKey' },
+        {
+          key: 'endpoint',
+          type: 'text',
+          labelKey: 'wireguard.endpoint',
+          required: true,
+          placeholder: 'vpn.example.com:51820',
+        },
+        {
+          key: 'allowedIps',
+          type: 'stringList',
+          labelKey: 'wireguard.allowedIps',
+          required: true,
+          default: ['0.0.0.0/0'],
+          placeholder: '10.66.0.0/24',
+        },
+        {
+          key: 'persistentKeepalive',
+          type: 'number',
+          labelKey: 'wireguard.persistentKeepalive',
+          default: 25,
+        },
+      ],
+    },
+  ],
+};
+
 export const DRIVERS: Driver[] = [{ protocol: 'openvpn', schema: OPENVPN_SCHEMA }];
 
 export function makeProfile(overrides: Partial<Profile> = {}): Profile {

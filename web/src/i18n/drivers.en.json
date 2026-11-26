@@ -35,5 +35,15 @@
   "openvpn.resolveRetry": "Retry name resolution (seconds or infinite)",
   "openvpn.keepalive": "Keepalive (interval and timeout in seconds)",
   "openvpn.remoteNetworks": "Remote networks (behind the VPN, one CIDR per line)",
-  "openvpn.extraOptions": "Extra options"
+  "openvpn.extraOptions": "Extra options",
+  "wireguard.section.interface": "This device",
+  "wireguard.section.peer": "Server",
+  "wireguard.privateKey": "Private key",
+  "wireguard.address": "Tunnel address (IPv4 with prefix length)",
+  "wireguard.mtu": "MTU",
+  "wireguard.peerPublicKey": "Server public key",
+  "wireguard.presharedKey": "Pre-shared key (optional)",
+  "wireguard.endpoint": "Server address (host:port)",
+  "wireguard.allowedIps": "Allowed IPs (one IPv4 network per line)",
+  "wireguard.persistentKeepalive": "Persistent keepalive (seconds, 0 = off)"
 }

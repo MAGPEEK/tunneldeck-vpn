@@ -25,6 +25,7 @@ import (
 	"tunneldeck/internal/store"
 	"tunneldeck/internal/vpn"
 	"tunneldeck/internal/vpn/openvpn"
+	"tunneldeck/internal/vpn/wireguard"
 	"tunneldeck/internal/web"
 )
 
@@ -190,10 +191,9 @@ func logBackend(guard *netguard.Guard) {
 }
 
 func (a *app) startManager(ctx context.Context) error {
-	registry := vpn.NewRegistry()
-	factory := openvpn.Factory(openvpn.Options{DeviceName: netguard.DeviceName, LANSubnets: a.guard.LANSubnets})
-	if err := registry.Register(domain.ProtocolOpenVPN, factory); err != nil {
-		return fmt.Errorf("register drivers: %w", err)
+	registry, err := a.drivers()
+	if err != nil {
+		return err
 	}
 	a.manager = vpn.NewConnectionManager(vpn.ManagerConfig{
 		Registry: registry, Profiles: a.store, Desired: a.store, Firewall: a.store, Guard: a.guard, UIPort: a.uiPort,
@@ -214,6 +214,24 @@ func (a *app) startManager(ctx context.Context) error {
 	a.api = api.New(a.apiDeps(registry), api.Options{})
 	a.router = newRouter(a.api, web.Handler())
 	return nil
+}
+
+// drivers registers the VPN drivers; both create the tunnel device
+// netguard guards.
+func (a *app) drivers() (*vpn.Registry, error) {
+	registry := vpn.NewRegistry()
+	factories := map[domain.Protocol]vpn.Factory{
+		domain.ProtocolOpenVPN: openvpn.Factory(openvpn.Options{DeviceName: netguard.DeviceName, LANSubnets: a.guard.LANSubnets}),
+		domain.ProtocolWireGuard: wireguard.Factory(wireguard.Options{
+			DeviceName: netguard.DeviceName, Runner: a.host.runner, LANSubnets: a.guard.LANSubnets,
+		}),
+	}
+	for protocol, factory := range factories {
+		if err := registry.Register(protocol, factory); err != nil {
+			return nil, fmt.Errorf("register drivers: %w", err)
+		}
+	}
+	return registry, nil
 }
 
 // apiDeps wires the API; one api.Server serves both listeners.

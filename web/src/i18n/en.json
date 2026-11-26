@@ -186,7 +186,10 @@
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
     "profileMissing": "This profile no longer exists.",
     "openLog": "Open log for details",
-    "routingWarning": "Routing for forwarded traffic could not be applied; retrying…"
+    "routingWarning": "Routing for forwarded traffic could not be applied; retrying…",
+    "messageCode": {
+      "wireguard_no_handshake": "No answer from the server – check the keys and the endpoint"
+    }
   },
   "log": {
     "title": "Log",
@@ -336,7 +339,15 @@
       "verb_replaced": "was replaced by the log level of TunnelDeck-VPN.",
       "credentials_expected": "The file contains no client certificate and no username and password. Sign-in with username and password is selected: enter the access data from your provider.",
       "credentials_from_partial_block": "Username and password were taken from a credentials block that is only partly commented out.",
-      "unknown_directive": "is not a known OpenVPN option."
+      "unknown_directive": "is not a known OpenVPN option.",
+      "dns_ignored": "is not applied; the host's DNS settings stay unchanged.",
+      "listen_port_ignored": "is not needed; TunnelDeck-VPN picks a free port.",
+      "save_config_ignored": "only matters to wg-quick and is not needed.",
+      "ipv6_ignored": "has IPv6 entries, which are left out; only IPv4 is used.",
+      "additional_address": "names a further IPv4 address; only the first one is used.",
+      "additional_peer": "is a further peer; only the first peer is used.",
+      "keepalive_default": "is not set; 25 seconds are used so that the tunnel stays reachable from the server.",
+      "unknown_key": "is not a known WireGuard setting."
     }
   },
   "firewall": {
@@ -807,7 +818,17 @@
     "openvpn_tls_crypt_v2_combined": "Cannot be combined with a tls-auth or tls-crypt key.",
     "public_address_invalid": "Enter an IPv4 address or a host name, e.g. 203.0.113.10 or vpn.example.com.",
     "public_ip_url_invalid": "Enter an absolute http or https URL, e.g. https://api.ipify.org.",
-    "url_credentials_not_allowed": "Must not contain a user name or password."
+    "url_credentials_not_allowed": "Must not contain a user name or password.",
+    "number_between": "Enter a whole number from {{min}} to {{max}}.",
+    "wireguard_key_invalid": "Must be a WireGuard key: 44 characters of base64, as wg genkey prints it.",
+    "wireguard_peer_is_self": "Enter the server's public key, not the one of this profile.",
+    "wireguard_address_invalid": "Enter an IPv4 address with prefix length, e.g. 10.66.0.2/32.",
+    "wireguard_address_overlaps_lan": "Overlaps a LAN subnet of the host ({{subnets}}).",
+    "wireguard_endpoint_invalid": "Enter host:port, e.g. vpn.example.com:51820; without a port, 51820 is used.",
+    "wireguard_unknown_setting": "Not a WireGuard setting.",
+    "wireguard_unknown_secret": "Not a WireGuard secret.",
+    "wireguard_file_empty": "The file is empty or contains only comments.",
+    "wireguard_not_a_config": "This is not a WireGuard configuration: it has no [Interface] or [Peer] section."
   },
   "uptime": {
     "months_one": "{{count}} month",

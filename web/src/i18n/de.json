@@ -186,7 +186,10 @@
     "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
     "profileMissing": "Dieses Profil existiert nicht mehr.",
     "openLog": "Protokoll mit Details öffnen",
-    "routingWarning": "Das Routing für weitergeleiteten Verkehr konnte nicht angewendet werden; neuer Versuch läuft …"
+    "routingWarning": "Das Routing für weitergeleiteten Verkehr konnte nicht angewendet werden; neuer Versuch läuft …",
+    "messageCode": {
+      "wireguard_no_handshake": "Keine Antwort vom Server – prüfen Sie die Schlüssel und die Serveradresse"
+    }
   },
   "log": {
     "title": "Protokoll",
@@ -336,7 +339,15 @@
       "verb_replaced": "wurde durch die Protokollstufe von TunnelDeck-VPN ersetzt.",
       "credentials_expected": "Die Datei enthält kein Client-Zertifikat und weder Benutzername noch Passwort. Die Anmeldung mit Benutzername und Passwort ist gewählt: Geben Sie die Zugangsdaten Ihres Anbieters ein.",
       "credentials_from_partial_block": "Benutzername und Passwort wurden aus einem nur teilweise auskommentierten Zugangsdaten-Block übernommen.",
-      "unknown_directive": "ist keine bekannte OpenVPN-Option."
+      "unknown_directive": "ist keine bekannte OpenVPN-Option.",
+      "dns_ignored": "wird nicht angewendet; die DNS-Einstellungen des Hosts bleiben unverändert.",
+      "listen_port_ignored": "wird nicht gebraucht; TunnelDeck-VPN wählt einen freien Port.",
+      "save_config_ignored": "betrifft nur wg-quick und wird nicht gebraucht.",
+      "ipv6_ignored": "enthält IPv6-Einträge, die weggelassen werden; verwendet wird nur IPv4.",
+      "additional_address": "nennt eine weitere IPv4-Adresse; verwendet wird nur die erste.",
+      "additional_peer": "ist ein weiterer Peer; verwendet wird nur der erste.",
+      "keepalive_default": "ist nicht gesetzt; verwendet werden 25 Sekunden, damit der Tunnel vom Server aus erreichbar bleibt.",
+      "unknown_key": "ist keine bekannte WireGuard-Einstellung."
     }
   },
   "firewall": {
@@ -807,7 +818,17 @@
     "openvpn_tls_crypt_v2_combined": "Lässt sich nicht mit einem tls-auth- oder tls-crypt-Schlüssel kombinieren.",
     "public_address_invalid": "Geben Sie eine IPv4-Adresse oder einen Hostnamen ein, z. B. 203.0.113.10 oder vpn.example.com.",
     "public_ip_url_invalid": "Geben Sie eine vollständige http- oder https-Adresse ein, z. B. https://api.ipify.org.",
-    "url_credentials_not_allowed": "Darf keinen Benutzernamen und kein Passwort enthalten."
+    "url_credentials_not_allowed": "Darf keinen Benutzernamen und kein Passwort enthalten.",
+    "number_between": "Geben Sie eine ganze Zahl von {{min}} bis {{max}} ein.",
+    "wireguard_key_invalid": "Muss ein WireGuard-Schlüssel sein: 44 Zeichen Base64, wie wg genkey ihn ausgibt.",
+    "wireguard_peer_is_self": "Geben Sie den öffentlichen Schlüssel des Servers ein, nicht den dieses Profils.",
+    "wireguard_address_invalid": "Geben Sie eine IPv4-Adresse mit Präfixlänge ein, z. B. 10.66.0.2/32.",
+    "wireguard_address_overlaps_lan": "Überschneidet sich mit einem LAN-Subnetz des Hosts ({{subnets}}).",
+    "wireguard_endpoint_invalid": "Geben Sie Host:Port ein, z. B. vpn.example.com:51820; ohne Port wird 51820 verwendet.",
+    "wireguard_unknown_setting": "Keine WireGuard-Einstellung.",
+    "wireguard_unknown_secret": "Kein WireGuard-Geheimnis.",
+    "wireguard_file_empty": "Die Datei ist leer oder enthält nur Kommentare.",
+    "wireguard_not_a_config": "Das ist keine WireGuard-Konfiguration: Die Datei hat keinen Abschnitt [Interface] oder [Peer]."
   },
   "uptime": {
     "months_one": "{{count}} Monat",

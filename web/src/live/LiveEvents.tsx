@@ -45,6 +45,7 @@ function applyState(client: QueryClient, event: StateEvent): void {
       ...status,
       state: event.state,
       message: event.message,
+      messageCode: event.messageCode,
       vpnIp: event.vpnIp,
       remote: event.remote,
       since: event.since,

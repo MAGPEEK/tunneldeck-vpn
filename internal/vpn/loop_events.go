@@ -33,6 +33,8 @@ func (l *loop) driverEvent(t *tunnel, e domain.Event) {
 
 func (l *loop) driverState(t *tunnel, e domain.StateEvent) {
 	switch e.State {
+	case domain.StateConnecting:
+		l.driverConnecting(e)
 	case domain.StateConnected:
 		l.tunnelConnected(t, e)
 	case domain.StateReconnecting:
@@ -41,6 +43,17 @@ func (l *loop) driverState(t *tunnel, e domain.StateEvent) {
 		t.failure = endFailure(e)
 		l.reconcile()
 	}
+}
+
+// driverConnecting shows the driver's note about an attempt that makes no
+// progress yet, such as a server that does not answer. The state and its
+// since stay; a later state change clears the note.
+func (l *loop) driverConnecting(e domain.StateEvent) {
+	if l.status.State != domain.StateConnecting && l.status.State != domain.StateReconnecting {
+		return
+	}
+	l.status.Message, l.status.MessageCode = e.Message, e.MessageCode
+	l.broadcast(l.stateEvent())
 }
 
 // endFailure turns the terminal event of a tunnel the manager did not stop
@@ -75,12 +88,22 @@ func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
 	l.failures = 0
 	l.status.LastError = nil
 	l.status.VPNIP, l.status.Remote = e.VPNIP, e.Remote
-	l.setState(domain.StateConnected, "")
+	l.setStateSince(domain.StateConnected, "", l.connectedSince(e))
 	if l.status.RoutingWarning == nil {
 		l.detectPublicIP(t)
 	} else {
 		l.setPublicIP("")
 	}
+}
+
+// connectedSince is when the tunnel of e came up: the driver's time, such
+// as WireGuard's handshake, unless it is unset or lies in the future.
+func (l *loop) connectedSince(e domain.StateEvent) time.Time {
+	now := l.now()
+	if e.Since.IsZero() || e.Since.After(now) {
+		return now
+	}
+	return e.Since.UTC()
 }
 
 // applyRouting routes through the connected tunnel t. When that fails, t
@@ -225,7 +248,13 @@ func (l *loop) dailyReconnectDue() {
 // IP detection and forgets the public IP, which a reconnect may change;
 // leaving the tunnel's states forgets what the tunnel reported.
 func (l *loop) setState(state domain.ConnectionState, message string) {
-	l.status.State, l.status.Message, l.status.Since = state, message, l.now()
+	l.setStateSince(state, message, l.now())
+}
+
+// setStateSince is setState with the time the state began.
+func (l *loop) setStateSince(state domain.ConnectionState, message string, since time.Time) {
+	l.status.State, l.status.Message, l.status.Since = state, message, since
+	l.status.MessageCode = ""
 	if state != domain.StateConnected {
 		l.publicIP.stop()
 	}
@@ -242,7 +271,8 @@ func (l *loop) setState(state domain.ConnectionState, message string) {
 // stateEvent describes the current state.
 func (l *loop) stateEvent() domain.StateEvent {
 	event := domain.StateEvent{
-		State: l.status.State, Message: l.status.Message, VPNIP: l.status.VPNIP, Remote: l.status.Remote, Since: l.status.Since,
+		State: l.status.State, Message: l.status.Message, MessageCode: l.status.MessageCode,
+		VPNIP: l.status.VPNIP, Remote: l.status.Remote, Since: l.status.Since,
 	}
 	if l.status.State == domain.StateError && l.status.LastError != nil {
 		event.Code = l.status.LastError.Code

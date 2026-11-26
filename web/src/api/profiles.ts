@@ -72,6 +72,8 @@ export interface Profile {
   createdAt: string;
   updatedAt: string;
   advisories: Advisory[];
+  /** Values the driver derives from stored secrets for display, e.g. WireGuard's `publicKey`. */
+  derived?: Record<string, string>;
 }
 
 export interface ProfileRequest {
