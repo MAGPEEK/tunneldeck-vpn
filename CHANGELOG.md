@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - The remote access address on the Dashboard and the System page is a plain link; the Copy button next to it is gone.
 - The Dashboard connection card no longer repeats the state pill, the profile name and the protocol badge in its header; the state is still announced to screen readers, and the status list and connection line show the details.
+- The log on the Log page fills the window height (at least 360px) instead of a fixed 360px box.
 - Edit, Duplicate and Delete on the Profiles page stay on one line; on narrow screens the table scrolls sideways.
 
 ## [0.2.0-alpha.6] - 2026-11-27
