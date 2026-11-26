@@ -7,37 +7,38 @@ import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const profile = makeProfile();
 
-const dsm = {
+const adminUi = {
   id: 'a',
-  name: 'DSM',
+  name: 'Admin',
   direction: 'inbound',
   action: 'accept',
   protocol: 'tcp',
   source: '',
-  destination: { kind: 'host' },
+  destination: '192.168.1.10',
   destinationPort: { from: 5001 },
   keepSourceAddress: false,
   enabled: true,
   comment: '',
 };
 
-const lancomOut = {
-  ...dsm,
+const routerOut = {
+  ...adminUi,
   id: 'b',
-  name: 'LANCOM out',
+  name: 'Router out',
   direction: 'outbound',
   protocol: 'esp',
-  source: '192.168.2.2',
-  destination: { kind: 'address', cidr: '0.0.0.0/0' },
+  source: '192.168.1.2',
+  destination: '0.0.0.0/0',
   destinationPort: undefined,
 };
 
 function firewall(overrides: Record<string, unknown> = {}) {
   return {
-    rules: [dsm],
+    rules: [adminUi],
     settings: { dropInvalid: true, mssClamp: true, synFloodProtection: true, pingLimit: true },
-    hostAddress: '192.168.2.10',
-    lanSubnets: ['192.168.2.0/24'],
+    hostAddress: '192.168.1.10',
+    hostAddresses: ['192.168.1.10'],
+    lanSubnets: ['192.168.1.0/24'],
     ipForward: true,
     ...overrides,
   };
@@ -94,7 +95,7 @@ describe('DashboardPage', () => {
   it('warns when IP forwarding is off and a rule needs it', async () => {
     renderApp(
       routes({
-        'GET /api/firewall': { body: firewall({ rules: [dsm, lancomOut], ipForward: false }) },
+        'GET /api/firewall': { body: firewall({ rules: [adminUi, routerOut], ipForward: false }) },
       }),
     );
     expect(await screen.findByText('1 inbound rule, 1 outbound rule')).toBeInTheDocument();

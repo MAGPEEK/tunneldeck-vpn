@@ -288,7 +288,7 @@ func TestUploadCertificateFailures(t *testing.T) {
 }
 
 func TestFirewallRejectsTheRemoteAccessPort(t *testing.T) {
-	const rule = `{"name":"r","direction":"inbound","protocol":"%s","destination":{"kind":"host"},"destinationPort":{"from":8443},"enabled":%t}`
+	const rule = `{"name":"r","direction":"inbound","protocol":"%s","destination":"192.168.2.10","destinationPort":{"from":8443},"enabled":%t}`
 	tests := []struct {
 		name     string
 		enabled  bool

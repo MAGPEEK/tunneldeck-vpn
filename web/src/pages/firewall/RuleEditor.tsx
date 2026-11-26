@@ -6,7 +6,7 @@ import { Field } from '../../components/Field';
 import fieldStyles from '../../components/Field.module.css';
 import { Notice } from '../../components/Notice';
 import styles from './FirewallPage.module.css';
-import { isPortForward, visiblePortFields, type RuleDraft } from './ruleDraft';
+import { isPortForward, isToHost, visiblePortFields, type RuleDraft } from './ruleDraft';
 
 const ACTIONS: FirewallAction[] = ['accept', 'drop', 'reject'];
 const PROTOCOLS: FirewallProtocol[] = ['tcp', 'udp', 'tcp+udp', 'icmp', 'esp', 'gre', 'any'];
@@ -30,6 +30,7 @@ export interface RuleEditorProps {
   draft: RuleDraft;
   errors: Record<string, string>;
   hostAddress: string;
+  hostAddresses: readonly string[];
   lanSubnets: string[];
   onChange: (change: Partial<RuleDraft>) => void;
   onDone: () => void;
@@ -39,6 +40,7 @@ export function RuleEditor({
   draft,
   errors,
   hostAddress,
+  hostAddresses,
   lanSubnets,
   onChange,
   onDone,
@@ -46,7 +48,7 @@ export function RuleEditor({
   const { t } = useTranslation();
   const titleId = useId();
   const inbound = draft.direction === 'inbound';
-  const forward = isPortForward(draft);
+  const forward = isPortForward(draft, hostAddresses);
   const ports = visiblePortFields(draft);
   const other = Object.entries(errors).filter(([field]) => !SHOWN_FIELDS.has(field));
 
@@ -153,6 +155,7 @@ export function RuleEditor({
           draft={draft}
           errors={errors}
           hostAddress={hostAddress}
+          hostAddresses={hostAddresses}
           lanSubnets={lanSubnets}
           onChange={onChange}
         />
@@ -162,11 +165,11 @@ export function RuleEditor({
             label={t('firewall.editor.destinationOutbound')}
             placeholder={t('firewall.editor.destinationOutboundPlaceholder')}
             className={styles.monoField}
-            value={draft.destinationCidr}
+            value={draft.destination}
             required
             spellCheck={false}
             error={errors.destination}
-            onChange={(event) => onChange({ destinationCidr: event.currentTarget.value })}
+            onChange={(event) => onChange({ destination: event.currentTarget.value })}
           />
           {ports.includes('destinationPort') && (
             <PortInput
@@ -196,6 +199,7 @@ interface InboundDestinationProps {
   draft: RuleDraft;
   errors: Record<string, string>;
   hostAddress: string;
+  hostAddresses: readonly string[];
   lanSubnets: string[];
   onChange: (change: Partial<RuleDraft>) => void;
 }
@@ -204,60 +208,42 @@ function InboundDestination({
   draft,
   errors,
   hostAddress,
+  hostAddresses,
   lanSubnets,
   onChange,
 }: InboundDestinationProps) {
   const { t } = useTranslation();
   const name = useId();
-  const toHost = draft.destinationKind === 'host';
+  const toHost = isToHost(draft, hostAddresses);
   const ports = visiblePortFields(draft);
-  const destinationError = errors.destination;
   const anyPort = draft.destinationPort.trim() === '';
   const publicPortDisabled = toHost || anyPort;
+  const suggestHost = hostAddress !== '' && draft.destination.trim() !== hostAddress;
   return (
     <>
-      <fieldset className={styles.radioGroup}>
-        <legend className={fieldStyles.label}>{t('firewall.editor.destination')}</legend>
-        <label className={styles.choice}>
-          <input
-            type="radio"
-            name={name}
-            checked={toHost}
-            onChange={() => onChange({ destinationKind: 'host' })}
-          />
-          {t('firewall.editor.host', {
-            address: hostAddress || t('firewall.context.notDetected'),
-          })}
-        </label>
-        <label className={styles.choice}>
-          <input
-            type="radio"
-            name={name}
-            checked={!toHost}
-            onChange={() => onChange({ destinationKind: 'address' })}
-          />
-          {t('firewall.editor.address')}
-        </label>
-        {toHost && destinationError && <p className={fieldStyles.error}>{destinationError}</p>}
-      </fieldset>
       <div className={styles.editorGrid}>
-        {!toHost && (
+        <div>
           <Field
-            label={t('firewall.editor.destinationAddress')}
+            label={t('firewall.editor.destination')}
             hint={
               lanSubnets.length > 0
                 ? t('firewall.editor.lanHint', { subnets: lanSubnets.join(', ') })
                 : undefined
             }
-            placeholder="192.168.2.2"
+            placeholder="192.168.1.10"
             className={styles.monoField}
-            value={draft.destinationCidr}
+            value={draft.destination}
             required
             spellCheck={false}
-            error={destinationError}
-            onChange={(event) => onChange({ destinationCidr: event.currentTarget.value })}
+            error={errors.destination}
+            onChange={(event) => onChange({ destination: event.currentTarget.value })}
           />
-        )}
+          {suggestHost && (
+            <Button variant="ghost" onClick={() => onChange({ destination: hostAddress })}>
+              {t('firewall.editor.useHostAddress', { address: hostAddress })}
+            </Button>
+          )}
+        </div>
         {ports.includes('destinationPort') && (
           <PortInput
             label={t('firewall.editor.destinationPort')}

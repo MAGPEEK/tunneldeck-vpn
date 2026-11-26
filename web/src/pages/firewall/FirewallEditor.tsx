@@ -88,7 +88,8 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
   };
 
   const save = useMutation({
-    mutationFn: (sent: RuleDraft[]) => putFirewall({ rules: sent.map(toRule), settings }),
+    mutationFn: (sent: RuleDraft[]) =>
+      putFirewall({ rules: sent.map((draft) => toRule(draft, saved.hostAddresses)), settings }),
     onSuccess: (state) => {
       client.setQueryData(queryKeys.firewall, state);
       reset(state);
@@ -103,7 +104,9 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
     },
   });
 
-  const dirty = draftsDiffer(drafts, saved.rules) || settingsDiffer(settings, saved.settings);
+  const dirty =
+    draftsDiffer(drafts, saved.rules, saved.hostAddresses) ||
+    settingsDiffer(settings, saved.settings);
 
   const submit = () => {
     setMessage(undefined);
@@ -223,6 +226,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
                 direction={tab}
                 drafts={visible}
                 errorKeys={errorKeys}
+                hostAddresses={saved.hostAddresses}
                 onChange={update}
                 onMove={(key, step) => setDrafts((current) => moveDraft(current, key, step))}
                 onEdit={(key) => {
@@ -253,6 +257,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
                   draft={editing}
                   errors={errors[editing.key] ?? {}}
                   hostAddress={saved.hostAddress}
+                  hostAddresses={saved.hostAddresses}
                   lanSubnets={saved.lanSubnets}
                   onChange={(change) => update(editing.key, change)}
                   onDone={() => setEditingKey(undefined)}

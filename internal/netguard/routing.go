@@ -74,7 +74,7 @@ func (g *Guard) routeVPNReplies(ctx context.Context, vpnIP netip.Addr, sources [
 // of remoteNetworks, detecting the LAN only when there are any.
 func (g *Guard) routedPolicyRules(ctx context.Context, remoteNetworks []netip.Prefix) ([]policyRule, error) {
 	firewall := g.installedFirewall()
-	if len(remoteNetworks) == 0 && !needsPolicyRules(firewall) {
+	if len(remoteNetworks) == 0 && !mayNeedPolicyRules(firewall) {
 		return nil, nil
 	}
 	lan, err := g.detectLAN(ctx)

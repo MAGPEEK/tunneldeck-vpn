@@ -236,15 +236,15 @@ Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning
 
 ## 16. Firewall (0.2.0, replaces "Host access")
 
-Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions of 2026-11-25. The single "Host access" list becomes a two-direction firewall that can target the host or any LAN device.
+Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions of 2026-11-25. The single "Host access" list becomes a two-direction firewall that can target this device or any other device in the local LAN, always by IPv4 address.
 
 ### 16.1 Rule model
 
-`FirewallRule { id, direction: inbound | outbound, protocol: tcp | udp | esp | gre | any, source: CIDR (optional = any), destination: IPv4 address or CIDR, destinationPort: port or range (tcp/udp only; empty = any port), publicPort: port or range (inbound tcp/udp only, default = destinationPort; must be empty while destinationPort is), keepSourceAddress: bool (inbound to other devices, default false), enabled, comment }`. Default policy: everything not allowed by a rule is dropped in both directions. Rules are evaluated in list order; the UI allows reordering.
+`FirewallRule { id, direction: inbound | outbound, protocol: tcp | udp | esp | gre | any, source: CIDR (optional = any), destination: string (inbound: one IPv4 address; outbound: CIDR), destinationPort: port or range (tcp/udp only; empty = any port), publicPort: port or range (inbound tcp/udp only, default = destinationPort; must be empty while destinationPort is), keepSourceAddress: bool (inbound to other devices, default false), enabled, comment }`. Default policy: everything not allowed by a rule is dropped in both directions. Rules are evaluated in list order; the UI allows reordering.
 
-- **Inbound** (VPN side → LAN): `source` = allowed remote addresses (default any).
-  - Destination = the host's own LAN address (kind `host`, shown as "Host" with the detected address, e.g. "Host (192.168.2.10)") → accept in `TUNNELDECK-INPUT`; `publicPort` must equal `destinationPort`. This is today's host-access rule. An empty `destinationPort` accepts the protocol on every port. `TUNNELDECK-INPUT` drops TCP to the HTTP UI port before any rule, so no rule can open it to the tunnel; the remote-access HTTPS port keeps its own accept.
-  - Destination = another LAN address → DNAT `tdvpn0:publicPort → destination:destinationPort` in a `TUNNELDECK-PREROUTING` nat chain, accept in `TUNNELDECK-FORWARD`, and unless `keepSourceAddress` is set, MASQUERADE on the LAN interface so the target answers the host without route changes. With `keepSourceAddress` the target needs a route back via the host (typically an outbound rule for the same device, see below); the UI says so.
+- **Inbound** (VPN side → LAN): `source` = allowed remote addresses (default any, e.g. `203.0.113.0/24`). `destination` = exactly one IPv4 address inside a LAN subnet of the host (e.g. `192.168.1.10`). Whether it is the host's own address is re-evaluated on every apply, because the host's LAN address can change.
+  - Destination = one of the host's own LAN addresses → accept / drop / reject in `TUNNELDECK-INPUT`; `publicPort` must be empty or equal `destinationPort`. This replaces the 0.1 host-access rule. An empty `destinationPort` accepts the protocol on every port. `TUNNELDECK-INPUT` drops TCP to the HTTP UI port before any rule, so no rule can open it to the tunnel; the remote-access HTTPS port keeps its own accept.
+  - Destination = any other LAN address (e.g. `192.168.1.20`) → port forward (always accept): DNAT `tdvpn0:publicPort → destination:destinationPort` in a `TUNNELDECK-PREROUTING` nat chain, accept in `TUNNELDECK-FORWARD`, and unless `keepSourceAddress` is set, MASQUERADE on the LAN interface so the target answers the host without route changes. With `keepSourceAddress` the target needs a route back via the host (typically an outbound rule for the same device, see below); the UI says so.
   - An empty `destinationPort` (and `publicPort`) forwards every port of the protocol to the destination. Its DNAT returns early for TCP to the HTTP UI port and, while remote access is on, to the remote-access port, so the host keeps both. Such a forward conflicts with every other enabled accepting inbound rule of an overlapping protocol that goes elsewhere (reported on both rules).
   - `esp`/`gre` have no ports: they forward the whole protocol to one destination (only one such rule per protocol, since the public address is shared).
 - **Outbound** (LAN → VPN side): `source` = LAN device or subnet (required), `destination` = remote address or network behind the VPN (CIDR, `0.0.0.0/0` = everything). Matching traffic is policy-routed into table 7194 (`ip rule from <source> to <destination> lookup 7194`, with a higher-priority rule that keeps LAN-to-LAN traffic in the main table), accepted in `TUNNELDECK-FORWARD`, and MASQUERADEd on `tdvpn0`. LAN devices must send this traffic to the host (host as gateway, or a static route in the LAN router for the destination network); the UI shows that hint. When the tunnel is down, matching traffic is dropped, never sent out via the normal internet connection (kill switch).
@@ -268,14 +268,15 @@ Compared with the RUT240 firewall (General settings, Port forwards, Traffic rule
 
 ### 16.2 Reference use case: an IPsec router in the local LAN using the VPN address
 
-An IPsec router in the local LAN (example `192.168.1.2`; the owner uses a LANCOM) establishes IPsec tunnels using the mdex public address:
-- Inbound: UDP 500 → `192.168.2.2:500`, UDP 4500 → `192.168.2.2:4500`, ESP → `192.168.2.2`, each with `keepSourceAddress` on (IKE identifies peers by address).
-- Outbound: source `192.168.2.2/32` → destination `0.0.0.0/0` (or the peers' addresses), so the LANCOM's own IKE/ESP traffic and its replies leave through the tunnel with the public address. The LANCOM's default gateway (or a route for the peers) points to the host.
-- The UI offers this as a template ("IPsec device") that creates the five rules.
+An IPsec router in the local LAN (example `192.168.1.2`) establishes IPsec tunnels to peers (e.g. `198.51.100.7`) using the tunnel's public address:
+- Inbound: UDP 500 → `192.168.1.2:500`, UDP 4500 → `192.168.1.2:4500`, ESP → `192.168.1.2`, each with `keepSourceAddress` on (IKE identifies peers by address).
+- Outbound: source `192.168.1.2/32` → destination `0.0.0.0/0` (or the peers' addresses), so the router's own IKE/ESP traffic and its replies leave through the tunnel with the public address. The router's default gateway (or a route for the peers) points to the host.
+- The UI offers this as a template ("IPsec router") that creates the five rules.
 
 ### 16.3 Migration and API
 
-- `settings.json` schemaVersion 1 → 2: every host-access rule becomes an inbound rule with destination "Host" (kind `host`). 
+- `settings.json` schemaVersion 1 → 2: every host-access rule becomes an inbound rule to the host (0.2.0-alpha stored a host destination kind).
+- schemaVersion 2 → 3: destinations become plain strings. Legacy host-kind rules are kept privately by the store; `GET /api/firewall` returns them with the host's detected address (`hostAddress`), and the next PUT stores plain addresses. Until then netguard keeps handling legacy rules.
 - `GET/PUT /api/firewall` replaces `/api/host-access` (the old endpoint answers 410 Gone with a pointer).
 - Breaking change → release 0.2.0.
 

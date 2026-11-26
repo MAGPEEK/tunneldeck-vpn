@@ -4,17 +4,26 @@ import (
 	"net/netip"
 )
 
-// HostNetwork is the host's LAN as detected at run time: the address the
-// UI shows as "This device", the LAN subnets port forwards must target,
-// and whether IPv4 forwarding is on (SPEC §16.1). Zero values mean "not
-// detected".
+// HostNetwork is the host's LAN as detected at run time: the host's own
+// LAN addresses, which make an inbound rule a rule to the host itself, the
+// LAN subnets inbound destinations must lie in, and whether IPv4
+// forwarding is on (SPEC §16.1). Zero values mean "not detected".
 type HostNetwork struct {
-	Address   netip.Addr
+	Addresses []netip.Addr
 	Subnets   []netip.Prefix
 	IPForward bool
 }
 
-// IPsec ports of the "IPsec device" template (SPEC §16.2).
+// Address returns the host's first LAN address, the one the UI offers as
+// "this device's address"; the zero Addr when none was detected.
+func (n HostNetwork) Address() netip.Addr {
+	if len(n.Addresses) == 0 {
+		return netip.Addr{}
+	}
+	return n.Addresses[0]
+}
+
+// IPsec ports of the "IPsec router" template (SPEC §16.2).
 const (
 	portIKE  = 500
 	portNATT = 4500
@@ -34,7 +43,7 @@ const (
 // so every generated rule name stays within MaxFirewallRuleNameLength.
 const MaxIPsecTemplateNameLength = MaxFirewallRuleNameLength - len(suffixOutboundUDP)
 
-// IPsecDeviceRules returns the rules of the "IPsec device" template (SPEC
+// IPsecDeviceRules returns the rules of the "IPsec router" template (SPEC
 // §16.2) for a LAN device that terminates IPsec using the tunnel's public
 // address: inbound UDP 500, UDP 4500 and ESP forwarded to device with the
 // source address kept, and outbound UDP and ESP from device into the
@@ -55,7 +64,7 @@ func IPsecDeviceRules(name string, device netip.Addr, peers []netip.Prefix) []Fi
 }
 
 func ipsecRulesForPeer(name string, device netip.Addr, source, remote string) []FirewallRule {
-	target := FirewallDestination{Kind: DestinationAddress, CIDR: device.String()}
+	target := device.String()
 	inbound := func(suffix string, protocol FirewallProtocol, port int) FirewallRule {
 		rule := FirewallRule{
 			Name: name + suffix, Direction: DirectionInbound, Action: ActionAccept, Protocol: protocol,
@@ -69,7 +78,7 @@ func ipsecRulesForPeer(name string, device netip.Addr, source, remote string) []
 	outbound := func(suffix string, protocol FirewallProtocol) FirewallRule {
 		return FirewallRule{
 			Name: name + suffix, Direction: DirectionOutbound, Action: ActionAccept, Protocol: protocol,
-			Source: device.String(), Destination: FirewallDestination{Kind: DestinationAddress, CIDR: remote}, Enabled: true,
+			Source: device.String(), Destination: remote, Enabled: true,
 		}
 	}
 	return []FirewallRule{

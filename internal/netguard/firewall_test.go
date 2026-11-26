@@ -130,9 +130,9 @@ func TestRuleShapes(t *testing.T) {
 		ikeForward  = "-i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"
 		ikeDNAT     = "-p udp --dport 500 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.2"
 		ikeMasq     = "! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE"
-		lancomJump  = "-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"
+		routerJump  = "-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"
 		officeJump  = "-A FORWARD -s 192.168.2.0/24 -d 10.0.0.0/8 -j TUNNELDECK-FORWARD"
-		lancomLocal = "! -i tdvpn0 ! -o tdvpn0 -s 192.168.2.2/32 -d 192.168.2.0/24 -m comment --comment tdfixed:lan-return -j RETURN"
+		routerLocal = "! -i tdvpn0 ! -o tdvpn0 -s 192.168.2.2/32 -d 192.168.2.0/24 -m comment --comment tdfixed:lan-return -j RETURN"
 	)
 	ike := portForward(domain.ProtocolUDP, "192.168.2.2", domain.SinglePort(500))
 	tests := []struct {
@@ -280,9 +280,9 @@ func TestRuleShapes(t *testing.T) {
 				changed(outboundRule(domain.ProtocolAny, "192.168.2.2", "10.66.0.0/16"), func(r *domain.FirewallRule) { r.Action = domain.ActionDrop }),
 				outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"),
 			),
-			forwardJumps: []string{lancomJump},
+			forwardJumps: []string{routerJump},
 			input:        inputWith(),
-			forward: slices.Concat([]string{lancomLocal}, forwardWith(
+			forward: slices.Concat([]string{routerLocal}, forwardWith(
 				"-o tdvpn0 -s 192.168.2.2/32 -d 10.66.0.0/16 -m comment --comment tdrule:r1 -j DROP",
 				"-o tdvpn0 -s 192.168.2.2/32 -m comment --comment tdrule:r2 -j ACCEPT")),
 			postrouting: []string{"-o tdvpn0 -s 192.168.2.2/32 -m comment --comment tdrule:r2 -j MASQUERADE"},
@@ -422,6 +422,36 @@ func TestInstallFirewallRejectsInvalidRulesBeforeAnyCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInboundRulesFollowTheHostAddress classifies inbound rules by the
+// host's addresses at build time: its own address and a legacy host rule
+// go to TUNNELDECK-INPUT, any other address is forwarded.
+func TestInboundRulesFollowTheHostAddress(t *testing.T) {
+	ssh := hostRule(domain.ProtocolTCP, domain.SinglePort(22))
+	firewall := rulesOnly(ssh, hostAccess("", domain.ProtocolUDP, 161, "", true))
+	at := func(listing string) ruleset {
+		return buildRuleset(firewall, hostPorts{}, parseLANAddresses(listing))
+	}
+	rs := at(lanListing)
+	if !slices.ContainsFunc(rs.input, hasTag("r1")) || !slices.ContainsFunc(rs.input, hasTag("r2")) || len(rs.prerouting) != 0 {
+		t.Fatalf("rules to the host: input %v, prerouting %v", rs.input, rs.prerouting)
+	}
+	moved := strings.Replace(lanListing, testHostAddress+"/24", "192.168.2.11/24", 1)
+	rs = at(moved)
+	if slices.ContainsFunc(rs.input, hasTag("r1")) || !slices.ContainsFunc(rs.prerouting, hasTag("r1")) ||
+		!slices.ContainsFunc(rs.input, hasTag("r2")) {
+		t.Fatalf("after the host moved: input %v, prerouting %v", rs.input, rs.prerouting)
+	}
+}
+
+func TestInstallFirewallRejectsDropToAnotherDevice(t *testing.T) {
+	drop := rulesOnly(changed(portForward(domain.ProtocolTCP, "192.168.2.5", domain.SinglePort(22)), func(r *domain.FirewallRule) {
+		r.Action = domain.ActionDrop
+	}))
+	f := newFakeRunner()
+	err := newLegacyGuard(f).InstallFirewall(context.Background(), drop, uiPort)
+	assertValidationField(t, err, "rules[0].action")
 }
 
 func TestInstallFirewallChecksTheLAN(t *testing.T) {

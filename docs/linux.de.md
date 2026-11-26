@@ -63,7 +63,7 @@ Der Docker-Gesundheitsstatus zeigt, ob der Webserver antwortet, nicht ob der Tun
 
 Was TunnelDeck-VPN auf dem Host ändert (SPEC §6, §16):
 
-- Kette `TUNNELDECK-INPUT`, angesprungen von Position 1 in `INPUT` für Verkehr, der über `tdvpn0` ankommt: bestehende Verbindungen annehmen, TCP an den Port der Weboberfläche verwerfen, die eingehenden Firewall-Regeln an den **Host** anwenden (und den Port des Fernzugriffs annehmen, solange er an ist), alles andere verwerfen.
+- Kette `TUNNELDECK-INPUT`, angesprungen von Position 1 in `INPUT` für Verkehr, der über `tdvpn0` ankommt: bestehende Verbindungen annehmen, TCP an den Port der Weboberfläche verwerfen, die eingehenden Firewall-Regeln an die eigene LAN-Adresse dieses Geräts anwenden (und den Port des Fernzugriffs annehmen, solange er an ist), alles andere verwerfen.
 - Kette `TUNNELDECK-FORWARD`, angesprungen von Position 1 in `FORWARD` für Verkehr von oder zu `tdvpn0` und für den Verkehr jeder ausgehenden Regel: Portweiterleitungen und ausgehende Regeln annehmen, alles andere verwerfen. Ohne solche Regeln wird nichts weitergeleitet.
 - Ketten `TUNNELDECK-PREROUTING` und `TUNNELDECK-POSTROUTING` in der Tabelle `nat`: die Adressumsetzung der Portweiterleitungen und ausgehenden Regeln (Abschnitt 10).
 - Routingtabelle `7194` mit einer Default-Route über `tdvpn0` und die Regel `from <VPN-Adresse> lookup 7194`, damit Antworten auf Verbindungen, die durch den Tunnel kamen, auch durch ihn zurückgehen; während der Verbindung außerdem die Policy-Regeln der Firewall (Prioritäten 7100–7191). Die Haupt-Routingtabelle bleibt unberührt; während der Verbindung erscheint dort nur die eigene Route des Kernels für das Tunnel-Subnetz.
@@ -88,14 +88,14 @@ ip rule show; ip route show table 7194
 
 Der iptables-Selbsttest auf der Seite System und das Start-Log (`iptables backend binary=... reason=...`) nennen die Wahl und den Grund. Wer sie übersteuern will, setzt `TUNNELDECK_IPTABLES` auf `nft` oder `legacy` (Standard `auto`).
 
-Auch im gemeinsamen Backend wirken die Regeln zusammen, in fester Reihenfolge: TunnelDeck-VPN setzt seinen Sprung an Position 1 von `INPUT`, für Verkehr, der über `tdvpn0` ankommt, entscheidet also zuerst seine Kette, und diese Entscheidung gilt. Ein mit einer eingehenden Regel an den **Host** geöffneter Port (oder der Port des Fernzugriffs) ist erreichbar, auch wenn die Host-Firewall ihn verwerfen würde; alles andere aus dem Tunnel wird verworfen, auch wenn die Host-Firewall es erlaubt. Verkehr auf anderen Schnittstellen läuft nie durch die Ketten von TunnelDeck-VPN. Regeln in einer anderen *Tabelle* (die eigene nftables-Tabelle von firewalld oder das andere Backend auf einem gemischten Host) werden getrennt ausgewertet und können verwerfen, was TunnelDeck-VPN annimmt.
+Auch im gemeinsamen Backend wirken die Regeln zusammen, in fester Reihenfolge: TunnelDeck-VPN setzt seinen Sprung an Position 1 von `INPUT`, für Verkehr, der über `tdvpn0` ankommt, entscheidet also zuerst seine Kette, und diese Entscheidung gilt. Ein mit einer eingehenden Regel an die eigene LAN-Adresse dieses Geräts geöffneter Port (oder der Port des Fernzugriffs) ist erreichbar, auch wenn die Host-Firewall ihn verwerfen würde; alles andere aus dem Tunnel wird verworfen, auch wenn die Host-Firewall es erlaubt. Verkehr auf anderen Schnittstellen läuft nie durch die Ketten von TunnelDeck-VPN. Regeln in einer anderen *Tabelle* (die eigene nftables-Tabelle von firewalld oder das andere Backend auf einem gemischten Host) werden getrennt ausgewertet und können verwerfen, was TunnelDeck-VPN annimmt.
 
 ### ufw
 
 Mit dem üblichen `default deny incoming` von ufw:
 
 - Den UI-Port aus dem LAN erlauben, sonst sperrt ufw den Browser aus: `sudo ufw allow from 192.168.1.0/24 to any port 8194 proto tcp`.
-- **Gleiches Backend** (der Normalfall: ufw auf nft, TunnelDeck-VPN zeigt `using iptables-nft`): Der Sprung von TunnelDeck-VPN steht in `INPUT` vor den Ketten von ufw, TunnelDeck-VPN entscheidet also allein über Tunnelverkehr. Eine Firewall-Regel an den **Host** öffnet den Port; die eigenen Freigaben von ufw (zum Beispiel `ufw allow 22`) öffnen am Tunnel nichts. `ufw reload` lässt den Sprung von TunnelDeck-VPN an erster Stelle.
+- **Gleiches Backend** (der Normalfall: ufw auf nft, TunnelDeck-VPN zeigt `using iptables-nft`): Der Sprung von TunnelDeck-VPN steht in `INPUT` vor den Ketten von ufw, TunnelDeck-VPN entscheidet also allein über Tunnelverkehr. Eine eingehende Regel an die eigene LAN-Adresse dieses Geräts öffnet den Port; die eigenen Freigaben von ufw (zum Beispiel `ufw allow 22`) öffnen am Tunnel nichts. `ufw reload` lässt den Sprung von TunnelDeck-VPN an erster Stelle.
 - **Verschiedene Backends** (nur wenn `TUNNELDECK_IPTABLES` das andere Backend erzwingt oder der Host beide mischt und das andere mehr Regeln enthält): Eine Regel in TunnelDeck-VPN allein reicht nicht, ufw verwirft den Port weiterhin. Ihn zusätzlich in ufw erlauben:
 
   ```sh
@@ -104,7 +104,7 @@ Mit dem üblichen `default deny incoming` von ufw:
 
   Die Regel lässt sich anlegen, auch wenn `tdvpn0` gerade nicht existiert. Ein nur in ufw erlaubter Port bleibt zu, weil TunnelDeck-VPN ihn verwirft.
 
-Beide Fälle sind in einem Container-Labor geprüft (Alpine, ufw 0.36.2 auf iptables-nft, TunnelDeck-VPN mit einem Testserver verbunden, Proben durch den Tunnel). Der End-to-End-Test deckt den gemeinsamen Fall mit automatischer Erkennung ab: eine Host-Regel in nf_tables, die TCP aus dem Tunnel verwirft, und Firewall-Regeln an den Host, die ihren Port trotzdem öffnen. Nicht geprüft auf einer vollständigen Distribution wie Ubuntu oder Debian.
+Beide Fälle sind in einem Container-Labor geprüft (Alpine, ufw 0.36.2 auf iptables-nft, TunnelDeck-VPN mit einem Testserver verbunden, Proben durch den Tunnel). Der End-to-End-Test deckt den gemeinsamen Fall mit automatischer Erkennung ab: eine Host-Regel in nf_tables, die TCP aus dem Tunnel verwirft, und eingehende Regeln an die eigene LAN-Adresse des Hosts, die ihren Port trotzdem öffnen. Nicht geprüft auf einer vollständigen Distribution wie Ubuntu oder Debian.
 
 ### firewalld
 
@@ -192,13 +192,15 @@ Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleib
 
 ## 10. Firewall-Regeln
 
-Die Seite **Firewall** regelt, was den Tunnel passiert, in beide Richtungen, zu diesem Host und zu jedem Gerät in seinem LAN (SPEC §16). Was keine Regel erlaubt, wird in beide Richtungen verworfen; Antworten auf erlaubte Verbindungen kommen immer durch. Die Regeln gelten in der Reihenfolge der Liste, von oben nach unten.
+Die Seite **Firewall** regelt, was den Tunnel passiert, in beide Richtungen, zu diesem Gerät und zu jedem anderen Gerät im lokalen LAN (SPEC §16). Was keine Regel erlaubt, wird in beide Richtungen verworfen; Antworten auf erlaubte Verbindungen kommen immer durch. Die Regeln gelten in der Reihenfolge der Liste, von oben nach unten.
 
 ### Begriffe
 
-- **Eingehende** Regeln (Reiter „Eingehend vom VPN“) betreffen Verkehr, der durch den Tunnel an der Adresse des Tunnels ankommt, der *öffentlichen Adresse* (bei mdex public.IP die Adresse von `publicipNN.mdex.de`). *Quelle* beschränkt die entfernten Adressen (leer = beliebig).
-- **Host** ist der Rechner, auf dem TunnelDeck-VPN läuft, mit welcher LAN-Adresse auch immer; die Seite Firewall zeigt ihn mit der erkannten Adresse, z. B. „Host (192.168.2.10)“. Eine eingehende Regel an den Host öffnet einen Port des Hosts selbst (das ersetzt die frühere Liste „Host-Zugriff“; eine `settings.json` von 0.1 wird beim Start migriert). Der Port der Weboberfläche lässt sich nie öffnen, der Port des Fernzugriffs ist reserviert.
-- **Leerer Port = beliebiger Port.** Bei TCP, UDP und TCP+UDP passt ein leerer *Quellport* oder *Zielport* auf jeden Port, in beiden Richtungen und für Erlauben, Verwerfen und Ablehnen. Eine eingehende Regel an den Host mit leerem Zielport öffnet jeden Port dieses Protokolls, außer dem Port der Weboberfläche: TCP an ihn aus dem Tunnel wird vor jeder Regel verworfen.
+- **Eingehende** Regeln (Reiter „Eingehend vom VPN“) betreffen Verkehr, der durch den Tunnel an der Adresse des Tunnels ankommt, der *öffentlichen Adresse*. *Quelle* beschränkt die entfernten Adressen (leer = beliebig).
+- Das **Ziel** einer eingehenden Regel ist genau eine IPv4-Adresse im lokalen LAN (Feld „Ziel (Adresse im lokalen LAN)“). Die Seite Firewall zeigt die Adressen in ihrer Kontextzeile, z. B. „Dieses Gerät: 192.168.1.10 · Lokales LAN: 192.168.1.0/24 · IP-Weiterleitung: an“, und das Feld bietet den Vorschlag „Adresse dieses Geräts: 192.168.1.10“ an.
+- Eine eingehende Regel an die **eigene LAN-Adresse dieses Geräts** öffnet einen Port auf diesem Gerät, mit Erlauben, Verwerfen oder Ablehnen; der *Port auf der VPN-Adresse* muss leer oder gleich dem Zielport sein (das ersetzt die frühere Liste „Host-Zugriff“). Jede andere LAN-Adresse macht die Regel zu einer Portweiterleitung. Das wird bei jedem Anwenden neu entschieden, weil sich die Adresse dieses Geräts ändern kann; sie daher im Router reservieren. Der Port der Weboberfläche lässt sich nie öffnen, der Port des Fernzugriffs ist reserviert.
+- **Ältere Einstellungen:** Eine `settings.json` von 0.1 und 0.2.0-alpha wird beim Start migriert. Regeln, die 0.2.0-alpha mit dem Ziel „Host“ gespeichert hat, funktionieren weiter; die Seite Firewall zeigt sie mit der aktuellen LAN-Adresse dieses Geräts, und das nächste Speichern legt diese Adresse ab.
+- **Leerer Port = beliebiger Port.** Bei TCP, UDP und TCP+UDP passt ein leerer *Quellport* oder *Zielport* auf jeden Port, in beiden Richtungen und für Erlauben, Verwerfen und Ablehnen. Eine eingehende Regel an die eigene Adresse dieses Geräts mit leerem Zielport öffnet jeden Port dieses Protokolls, außer dem Port der Weboberfläche: TCP an ihn aus dem Tunnel wird vor jeder Regel verworfen.
 - Eine **Portweiterleitung** ist eine eingehende Regel an eine andere LAN-Adresse: Verkehr an den *Port auf der VPN-Adresse* wird auf Zieladresse und *Zielport* umgesetzt (DNAT). Das Ziel muss in einem LAN-Subnetz des Hosts liegen (die Seiten System und Firewall zeigen sie; link-lokale Adressen wie 169.254.x.x, Docker-Bridges, veth- und Tunnel-Schnittstellen zählen nie als LAN). ESP und GRE leiten das ganze Protokoll an ein Gerät weiter. Eine Portweiterleitung mit leerem Zielport (der *Port auf der VPN-Adresse* bleibt dann ebenfalls leer) leitet jeden Port ihres Protokolls an das Gerät weiter, außer dem Port der Weboberfläche und, solange der Fernzugriff an ist, dessen Port; beide bleiben beim Host. Sie kann ihr Protokoll mit keiner anderen Weiterleitung teilen.
 - **Quelladresse behalten** aus (Standard): TunnelDeck-VPN ersetzt den Absender durch seine eigene LAN-Adresse (Masquerade), das Gerät antwortet dem Host also ohne Routenänderung, sieht aber nur den Host als Client. An: Das Gerät sieht die echte entfernte Adresse und muss seine Antworten über den Host zurückschicken; der Host muss also sein Gateway sein (Default-Route oder eine Route für die entfernten Adressen). Nötig, wo die entfernte Adresse zählt, zum Beispiel bei IKE.
 - **Ausgehende** Regeln (Reiter „Ausgehend ins VPN“) schicken Verkehr eines LAN-Geräts oder Subnetzes (*Quelle*, Pflicht) an ein Ziel hinter dem VPN (*Ziel*, `0.0.0.0/0` = alles) durch den Tunnel, umgesetzt auf die Tunneladresse. Verkehr dieser Quelle innerhalb des LANs bleibt im LAN.
@@ -220,27 +222,27 @@ sudo sysctl -w net.ipv4.ip_forward=1
 echo 'net.ipv4.ip_forward = 1' | sudo tee /etc/sysctl.d/90-tunneldeck.conf
 ```
 
-TunnelDeck-VPN liest den Wert, ändert ihn aber nie. Regeln an den Host funktionieren ohne Weiterleitung.
+TunnelDeck-VPN liest den Wert, ändert ihn aber nie. Regeln an die eigene Adresse dieses Geräts funktionieren ohne Weiterleitung.
 
-### Beispiel: ein IPsec-Router im LAN
+### Ein IPsec-Router im lokalen LAN
 
-Referenzfall (SPEC §16.2): Ein IPsec-Router im LAN, zum Beispiel ein LANCOM-Router unter `192.168.2.2`, baut IPsec-Tunnel zu entfernten Gegenstellen über die öffentliche Adresse des Tunnels auf statt über seine eigene Internetverbindung. Die Gegenstellen verbinden sich mit der öffentlichen Adresse; TunnelDeck-VPN leitet IKE und ESP an den Router weiter.
+Referenzfall (SPEC §16.2): Ein IPsec-Router im lokalen LAN, zum Beispiel unter `192.168.1.2`, baut IPsec-Tunnel zu entfernten Gegenstellen über die öffentliche Adresse des Tunnels auf statt über seine eigene Internetverbindung. Die Gegenstellen verbinden sich mit der öffentlichen Adresse; TunnelDeck-VPN leitet IKE und ESP an den Router weiter.
 
-1. Auf der Seite Firewall **IPsec-Gerät hinzufügen** wählen, einen Namen, die Adresse des Routers `192.168.2.2` und optional die öffentlichen Adressen der Gegenstellen eingeben. Die Vorlage fügt je Gegenstelle fünf Regeln ein (ohne Gegenstellen einmal, für jede Quelle):
+1. Auf der Seite Firewall **IPsec-Router hinzufügen** wählen, einen Namen, die Adresse des Routers `192.168.1.2` und optional die öffentlichen Adressen der Gegenstellen eingeben. Die Vorlage fügt je Gegenstelle fünf Regeln ein (ohne Gegenstellen einmal, für jede Quelle):
 
    | Richtung | Protokoll | Port | Quelle → Ziel | Quelladresse behalten |
    |---|---|---|---|---|
-   | Eingehend | UDP | 500 (IKE) | Gegenstelle → `192.168.2.2` | an |
-   | Eingehend | UDP | 4500 (NAT-T) | Gegenstelle → `192.168.2.2` | an |
-   | Eingehend | ESP | – | Gegenstelle → `192.168.2.2` | an |
-   | Ausgehend | UDP | – | `192.168.2.2` → Gegenstelle (oder `0.0.0.0/0`) | – |
-   | Ausgehend | ESP | – | `192.168.2.2` → Gegenstelle (oder `0.0.0.0/0`) | – |
+   | Eingehend | UDP | 500 (IKE) | Gegenstelle → `192.168.1.2` | an |
+   | Eingehend | UDP | 4500 (NAT-T) | Gegenstelle → `192.168.1.2` | an |
+   | Eingehend | ESP | – | Gegenstelle → `192.168.1.2` | an |
+   | Ausgehend | UDP | – | `192.168.1.2` → Gegenstelle (oder `0.0.0.0/0`) | – |
+   | Ausgehend | ESP | – | `192.168.1.2` → Gegenstelle (oder `0.0.0.0/0`) | – |
 
    Die Änderungen speichern.
 2. Im Router den IPsec-Verkehr zum Host schicken: eine statische Route für die öffentliche Adresse jeder Gegenstelle (`/32`) mit der LAN-Adresse des Hosts als Gateway, oder den Host als Default-Gateway, wenn der Router keine andere Internetverbindung hat. Die ausgehenden Regeln bringen die eigenen IKE- und ESP-Pakete des Routers mit der öffentlichen Adresse durch den Tunnel, wie es die Gegenstellen erwarten.
 3. Im Router die IPsec-Verbindung zu jeder Gegenstelle wie gewohnt einrichten, mit diesen Punkten:
    - IKEv2 mit aktuellen Proposals (zum Beispiel AES-GCM, SHA-256, ECP-256).
-   - NAT-Traversal muss erlaubt sein. Die eigene Adresse des Routers (`192.168.2.2`) unterscheidet sich von der öffentlichen Adresse, an die sich die Gegenstelle wendet; beide Seiten erkennen daher NAT und verlegen IKE und ESP auf UDP 4500.
+   - NAT-Traversal muss erlaubt sein. Die eigene Adresse des Routers (`192.168.1.2`) unterscheidet sich von der öffentlichen Adresse, an die sich die Gegenstelle wendet; beide Seiten erkennen daher NAT und verlegen IKE und ESP auf UDP 4500.
    - Auf beiden Seiten eine Identität verwenden, die nicht die IP-Adresse des Routers ist (Typ FQDN oder E-Mail), weil sich die Adressen durch das NAT unterscheiden.
 4. In jeder Gegenstelle die öffentliche Adresse des Tunnels als Adresse des Routers eintragen.
 
@@ -249,4 +251,8 @@ Solange der Tunnel nicht steht, werden die IPsec-Pakete des Routers verworfen (K
 Was geprüft ist und was nicht:
 
 - **Im Labor geprüft** vom End-to-End-Test (`test/e2e/README.md`), mit beiden iptables-Backends: strongSwan 6.0 als LAN-Router und als Gegenstelle auf der VPN-Seite, PSK, IKEv2 mit AES-GCM und ECP-256. Die Regeln der Vorlage werden über die API angewendet, IKEv2 wird in beide Richtungen aufgebaut (Gegenstelle zu Router und Router zu Gegenstelle), beide Seiten melden NAT-T (`TUNNEL-in-UDP`), und die Netze hinter beiden Enden pingen sich durch die SA an. Reines ESP (Protokoll 50, ohne UDP-Kapselung) durch die ESP-Weiterleitung wurde mit SAs mit manuell gesetzten Schlüsseln geprüft, weil IKE in diesem Aufbau immer NAT-T wählt. Ebenfalls geprüft: Portweiterleitungen mit und ohne behaltene Quelladresse, eine Quellbeschränkung, eine ausgehende Regel für ein LAN-Gerät und der Kill-Switch nach einem Tunnelabbruch und nach dem Trennen.
-- **Nicht geprüft:** ein echter LANCOM-Router (oder ein Gerät eines anderen Herstellers), Zertifikate statt PSK, IKEv1, eine echte mdex-public.IP-Verbindung und die MTU von IPsec im OpenVPN-Tunnel bei großen Paketen. Bleiben große Übertragungen hängen, während kleine funktionieren, MTU oder TCP-MSS der IPsec-Verbindung im Router senken.
+- **Nicht geprüft:** ein echter IPsec-Router eines beliebigen Herstellers, Zertifikate statt PSK, IKEv1, die öffentliche Adresse eines echten VPN-Anbieters und die MTU von IPsec im OpenVPN-Tunnel bei großen Paketen. Bleiben große Übertragungen hängen, während kleine funktionieren, MTU oder TCP-MSS der IPsec-Verbindung im Router senken.
+
+#### Beispiel: LANCOM-Router mit mdex
+
+Bei mdex public.IP ist die öffentliche Adresse die Adresse von `publicipNN.mdex.de`. Ein LANCOM-Router unter `192.168.1.2` wird wie oben beschrieben eingerichtet: die Vorlage mit der Adresse des Routers, eine statische Route für die öffentliche Adresse jeder Gegenstelle über den Host (oder der Host als Default-Gateway), IKEv2 mit NAT-Traversal und einer Identität vom Typ FQDN oder E-Mail, und in jeder Gegenstelle `publicipNN.mdex.de` als Adresse des Routers. *Ungeprüft:* Weder ein echter LANCOM-Router noch eine echte mdex-public.IP-Verbindung wurden getestet; die Schritte folgen aus dem Labortest mit strongSwan.

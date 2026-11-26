@@ -30,14 +30,15 @@ var numericICMPType = regexp.MustCompile(`^([0-9]{1,3})(/([0-9]{1,3}))?$`)
 // Examples named by the address messages.
 const (
 	exampleLANNetwork    = "192.168.1.0/24"
+	exampleLANAddress    = "192.168.1.10"
 	exampleRemoteNetwork = "10.0.0.0/8"
 )
 
 // Validate checks one rule on its own. Field names are relative to the rule
 // ("name", "protocol", "destinationPort", ...). Checks that need other rules
 // or the host are in ValidateFirewallRules, CheckReservedPorts and
-// CheckLANDestinations. An empty source or destination port matches any
-// port.
+// CheckInboundDestinations. An empty source or destination port matches
+// any port.
 func (r FirewallRule) Validate() error {
 	v := &ValidationError{}
 	r.validateName(v)
@@ -52,11 +53,14 @@ func (r FirewallRule) Validate() error {
 	if protocolOK {
 		r.validatePorts(v)
 	}
-	if r.KeepSourceAddress && !r.IsPortForward() {
-		v.AddIssue("keepSourceAddress", Issue("firewall_keep_source_forward_only"),
-			"applies only to inbound rules to another device")
+	if r.KeepSourceAddress && r.Direction != DirectionInbound {
+		addKeepSourceIssue(v, "keepSourceAddress")
 	}
 	return v.OrNil()
+}
+
+func addKeepSourceIssue(v *ValidationError, field string) {
+	v.AddIssue(field, Issue("firewall_keep_source_forward_only"), "applies only to inbound rules to another device")
 }
 
 func (r FirewallRule) validateName(v *ValidationError) {
@@ -72,11 +76,7 @@ func (r FirewallRule) validateName(v *ValidationError) {
 
 func (r FirewallRule) validateAction(v *ValidationError) {
 	switch r.Action {
-	case "", ActionAccept:
-	case ActionDrop, ActionReject:
-		if r.IsPortForward() {
-			v.AddIssue("action", Issue("firewall_forward_accepts_only"), "rules to another device always accept")
-		}
+	case "", ActionAccept, ActionDrop, ActionReject:
 	default:
 		v.AddIssue("action", Issue("firewall_action_invalid"), "must be accept, drop or reject")
 	}
@@ -89,10 +89,7 @@ func (r FirewallRule) validateProtocol(v *ValidationError) bool {
 		v.AddIssue("protocol", Issue("firewall_protocol_invalid"), "must be tcp, udp, tcp+udp, icmp, esp, gre or any")
 		return false
 	}
-	switch {
-	case r.IsPortForward() && (r.Protocol == ProtocolAny || r.Protocol == ProtocolICMP):
-		v.AddIssue("protocol", Issue("firewall_forward_protocol"), "rules to another device forward tcp, udp, tcp+udp, esp or gre")
-	case r.Direction == DirectionInbound && r.Protocol == ProtocolAny && r.EffectiveAction() == ActionAccept:
+	if r.Direction == DirectionInbound && r.Protocol == ProtocolAny && r.EffectiveAction() == ActionAccept {
 		v.AddIssue("protocol", Issue("firewall_accept_any_protocol"),
 			"accepting any protocol would open every port of the host; choose a protocol")
 	}
@@ -147,29 +144,33 @@ func addPrefixIssue(v *ValidationError, field, example string) {
 		"must be an IPv4 address or a network in CIDR notation without host bits, e.g. "+example)
 }
 
+// validateDestination requires one IPv4 address for inbound rules and an
+// address or network for outbound rules. A legacy host rule has none.
 func (r FirewallRule) validateDestination(v *ValidationError) {
-	d := r.Destination
 	switch {
-	case d.Kind == DestinationHost && r.Direction == DirectionOutbound:
-		v.AddIssue("destination", Issue("firewall_outbound_to_host"), "outbound rules go to an address or network behind the VPN")
-	case d.Kind == DestinationHost && d.CIDR != "":
-		v.AddIssue("destination", Issue("firewall_host_takes_no_address"), "the host takes no address")
-	case d.Kind == DestinationHost:
-	case d.Kind != DestinationAddress:
-		v.AddIssue("destination", Issue("firewall_destination_kind_invalid"), "kind must be host or address")
+	case r.legacyHost:
+	case r.Destination == "":
+		v.AddIssue("destination", Issue("required"), "is required")
+	case r.Direction == DirectionInbound:
+		validateInboundDestination(v, r.Destination)
 	default:
-		r.validateDestinationAddress(v)
+		if _, err := ParseIPv4Prefix(r.Destination); err != nil {
+			addPrefixIssue(v, "destination", exampleRemoteNetwork)
+		}
 	}
 }
 
-func (r FirewallRule) validateDestinationAddress(v *ValidationError) {
-	prefix, err := ParseIPv4Prefix(r.Destination.CIDR)
-	switch {
-	case err != nil:
-		addPrefixIssue(v, "destination", exampleRemoteNetwork)
-	case r.Direction == DirectionInbound && prefix.Bits() != 32:
-		v.AddIssue("destination", Issue("firewall_inbound_single_address"), "must be a single IPv4 address for inbound rules")
+func validateInboundDestination(v *ValidationError, destination string) {
+	if addr, err := netip.ParseAddr(destination); err == nil && addr.Is4() {
+		return
 	}
+	if _, err := ParseIPv4Prefix(destination); err == nil {
+		v.AddIssue("destination", Issue("firewall_inbound_single_address", "example", exampleLANAddress),
+			"must be a single IPv4 address in the local LAN, e.g. "+exampleLANAddress)
+		return
+	}
+	v.AddIssue("destination", Issue("ipv4_address_invalid", "example", exampleLANAddress),
+		"must be an IPv4 address, e.g. "+exampleLANAddress)
 }
 
 func (r FirewallRule) validatePorts(v *ValidationError) {
@@ -204,19 +205,14 @@ func (r FirewallRule) validatePublicPort(v *ValidationError) {
 	case r.DestinationPort.IsZero():
 		v.AddIssue("publicPort", Issue("firewall_public_port_needs_destination_port"),
 			"must be empty while the destination port is empty (any port)")
-	case r.Destination.Kind == DestinationHost && !r.PublicPort.Equal(r.DestinationPort):
-		v.AddIssue("publicPort", Issue("firewall_public_port_host"), "must equal the destination port for rules to the host")
 	case r.PublicPort.Len() != r.DestinationPort.Len():
 		v.AddIssue("publicPort", Issue("firewall_public_port_length"), "must cover as many ports as the destination port")
 	}
 }
 
-// ValidateFirewallRules validates every rule, rejects duplicate IDs and
-// duplicate matches, and keeps the shared public address unambiguous: an
-// accepting port forward must not share a public port (or, for esp and
-// gre, the protocol) with another accepting inbound rule that goes
-// elsewhere. A conflict with an any-port forward is reported on both
-// rules. Field names have the form "rules[i].field".
+// ValidateFirewallRules validates every rule and rejects duplicate IDs and
+// duplicate matches. Field names have the form "rules[i].field". What
+// depends on the host's LAN is checked by CheckInboundDestinations.
 func ValidateFirewallRules(rules []FirewallRule) error {
 	v := &ValidationError{}
 	seenID := make(map[string]bool, len(rules))
@@ -242,21 +238,21 @@ func ValidateFirewallRules(rules []FirewallRule) error {
 			continue
 		}
 		seenMatch[key] = i
-		addPublicAddressConflict(v, rules, i)
 	}
 	return v.OrNil()
 }
 
 // addPublicAddressConflict reports the first valid earlier rule that
-// conflicts with rules[i] on the shared public address.
-func addPublicAddressConflict(v *ValidationError, rules []FirewallRule, i int) {
+// conflicts with rules[i] on the shared public address; host are the
+// host's own LAN addresses.
+func addPublicAddressConflict(v *ValidationError, rules []FirewallRule, i int, host []netip.Addr) {
 	rule := rules[i]
 	for j, other := range rules[:i] {
-		if other.Validate() != nil || !publicAddressConflict(other, rule) {
+		if other.Validate() != nil || !publicAddressConflict(other, rule, host) {
 			continue
 		}
 		addConflict(v, i, rule, j)
-		if rule.isAnyPortForward() || other.isAnyPortForward() {
+		if rule.isAnyPortForward(host) || other.isAnyPortForward(host) {
 			addConflict(v, j, other, i)
 		}
 		return
@@ -274,7 +270,7 @@ func addConflict(v *ValidationError, index int, rule FirewallRule, with int) {
 func (r FirewallRule) matchKey() string {
 	return strings.Join([]string{
 		string(r.Direction), string(r.Protocol), r.ICMPType, canonicalPrefix(r.Source),
-		r.SourcePort.String(), string(r.Destination.Kind), canonicalPrefix(r.Destination.CIDR),
+		r.SourcePort.String(), strconv.FormatBool(r.legacyHost), canonicalPrefix(r.Destination),
 		r.DestinationPort.String(), r.PublicPorts().String(),
 	}, "|")
 }
@@ -293,20 +289,21 @@ func canonicalPrefix(s string) string {
 // the same traffic on the public address for different targets. At least
 // one must be a port forward: overlapping rules to the host only accept,
 // which never conflicts. An any-port forward claims every public port of
-// its protocol, but only while both rules are enabled.
-func publicAddressConflict(a, b FirewallRule) bool {
+// its protocol, but only while both rules are enabled. host are the host's
+// own LAN addresses; rules to any of them share the target "host".
+func publicAddressConflict(a, b FirewallRule, host []netip.Addr) bool {
 	if a.Direction != DirectionInbound || b.Direction != DirectionInbound ||
 		a.EffectiveAction() != ActionAccept || b.EffectiveAction() != ActionAccept ||
-		(!a.IsPortForward() && !b.IsPortForward()) || !sharesProtocol(a.Protocol, b.Protocol) {
+		(!a.IsPortForward(host) && !b.IsPortForward(host)) || !sharesProtocol(a.Protocol, b.Protocol) {
 		return false
 	}
-	sameTarget := a.Destination.Kind == b.Destination.Kind &&
-		canonicalPrefix(a.Destination.CIDR) == canonicalPrefix(b.Destination.CIDR)
+	sameTarget := a.IsPortForward(host) == b.IsPortForward(host) &&
+		canonicalPrefix(a.Destination) == canonicalPrefix(b.Destination)
 	if !a.Protocol.HasPorts() {
 		return !sameTarget
 	}
 	sameMapping := sameTarget && a.DestinationPort.Equal(b.DestinationPort) && a.PublicPorts().Equal(b.PublicPorts())
-	if a.isAnyPortForward() || b.isAnyPortForward() {
+	if a.isAnyPortForward(host) || b.isAnyPortForward(host) {
 		return a.Enabled && b.Enabled && !sameMapping
 	}
 	return a.PublicPorts().Overlaps(b.PublicPorts()) && !sameMapping
@@ -361,30 +358,74 @@ func CheckReservedPorts(rules []FirewallRule, uiPort, remoteAccessPort int) erro
 	return v.OrNil()
 }
 
-// CheckLANDestinations requires the destination of every enabled port
-// forward to lie inside one of lan, the host's LAN subnets. Disabled rules
-// install nothing and are not checked, so a rule left behind by a changed
-// LAN can be disabled instead of blocking the others.
-func CheckLANDestinations(rules []FirewallRule, lan []netip.Prefix) error {
+// CheckInboundDestinations checks the inbound rules against the host's LAN
+// as detected now (SPEC §16.1), so it runs again on every apply: a rule to
+// one of the host's own addresses opens a service on the host and takes
+// no public port other than its destination port and no keepSourceAddress;
+// a rule to any other address is a port forward, which always accepts,
+// forwards tcp, udp, tcp+udp, esp or gre, and, while enabled, must target
+// an address inside a LAN subnet. Disabled rules install nothing, so a
+// rule left behind by a changed LAN can be disabled instead of blocking
+// the others. It also keeps the shared public address unambiguous: an
+// accepting port forward must not share a public port (or, for esp and
+// gre, the protocol) with another accepting inbound rule that goes
+// elsewhere; a conflict with an any-port forward is reported on both
+// rules. Rules that are invalid on their own are skipped.
+func CheckInboundDestinations(rules []FirewallRule, network HostNetwork) error {
 	v := &ValidationError{}
 	for i, rule := range rules {
-		if !rule.Enabled || !rule.IsPortForward() {
+		if rule.Direction != DirectionInbound || rule.Validate() != nil {
 			continue
 		}
-		prefix, err := ParseIPv4Prefix(rule.Destination.CIDR)
-		if err != nil || !insideAny(prefix.Addr(), lan) {
-			v.AddIssue(fmt.Sprintf("rules[%d].destination", i), lanIssue(lan),
-				"must be inside a LAN subnet of the host ("+describePrefixes(lan)+")")
+		prefix := fmt.Sprintf("rules[%d].", i)
+		if rule.TargetsHost(network.Addresses) {
+			rule.checkHostTarget(v, prefix)
+		} else {
+			rule.checkForwardTarget(v, prefix, network.Subnets)
 		}
+		addPublicAddressConflict(v, rules, i, network.Addresses)
 	}
 	return v.OrNil()
 }
 
-func lanIssue(lan []netip.Prefix) FieldIssue {
-	if len(lan) == 0 {
-		return Issue("firewall_lan_not_detected")
+func (r FirewallRule) checkHostTarget(v *ValidationError, prefix string) {
+	if !r.PublicPort.IsZero() && !r.PublicPort.Equal(r.DestinationPort) {
+		v.AddIssue(prefix+"publicPort", Issue("firewall_public_port_own_address"),
+			"a rule to this device's own address needs no port on the VPN address; leave it empty")
 	}
-	return Issue("firewall_destination_outside_lan", "subnets", describePrefixes(lan))
+	if r.KeepSourceAddress {
+		addKeepSourceIssue(v, prefix+"keepSourceAddress")
+	}
+}
+
+func (r FirewallRule) checkForwardTarget(v *ValidationError, prefix string, lan []netip.Prefix) {
+	if r.EffectiveAction() != ActionAccept {
+		v.AddIssue(prefix+"action", Issue("firewall_forward_accepts_only"),
+			"drop and reject apply only to this device's own address; rules to other devices always accept")
+	}
+	if r.Protocol == ProtocolAny || r.Protocol == ProtocolICMP {
+		v.AddIssue(prefix+"protocol", Issue("firewall_forward_protocol"),
+			"rules to other devices forward tcp, udp, tcp+udp, esp or gre")
+	}
+	if !r.Enabled {
+		return
+	}
+	if issue, msg := LANAddressProblem(netip.MustParseAddr(r.Destination), lan); msg != "" {
+		v.AddIssue(prefix+"destination", issue, msg)
+	}
+}
+
+// LANAddressProblem returns why addr cannot be the target of a port
+// forward given lan, the host's LAN subnets, or an empty message.
+func LANAddressProblem(addr netip.Addr, lan []netip.Prefix) (FieldIssue, string) {
+	switch {
+	case len(lan) == 0:
+		return Issue("firewall_lan_not_detected"), "must be inside the local LAN, which was not detected"
+	case !insideAny(addr, lan):
+		return Issue("firewall_destination_not_in_lan", "subnets", describePrefixes(lan)),
+			"must be inside the local LAN (" + describePrefixes(lan) + ")"
+	}
+	return FieldIssue{}, ""
 }
 
 func insideAny(addr netip.Addr, prefixes []netip.Prefix) bool {

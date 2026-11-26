@@ -165,6 +165,18 @@ func (td *tunnelDeck) logTail() string {
 	return strings.Join(lines, "\n")
 }
 
+// hostAddress returns this device's LAN address as GET /api/firewall
+// reports it.
+func (td *tunnelDeck) hostAddress(t *testing.T) string {
+	t.Helper()
+	var state firewallState
+	td.must(t, td.api.get("/api/firewall", &state), "read the firewall")
+	if state.HostAddress == "" {
+		t.Fatal("GET /api/firewall reports no host address")
+	}
+	return state.HostAddress
+}
+
 // setFirewallRules replaces the firewall rules and keeps every global
 // protection on.
 func (td *tunnelDeck) setFirewallRules(rules []firewallRule) error {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -33,12 +34,15 @@ type firewallRequest struct {
 // the UI: the host's network, empty when detection fails, and the hits of
 // the installed rules by rule ID.
 type firewallResponse struct {
-	Rules       []domain.FirewallRule          `json:"rules"`
-	Settings    domain.FirewallSettings        `json:"settings"`
-	HostAddress string                         `json:"hostAddress"`
-	LANSubnets  []string                       `json:"lanSubnets"`
-	IPForward   bool                           `json:"ipForward"`
-	Counters    map[string]domain.RuleCounters `json:"counters"`
+	Rules       []domain.FirewallRule   `json:"rules"`
+	Settings    domain.FirewallSettings `json:"settings"`
+	HostAddress string                  `json:"hostAddress"`
+	// HostAddresses are all of the host's LAN addresses; an inbound rule to
+	// one of them opens a service on the host instead of forwarding.
+	HostAddresses []string                       `json:"hostAddresses"`
+	LANSubnets    []string                       `json:"lanSubnets"`
+	IPForward     bool                           `json:"ipForward"`
+	Counters      map[string]domain.RuleCounters `json:"counters"`
 	// CountersAvailable is false, and Counters null, when the counters
 	// cannot be read, for example without the iptables comment match.
 	CountersAvailable bool `json:"countersAvailable"`
@@ -113,8 +117,8 @@ func (s *Server) rollbackFirewall(ctx context.Context, previous domain.Firewall,
 
 // validateFirewall checks the request as a whole: the settings, the rules
 // on their own and against each other, the reserved ports (web UI, and
-// remote access while it is on) and the LAN subnets of inbound
-// destinations. The caller holds s.portsMu.
+// remote access while it is on) and the inbound destinations against the
+// host's LAN as detected now. The caller holds s.portsMu.
 func (s *Server) validateFirewall(ctx context.Context, body firewallRequest) (domain.Firewall, error) {
 	v := &domain.ValidationError{}
 	settings := firewallSettings(body.Settings, v)
@@ -126,7 +130,7 @@ func (s *Server) validateFirewall(ctx context.Context, body firewallRequest) (do
 	for _, err := range []error{
 		domain.ValidateFirewallRules(rules),
 		domain.CheckReservedPorts(rules, s.deps.System.UIPort, remotePort),
-		domain.CheckLANDestinations(rules, s.hostNetwork(ctx).Subnets),
+		domain.CheckInboundDestinations(rules, s.hostNetwork(ctx)),
 	} {
 		var fields *domain.ValidationError
 		switch {
@@ -164,7 +168,7 @@ func firewallSettings(body *firewallSettingsRequest, v *domain.ValidationError) 
 	return settings
 }
 
-// ipsecTemplate returns the rules of the "IPsec device" template (SPEC
+// ipsecTemplate returns the rules of the "IPsec router" template (SPEC
 // §16.2) without storing them; the UI inserts them into its rule list.
 func (s *Server) ipsecTemplate(w http.ResponseWriter, r *http.Request) {
 	var body ipsecTemplateRequest
@@ -191,21 +195,21 @@ func (s *Server) ipsecTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 // templateDevice parses the device address, which must be a single IPv4
-// address inside a LAN subnet of the host.
+// address inside a LAN subnet of the host and not one of the host's own.
 func (s *Server) templateDevice(ctx context.Context, address string, v *domain.ValidationError) netip.Addr {
 	device, err := netip.ParseAddr(address)
 	if err != nil || !device.Is4() {
-		v.AddIssue("deviceAddress", domain.Issue("ipv4_address_invalid", "example", "192.168.2.2"), "must be an IPv4 address, e.g. 192.168.2.2")
+		v.AddIssue("deviceAddress", domain.Issue("ipv4_address_invalid", "example", "192.168.1.2"), "must be an IPv4 address, e.g. 192.168.1.2")
 		return netip.Addr{}
 	}
-	probe := []domain.FirewallRule{{
-		Direction: domain.DirectionInbound, Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: address},
-		Enabled: true,
-	}}
-	var fields *domain.ValidationError
-	if errors.As(domain.CheckLANDestinations(probe, s.hostNetwork(ctx).Subnets), &fields) {
-		const field = "rules[0].destination"
-		v.AddIssue("deviceAddress", fields.Issues[field], fields.Fields[field])
+	network := s.hostNetwork(ctx)
+	if slices.Contains(network.Addresses, device) {
+		v.AddIssue("deviceAddress", domain.Issue("firewall_template_own_address"),
+			"must be another device in the local LAN, not this device's own address")
+		return device
+	}
+	if issue, msg := domain.LANAddressProblem(device, network.Subnets); msg != "" {
+		v.AddIssue("deviceAddress", issue, msg)
 	}
 	return device
 }
@@ -234,14 +238,21 @@ func (s *Server) goneHostAccess(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) firewallState(ctx context.Context, firewall domain.Firewall) firewallResponse {
 	network := s.hostNetwork(ctx)
 	response := firewallResponse{
-		Rules:      nonNilSlice(firewall.Rules),
-		Settings:   firewall.FirewallSettings,
-		LANSubnets: make([]string, 0, len(network.Subnets)),
-		IPForward:  network.IPForward,
+		Rules:         make([]domain.FirewallRule, 0, len(firewall.Rules)),
+		Settings:      firewall.FirewallSettings,
+		HostAddresses: make([]string, 0, len(network.Addresses)),
+		LANSubnets:    make([]string, 0, len(network.Subnets)),
+		IPForward:     network.IPForward,
+	}
+	for _, rule := range firewall.Rules {
+		response.Rules = append(response.Rules, rule.WithHostAddress(network.Address()))
 	}
 	response.Counters, response.CountersAvailable = s.ruleCounters(ctx)
-	if network.Address.IsValid() {
-		response.HostAddress = network.Address.String()
+	if address := network.Address(); address.IsValid() {
+		response.HostAddress = address.String()
+	}
+	for _, address := range network.Addresses {
+		response.HostAddresses = append(response.HostAddresses, address.String())
 	}
 	for _, subnet := range network.Subnets {
 		response.LANSubnets = append(response.LANSubnets, subnet.String())

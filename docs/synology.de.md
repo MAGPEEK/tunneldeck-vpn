@@ -113,9 +113,9 @@ Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleib
 
 ## 10. Firewall-Regeln und IPsec
 
-Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zur NAS selbst (**Host**) und zu anderen Geräten in ihrem LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, Host, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:
+Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zu diesem Gerät selbst und zu anderen Geräten im lokalen LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, die Zieladresse, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:
 
-- Eine eingehende Regel an den **Host** öffnet einen Port der NAS an der Tunneladresse (zum Beispiel `5001` von DSM). Host-Zugriffsregeln von 0.1 werden beim ersten Start von 0.2 zu solchen Regeln.
+- Das Ziel einer eingehenden Regel ist eine Adresse im lokalen LAN. Eine eingehende Regel an die **eigene LAN-Adresse dieses Geräts** (die Seite Firewall zeigt sie als „Dieses Gerät: 192.168.1.10“) öffnet einen Port von DSM an der Tunneladresse (zum Beispiel `5001` von DSM). Host-Zugriffsregeln von 0.1 werden beim ersten Start von 0.2 zu solchen Regeln; Regeln, die 0.2.0-alpha mit dem Ziel „Host“ gespeichert hat, funktionieren weiter und werden beim nächsten Speichern mit der Adresse dieses Geräts abgelegt.
 - Eine eingehende Regel an eine andere LAN-Adresse ist eine **Portweiterleitung**. Mit **Quelladresse behalten** sieht das Gerät die echte entfernte Adresse und braucht die NAS als Gateway.
 - Eine **ausgehende** Regel schickt den Verkehr eines LAN-Geräts durch den Tunnel. Das Gerät braucht die NAS als Gateway oder eine Route im LAN-Router, die auf die NAS zeigt. Solange der Tunnel nicht steht, wird dieser Verkehr verworfen (Kill-Switch).
 
@@ -133,13 +133,17 @@ Steht sie auf `0`: Systemsteuerung > Aufgabenplaner > Erstellen > Ausgelöste Au
 
 Die DSM-Firewall filtert Verkehr an die NAS selbst. Die Ketten von TunnelDeck-VPN stehen für Tunnelverkehr an erster Stelle in `INPUT` und `FORWARD`, dort entscheiden also seine Regeln. *Auf der NAS prüfen:* dass DSMs eigene Regeln weitergeleiteten Verkehr zwischen Tunnel und LAN nicht sperren (`sudo iptables -S FORWARD | head -5` sollte zuerst die Sprünge nach `TUNNELDECK-FORWARD` zeigen); nach Änderungen an der DSM-Firewall den Container neu starten.
 
-### Beispiel: ein LANCOM-Router im LAN
+### Ein IPsec-Router im lokalen LAN
 
-Referenzfall (SPEC §16.2): Ein IPsec-Router im LAN, hier ein LANCOM-Router unter `192.168.2.2`, baut seine IPsec-Tunnel über die öffentliche Adresse des Tunnels auf (mdex public.IP).
+Referenzfall (SPEC §16.2): Ein IPsec-Router im lokalen LAN, zum Beispiel unter `192.168.1.2`, baut seine IPsec-Tunnel über die öffentliche Adresse des Tunnels auf.
 
-1. Seite Firewall > **IPsec-Gerät hinzufügen**: ein Name, Geräteadresse `192.168.2.2`, optional die öffentlichen Adressen der Gegenstellen. Die Vorlage fügt eingehend UDP 500, UDP 4500 und ESP an `192.168.2.2` mit behaltener Quelladresse ein und ausgehend UDP und ESP von `192.168.2.2` an die Gegenstellen (oder `0.0.0.0/0`). Die Änderungen speichern.
+1. Seite Firewall > **IPsec-Router hinzufügen**: ein Name, die Adresse des Routers `192.168.1.2`, optional die öffentlichen Adressen der Gegenstellen. Die Vorlage fügt eingehend UDP 500, UDP 4500 und ESP an `192.168.1.2` mit behaltener Quelladresse ein und ausgehend UDP und ESP von `192.168.1.2` an die Gegenstellen (oder `0.0.0.0/0`). Die Änderungen speichern.
 2. Im Router: eine statische Route für die öffentliche Adresse jeder Gegenstelle (`/32`) über die LAN-Adresse der NAS, oder die NAS als Default-Gateway.
 3. In der IPsec-Verbindung des Routers: IKEv2 mit aktuellen Proposals, NAT-Traversal erlaubt (die eigene Adresse des Routers unterscheidet sich von der öffentlichen Adresse, beide Seiten wechseln daher auf UDP 4500), und auf beiden Seiten eine Identität, die keine IP-Adresse ist (Typ FQDN oder E-Mail).
 4. In jeder Gegenstelle: die öffentliche Adresse des Tunnels als Adresse des Routers.
 
-Die Tabelle der fünf Regeln und die ausführlichen Schritte stehen in [`linux.de.md`, „Beispiel: ein IPsec-Router im LAN“](linux.de.md#beispiel-ein-ipsec-router-im-lan). Geprüft: Der End-to-End-Test spielt diesen Fall mit strongSwan 6.0 auf beiden Seiten durch (IKEv2 mit PSK und NAT-T in beide Richtungen, reines ESP mit manuell gesetzten Schlüsseln), mit beiden iptables-Backends, iptables-legacy eingeschlossen, aber auf einem aktuellen Kernel eines Docker-Hosts, nicht auf dem Kernel 4.4 von DSM. *Nicht geprüft:* ein echter LANCOM-Router, DSM 7.2 selbst und eine echte mdex-public.IP-Verbindung.
+Die Tabelle der fünf Regeln und die ausführlichen Schritte stehen in [`linux.de.md`, „Ein IPsec-Router im lokalen LAN“](linux.de.md#ein-ipsec-router-im-lokalen-lan). Geprüft: Der End-to-End-Test spielt diesen Fall mit strongSwan 6.0 auf beiden Seiten durch (IKEv2 mit PSK und NAT-T in beide Richtungen, reines ESP mit manuell gesetzten Schlüsseln), mit beiden iptables-Backends, iptables-legacy eingeschlossen, aber auf einem aktuellen Kernel eines Docker-Hosts, nicht auf dem Kernel 4.4 von DSM. *Nicht geprüft:* ein echter IPsec-Router und DSM 7.2 selbst.
+
+#### Beispiel: LANCOM-Router mit mdex
+
+Ein LANCOM-Router unter `192.168.1.2` nutzt eine mdex-public.IP-Verbindung auf der NAS: Die öffentliche Adresse ist die Adresse von `publicipNN.mdex.de`, die jede Gegenstelle als Adresse des Routers verwendet. Die Schritte sind die oben genannten. *Nicht geprüft:* ein echter LANCOM-Router und eine echte mdex-public.IP-Verbindung.

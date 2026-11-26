@@ -1,6 +1,6 @@
 # TunnelDeck-VPN
 
-**A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC, a Raspberry Pi or a NAS.
+**A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC or a Raspberry Pi.
 
 [Deutsch](README.de.md) · License: MIT · Status: **pre-release 0.2.0-alpha.1**, not yet field-tested
 
@@ -10,7 +10,7 @@
 - **Dashboard**: connection state, VPN address, traffic, and a live log.
 - **Stays connected**: reconnects automatically after network errors, stops immediately when credentials are rejected, and reconnects after a container restart.
 - **Optional daily reconnect** at a time you choose, per profile.
-- **Firewall between VPN and LAN**: everything is blocked unless a rule allows it. Inbound rules open ports on this host or forward them to any LAN device (also ESP/GRE, e.g. for an IPsec router); outbound rules let chosen LAN devices reach networks behind the VPN, with a kill switch. The host keeps its own default route.
+- **Firewall between VPN and LAN**: everything is blocked unless a rule allows it. Inbound rules open ports on this device or forward them to any other device in the local LAN (also ESP/GRE, e.g. for an IPsec router); outbound rules let chosen LAN devices reach networks behind the VPN, with a kill switch. This device keeps its own default route.
 - **Flags outdated settings**: an unencrypted data channel, weak ciphers, compression and similar settings are shown as advisories.
 - **Secure by default**: sign-in required, credentials encrypted at rest, web UI on the LAN only. Optional remote access over HTTPS.
 - **German and English** UI, light and dark theme.

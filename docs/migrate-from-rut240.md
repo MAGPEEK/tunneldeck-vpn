@@ -46,7 +46,7 @@ What happens to each line when you paste it into **Extra options** or import it 
 | `tls-version-min 1.2` | kept | TunnelDeck-VPN renders `tls-version-min 1.2` anyway when no extra option sets a TLS version. |
 | `explicit-exit-notify 2` | kept for UDP | Dropped with a warning when the transport is TCP, because OpenVPN ignores it there. |
 | `fast-io` | dropped with a warning | Deprecated; OpenVPN 2.7 ignores it. |
-| `redirect-gateway def1` | dropped with a warning | Routing is handled by TunnelDeck-VPN; the NAS keeps its own default route. |
+| `redirect-gateway def1` | dropped with a warning | Routing is handled by TunnelDeck-VPN; this device keeps its own default route. |
 
 Lines that run scripts or touch files (`up`, `script-security`, `log`, ...) are rejected; the form names the line.
 
@@ -61,9 +61,9 @@ data-ciphers-fallback none
 
 The tunnel is then unencrypted when the server allows it, and falls back to ChaCha20-Poly1305 when it does not. The dashboard and the form show an advisory that traffic is not encrypted. A `cipher` line in the extra options is dropped with a pointer to the profile field.
 
-## Reaching the NAS from outside
+## Reaching this device from outside
 
-On the RUT240, the router's web UI was reachable over the tunnel. In TunnelDeck-VPN that is replaced by **remote access over HTTPS** (System > Remote access, default port 8443): TunnelDeck-VPN's own UI on `https://<VPN-address>:8443` with a self-signed or uploaded certificate. See [`synology.md`](synology.md#6-remote-access-over-the-tunnel). Other NAS ports become reachable from the tunnel only through an inbound rule on the **Firewall** page (destination "Host"); other LAN devices through a port-forward rule. Everything else stays blocked.
+On the RUT240, the router's web UI was reachable over the tunnel. In TunnelDeck-VPN that is replaced by **remote access over HTTPS** (System > Remote access, default port 8443): TunnelDeck-VPN's own UI on `https://<VPN-address>:8443` with a self-signed or uploaded certificate. See [`synology.md`](synology.md#6-remote-access-over-the-tunnel). Other ports of this device become reachable from the tunnel only through an inbound rule on the **Firewall** page to this device's own LAN address (for example `192.168.1.10`); other devices in the local LAN through an inbound rule to their address (for example `192.168.1.20`), which is a port forward. Everything else stays blocked.
 
 ## Recommendation: move to level 30
 

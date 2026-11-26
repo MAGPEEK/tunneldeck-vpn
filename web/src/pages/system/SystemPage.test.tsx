@@ -68,7 +68,7 @@ describe('SystemPage', () => {
             ...SYSTEM,
             checks: [
               { id: 'ip-forward', ok: false, detail: 'net.ipv4.ip_forward is 0', hint: 'x' },
-              { id: 'lan-subnets', ok: true, detail: '192.168.2.0/24' },
+              { id: 'lan-subnets', ok: true, detail: '192.168.1.0/24' },
             ],
           },
         },
@@ -78,6 +78,31 @@ describe('SystemPage', () => {
     expect(await screen.findByText('IP forwarding')).toBeInTheDocument();
     expect(screen.getByText('LAN subnets')).toBeInTheDocument();
     expect(screen.getByText(/Enable IPv4 forwarding on the host/)).toBeInTheDocument();
+  });
+
+  it('shows a warning check with a warning icon instead of a failure', async () => {
+    renderApp(
+      routes({
+        'GET /api/system': {
+          body: {
+            ...SYSTEM,
+            checks: [
+              {
+                id: 'rule-counters',
+                ok: false,
+                warning: true,
+                detail: 'the iptables comment match is unavailable',
+                hint: 'x',
+              },
+            ],
+          },
+        },
+      }),
+      '/system',
+    );
+    expect(await screen.findByRole('img', { name: 'Warning' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Failed' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Load the comment match on the host/)).toBeInTheDocument();
   });
 
   it('shows a neutral note when this build has no remote access', async () => {

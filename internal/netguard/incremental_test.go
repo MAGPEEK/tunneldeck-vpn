@@ -2,7 +2,6 @@ package netguard
 
 import (
 	"context"
-	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -193,7 +192,7 @@ func TestEveryContentLineIsTagged(t *testing.T) {
 		changed(portForward(domain.ProtocolTCPUDP, "192.168.2.5", domain.PortRange{}), func(r *domain.FirewallRule) { r.ID = "all" }),
 		changed(outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"), func(r *domain.FirewallRule) { r.ID = "out" }),
 	}}
-	rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")})
+	rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, parseLANAddresses(lanListing))
 	for _, chain := range rs.chainContent() {
 		for i, rule := range chain.content {
 			tag := ruleTag(rule)

@@ -376,7 +376,7 @@ func (h *fakeFirewallStore) setRules(rules ...domain.FirewallRule) {
 func hostPortRule(id string, protocol domain.FirewallProtocol, port int) domain.FirewallRule {
 	return domain.FirewallRule{
 		ID: id, Name: fmt.Sprintf("Host port %d/%s", port, protocol), Direction: domain.DirectionInbound,
-		Action: domain.ActionAccept, Protocol: protocol, Destination: domain.FirewallDestination{Kind: domain.DestinationHost},
+		Action: domain.ActionAccept, Protocol: protocol, Destination: testHostNetwork.Address().String(),
 		DestinationPort: domain.SinglePort(port), Enabled: true,
 	}
 }
@@ -388,7 +388,7 @@ func cloneTestFirewall(f domain.Firewall) domain.Firewall {
 
 // testHostNetwork is the LAN fakeFirewall reports by default.
 var testHostNetwork = domain.HostNetwork{
-	Address:   netip.MustParseAddr("192.168.2.10"),
+	Addresses: []netip.Addr{netip.MustParseAddr("192.168.2.10")},
 	Subnets:   []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")},
 	IPForward: true,
 }

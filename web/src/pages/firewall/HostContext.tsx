@@ -3,7 +3,7 @@ import type { FirewallState } from '../../api/firewall';
 import { Notice } from '../../components/Notice';
 import styles from './FirewallPage.module.css';
 
-/** "Host: 192.168.2.10 · LAN: 192.168.2.0/24 · IP forwarding: on", a warning when off. */
+/** "This device: 192.168.1.10 · Local LAN: 192.168.1.0/24 · IP forwarding: on", a warning when off. */
 export function HostContext({ state }: { state: FirewallState }) {
   const { t } = useTranslation();
   const notDetected = t('firewall.context.notDetected');

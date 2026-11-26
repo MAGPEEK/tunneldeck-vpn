@@ -30,8 +30,10 @@ import (
 // moved behind temporary DROP guards, so a failure leaves DROP in place;
 // the other chains are still attempted and all errors are returned.
 //
-// The LAN subnets are detected anew on every call; enabled port forwards
-// must target one of them. While a remote-access port is set
+// The LAN is detected anew on every call: an inbound rule to one of the
+// host's own LAN addresses opens a service on the host, any other one is
+// a port forward, whose target must lie in a LAN subnet while enabled
+// (domain.CheckInboundDestinations). While a remote-access port is set
 // (SetRemoteAccessPort), TUNNELDECK-INPUT also accepts TCP to that port.
 // While the tunnel is routed (RouteThroughTunnel), the policy rules follow
 // the new rules at once.
@@ -106,11 +108,11 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	if err != nil {
 		return fmt.Errorf("install firewall: %w", err)
 	}
-	if err := domain.CheckLANDestinations(firewall.Rules, subnets(lan)); err != nil {
+	if err := domain.CheckInboundDestinations(firewall.Rules, hostNetwork(lan)); err != nil {
 		return err
 	}
 	var errs []error
-	for _, chain := range buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, subnets(lan)).chainContent() {
+	for _, chain := range buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, lan).chainContent() {
 		content := chain.content
 		if !tagged {
 			content = untaggedContent(content)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"tunneldeck/internal/domain"
@@ -35,7 +36,7 @@ func (g *Guard) LANSubnets(ctx context.Context) ([]netip.Prefix, error) {
 	return subnets(addrs), nil
 }
 
-// HostNetwork returns the host's first LAN address, its LAN subnets and
+// HostNetwork returns the host's LAN addresses, its LAN subnets and
 // whether IPv4 forwarding is on. An unreadable ip_forward counts as off.
 func (g *Guard) HostNetwork(ctx context.Context) (domain.HostNetwork, error) {
 	g.mu.Lock()
@@ -45,10 +46,8 @@ func (g *Guard) HostNetwork(ctx context.Context) (domain.HostNetwork, error) {
 		return domain.HostNetwork{}, err
 	}
 	forward, _ := g.ipForwardValue()
-	network := domain.HostNetwork{Subnets: subnets(addrs), IPForward: forward == "1"}
-	if len(addrs) > 0 {
-		network.Address = addrs[0].prefix.Addr()
-	}
+	network := hostNetwork(addrs)
+	network.IPForward = forward == "1"
 	return network, nil
 }
 
@@ -96,6 +95,22 @@ func isLANInterface(iface string) bool {
 		}
 	}
 	return true
+}
+
+// hostNetwork is the host's LAN of addrs, IP forwarding unknown.
+func hostNetwork(addrs []lanAddress) domain.HostNetwork {
+	return domain.HostNetwork{Addresses: hostAddresses(addrs), Subnets: subnets(addrs)}
+}
+
+// hostAddresses returns the distinct addresses of addrs in detection order.
+func hostAddresses(addrs []lanAddress) []netip.Addr {
+	var out []netip.Addr
+	for _, a := range addrs {
+		if !slices.Contains(out, a.prefix.Addr()) {
+			out = append(out, a.prefix.Addr())
+		}
+	}
+	return out
 }
 
 // subnets returns the distinct subnets of addrs in detection order.

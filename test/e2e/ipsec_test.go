@@ -132,9 +132,9 @@ func (sc *lanScenario) applyIPsecTemplate(t *testing.T) {
 		t.Fatalf("IPsec template returned %d rules, want 5: %+v", len(template.Rules), template.Rules)
 	}
 	for _, rule := range template.Rules {
-		if rule.Direction == "inbound" && (!rule.KeepSourceAddress || rule.Destination.CIDR != lanIPsecAddress.String()) {
+		if rule.Direction == "inbound" && (!rule.KeepSourceAddress || rule.Destination != lanIPsecAddress.String()) {
 			t.Errorf("template rule %q: keepSourceAddress %v, destination %q; want true and %s",
-				rule.Name, rule.KeepSourceAddress, rule.Destination.CIDR, lanIPsecAddress)
+				rule.Name, rule.KeepSourceAddress, rule.Destination, lanIPsecAddress)
 		}
 	}
 	sc.td.must(t, sc.td.setFirewallRules(template.Rules), "save the IPsec template rules")

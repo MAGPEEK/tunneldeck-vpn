@@ -13,6 +13,9 @@ import {
   visiblePortFields,
 } from './ruleDraft';
 
+/** The host's own LAN addresses. */
+const HOST = ['192.168.1.10'];
+
 const forward: FirewallRule = {
   id: 'f',
   name: 'Web',
@@ -20,7 +23,7 @@ const forward: FirewallRule = {
   action: 'accept',
   protocol: 'tcp',
   source: '',
-  destination: { kind: 'address', cidr: '192.168.2.2' },
+  destination: '192.168.1.2',
   destinationPort: { from: 443 },
   publicPort: { from: 4444 },
   keepSourceAddress: true,
@@ -49,12 +52,12 @@ describe('ports', () => {
 
 describe('toRule', () => {
   it('round-trips a stored rule', () => {
-    expect(toRule(toDraft(forward))).toEqual(forward);
+    expect(toRule(toDraft(forward), HOST)).toEqual(forward);
   });
 
   it('drops fields that do not apply to the protocol and destination', () => {
     const draft = { ...toDraft(forward), protocol: 'esp' as const, icmpType: 'echo-request' };
-    expect(toRule(draft)).toEqual({
+    expect(toRule(draft, HOST)).toEqual({
       ...forward,
       protocol: 'esp',
       destinationPort: undefined,
@@ -62,11 +65,11 @@ describe('toRule', () => {
     });
     const toHost = {
       ...toDraft(forward),
-      destinationKind: 'host' as const,
+      destination: ' 192.168.1.10 ',
       action: 'drop' as const,
     };
-    const rule = toRule(toHost);
-    expect(rule.destination).toEqual({ kind: 'host' });
+    const rule = toRule(toHost, HOST);
+    expect(rule.destination).toBe('192.168.1.10');
     expect(rule.publicPort).toBeUndefined();
     expect(rule.keepSourceAddress).toBe(false);
     expect(rule.action).toBe('drop');
@@ -74,7 +77,7 @@ describe('toRule', () => {
 
   it('sends an empty port as any port, without a public port for a forward', () => {
     const anyPort = { ...toDraft(forward), destinationPort: '', sourcePort: '' };
-    expect(toRule(anyPort)).toEqual({
+    expect(toRule(anyPort, HOST)).toEqual({
       ...forward,
       destinationPort: undefined,
       publicPort: undefined,
@@ -82,16 +85,22 @@ describe('toRule', () => {
   });
 
   it('forces accept for port forwards and keeps the ICMP type only for ICMP', () => {
-    expect(toRule({ ...toDraft(forward), action: 'reject' }).action).toBe('accept');
+    expect(toRule({ ...toDraft(forward), action: 'reject' }, HOST).action).toBe('accept');
     const ping = { ...newDraft('inbound'), protocol: 'icmp' as const, icmpType: 'echo-request' };
-    expect(toRule(ping).icmpType).toBe('echo-request');
+    expect(toRule(ping, HOST).icmpType).toBe('echo-request');
+  });
+
+  it('treats a rule to any of the host addresses as a rule to the host', () => {
+    const toSecond = { ...toDraft(forward), destination: '10.10.0.1', action: 'drop' as const };
+    expect(toRule(toSecond, HOST).action).toBe('accept');
+    expect(toRule(toSecond, [...HOST, '10.10.0.1']).action).toBe('drop');
   });
 });
 
 describe('newDraft', () => {
-  it('defaults inbound rules to TCP+UDP to this device and outbound rules to any protocol', () => {
-    expect(newDraft('inbound')).toMatchObject({ protocol: 'tcp+udp', destinationKind: 'host' });
-    expect(newDraft('outbound')).toMatchObject({ protocol: 'any', destinationKind: 'address' });
+  it('defaults inbound rules to TCP+UDP and outbound rules to any protocol, without a destination', () => {
+    expect(newDraft('inbound')).toMatchObject({ protocol: 'tcp+udp', destination: '' });
+    expect(newDraft('outbound')).toMatchObject({ protocol: 'any', destination: '' });
   });
 });
 
@@ -134,8 +143,8 @@ describe('moveDraft', () => {
 describe('draftsDiffer', () => {
   it('ignores the highlight and compares what would be sent', () => {
     const draft = toDraft(forward, true);
-    expect(draftsDiffer([draft], [forward])).toBe(false);
-    expect(draftsDiffer([{ ...draft, destinationPort: '444' }], [forward])).toBe(true);
+    expect(draftsDiffer([draft], [forward], HOST)).toBe(false);
+    expect(draftsDiffer([{ ...draft, destinationPort: '444' }], [forward], HOST)).toBe(true);
   });
 });
 

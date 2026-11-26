@@ -11,15 +11,15 @@ import (
 	"tunneldeck/internal/domain"
 )
 
-// lancomFirewall is the IPsec device of SPEC §16.2 with the IKE port only:
+// routerFirewall is the IPsec router of SPEC §16.2 with the IKE port only:
 // an outbound rule for 192.168.2.2 plus UDP 500 and ESP forwarded to it.
-var lancomFirewall = rulesOnly(
+var routerFirewall = rulesOnly(
 	portForward(domain.ProtocolUDP, "192.168.2.2", domain.SinglePort(500)),
 	portForward(domain.ProtocolESP, "192.168.2.2", domain.PortRange{}),
 	outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"),
 )
 
-// The policy rules of lancomFirewall on lanListing.
+// The policy rules of routerFirewall on lanListing.
 const (
 	addLANExclusion = "ip rule add from 192.168.2.2/32 to 192.168.2.0/24 lookup main priority 7100"
 	addIKEReplies   = "ip rule add from 192.168.2.2/32 to 0.0.0.0/0 ipproto 17 sport 500 lookup 7194 priority 7191"
@@ -27,11 +27,11 @@ const (
 	addOutbound     = "ip rule add from 192.168.2.2/32 to 0.0.0.0/0 lookup 7194 priority 7190"
 )
 
-func lancomGuard(t *testing.T, f *fakeRunner) *Guard {
+func routerGuard(t *testing.T, f *fakeRunner) *Guard {
 	t.Helper()
 	scriptState(f, installedState{input: 1, forward: 1, forwardJumps: []string{"-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"}})
 	g := newLegacyGuard(f)
-	if err := g.InstallFirewall(context.Background(), lancomFirewall, uiPort); err != nil {
+	if err := g.InstallFirewall(context.Background(), routerFirewall, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	f.takeCalls()
@@ -72,7 +72,7 @@ func TestRouteThroughTunnelInstallsPolicyRules(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
-			g := lancomGuard(t, f)
+			g := routerGuard(t, f)
 			f.on(ruleShow, ok(tt.listing))
 			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
 				t.Fatalf("RouteThroughTunnel: %v", err)
@@ -84,7 +84,7 @@ func TestRouteThroughTunnelInstallsPolicyRules(t *testing.T) {
 
 func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 	f := newFakeRunner()
-	g := lancomGuard(t, f)
+	g := routerGuard(t, f)
 	f.on(ruleShow, ok(defaultRules))
 	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 		"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n"))
 	f.on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
 		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
-	if err := g.InstallFirewall(context.Background(), rulesOnly(lancomFirewall.Rules[:2]...), uiPort); err != nil {
+	if err := g.InstallFirewall(context.Background(), rulesOnly(routerFirewall.Rules[:2]...), uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	calls := f.takeCalls()
@@ -108,7 +108,7 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 
 func TestKillSwitchWhileDisconnected(t *testing.T) {
 	f := newFakeRunner()
-	g := lancomGuard(t, f)
+	g := routerGuard(t, f)
 	f.on(ruleShow, ok("7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n"+
 		"7190:\tfrom 192.168.2.2 lookup 7194\n"+
 		"7191:\tfrom 192.168.2.2 ipproto 17 sport 500 lookup 7194\n"+
@@ -128,7 +128,7 @@ func TestKillSwitchWhileDisconnected(t *testing.T) {
 	// final DROP of TUNNELDECK-FORWARD and adds no policy rule.
 	state := installedState{input: 1, forward: 1, forwardJumps: []string{"-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"}}
 	scriptState(f, state)
-	if err := g.InstallFirewall(context.Background(), lancomFirewall, uiPort); err != nil {
+	if err := g.InstallFirewall(context.Background(), routerFirewall, uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	calls := f.takeCalls()
@@ -197,7 +197,7 @@ func TestPolicyRuleFailures(t *testing.T) {
 				if err := routeThroughTunnel(g); err != nil {
 					return err
 				}
-				return g.InstallFirewall(context.Background(), lancomFirewall, uiPort)
+				return g.InstallFirewall(context.Background(), routerFirewall, uiPort)
 			},
 			wantErr: "update policy routing",
 		},
@@ -205,7 +205,7 @@ func TestPolicyRuleFailures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
-			g := lancomGuard(t, f)
+			g := routerGuard(t, f)
 			tt.script(f)
 			if err := tt.run(g); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
@@ -234,7 +234,7 @@ func TestWantedPolicyRulesExcludeTheHostsOwnAddress(t *testing.T) {
 		"rule add from 192.168.2.3/32 to 0.0.0.0/0 ipproto 6 sport 6000-6010 lookup 7194 priority 7191",
 		"rule add from 192.168.2.3/32 to 0.0.0.0/0 ipproto 17 sport 6000-6010 lookup 7194 priority 7191",
 	})
-	if needsPolicyRules(testFirewall) {
+	if mayNeedPolicyRules(testFirewall) {
 		t.Error("host rules need no policy rules")
 	}
 }
@@ -324,7 +324,7 @@ func TestRouteThroughTunnelRoutesRemoteNetworks(t *testing.T) {
 
 func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
 	f := newFakeRunner()
-	g := lancomGuard(t, f)
+	g := routerGuard(t, f)
 	f.on(ruleShow, ok(defaultRules))
 	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks[:1]); err != nil {
 		t.Fatal(err)
@@ -341,7 +341,7 @@ func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
 		"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n"))
 	f.on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
 		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
-	if err := g.InstallFirewall(context.Background(), rulesOnly(lancomFirewall.Rules[:2]...), uiPort); err != nil {
+	if err := g.InstallFirewall(context.Background(), rulesOnly(routerFirewall.Rules[:2]...), uiPort); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	calls := f.takeCalls()

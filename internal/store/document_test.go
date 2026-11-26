@@ -46,8 +46,8 @@ func TestOpenRejectsBadFiles(t *testing.T) {
 		{"wrong field type", ProfilesFileName, `{"schemaVersion":1,"profiles":{}}`, []string{ProfilesFileName, "corrupted"}, nil},
 		{"unsupported language", SettingsFileName, `{"schemaVersion":1,"language":"fr"}`, []string{SettingsFileName, "language"}, nil},
 		{
-			"newer settings", SettingsFileName, `{"schemaVersion":3}`,
-			[]string{SettingsFileName, "version 3", "up to 2"}, errSchemaTooNew,
+			"newer settings", SettingsFileName, `{"schemaVersion":4}`,
+			[]string{SettingsFileName, "version 4", "up to 3"}, errSchemaTooNew,
 		},
 		{
 			"newer profiles", ProfilesFileName, `{"schemaVersion":7,"profiles":[]}`,
@@ -108,6 +108,7 @@ func TestMigrationHook(t *testing.T) {
 			return nil
 		},
 		1: migrateSettingsV1ToV2,
+		2: migrateSettingsV2ToV3,
 	}
 	s, err := open(dir, newCipher(t, 1), deps)
 	if err != nil {
@@ -127,8 +128,8 @@ func TestMigrationHook(t *testing.T) {
 	if err := json.Unmarshal(readFile(t, dir, SettingsFileName), &written); err != nil {
 		t.Fatal(err)
 	}
-	if string(written[schemaVersionKey]) != "2" {
-		t.Fatalf("written schemaVersion = %s, want 2", written[schemaVersionKey])
+	if string(written[schemaVersionKey]) != "3" {
+		t.Fatalf("written schemaVersion = %s, want 3", written[schemaVersionKey])
 	}
 }
 

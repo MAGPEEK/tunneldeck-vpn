@@ -3,7 +3,6 @@ import { request } from './client';
 export type FirewallDirection = 'inbound' | 'outbound';
 export type FirewallAction = 'accept' | 'drop' | 'reject';
 export type FirewallProtocol = 'tcp' | 'udp' | 'tcp+udp' | 'icmp' | 'esp' | 'gre' | 'any';
-export type DestinationKind = 'host' | 'address';
 
 /** A single port (`to` absent or equal to `from`) or the inclusive range from–to. */
 export interface PortRange {
@@ -11,12 +10,11 @@ export interface PortRange {
   to?: number;
 }
 
-export interface FirewallDestination {
-  kind: DestinationKind;
-  cidr?: string;
-}
-
-/** One rule as `internal/domain/firewall.go` serialises it. Absent ports mean "none". */
+/**
+ * One rule as `internal/domain/firewall.go` serialises it. Absent ports mean "none".
+ * `destination` is one IPv4 address in the local LAN for inbound rules and an
+ * address or CIDR network for outbound rules.
+ */
 export interface FirewallRule {
   id: string;
   name: string;
@@ -26,7 +24,7 @@ export interface FirewallRule {
   icmpType?: string;
   source: string;
   sourcePort?: PortRange;
-  destination: FirewallDestination;
+  destination: string;
   destinationPort?: PortRange;
   publicPort?: PortRange;
   keepSourceAddress: boolean;
@@ -45,7 +43,10 @@ export interface FirewallSettings {
 export interface FirewallState {
   rules: FirewallRule[];
   settings: FirewallSettings;
+  /** The address offered as "this device's address". */
   hostAddress: string;
+  /** All of the host's LAN addresses: an inbound rule to one of them opens a service on the host. */
+  hostAddresses: string[];
   lanSubnets: string[];
   ipForward: boolean;
 }
@@ -69,13 +70,18 @@ export function putFirewall(update: FirewallUpdate): Promise<FirewallState> {
   return request<FirewallState>('/api/firewall', { method: 'PUT', body: update });
 }
 
-/** Rules of the "IPsec device" template; nothing is stored. */
+/** Rules of the "IPsec router" template; nothing is stored. */
 export async function ipsecTemplate(body: IpsecTemplateRequest): Promise<FirewallRule[]> {
   const response = await request<{ rules: FirewallRule[] }>('/api/firewall/templates/ipsec', {
     method: 'POST',
     body,
   });
   return response.rules;
+}
+
+/** Whether an inbound rule to `destination` opens a service on the host instead of forwarding. */
+export function targetsHost(destination: string, hostAddresses: readonly string[]): boolean {
+  return hostAddresses.includes(destination.trim());
 }
 
 export function hasPorts(protocol: FirewallProtocol): boolean {

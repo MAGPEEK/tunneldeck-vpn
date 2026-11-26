@@ -104,44 +104,51 @@ type hostPorts struct {
 
 // buildRuleset renders the chains for firewall (SPEC §16.1, §16.1a). Only
 // enabled rules install anything, in list order. Each line is tagged with
-// its rule or its fixed purpose. lan are the host's LAN subnets.
-func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []netip.Prefix) ruleset {
+// its rule or its fixed purpose. lan are the host's LAN addresses: an
+// inbound rule to one of them is a rule to the host, any other a port
+// forward.
+func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress) ruleset {
 	var enabled []parsedRule
+	host := hostAddresses(lan)
 	for _, rule := range firewall.Rules {
 		if rule.Enabled {
-			enabled = append(enabled, parseRule(rule))
+			enabled = append(enabled, parseRule(rule, host))
 		}
 	}
 	return ruleset{
 		input:       inputContent(firewall.FirewallSettings, enabled, reserved),
-		forward:     forwardContent(firewall.FirewallSettings, enabled, lan),
+		forward:     forwardContent(firewall.FirewallSettings, enabled, subnets(lan)),
 		prerouting:  preroutingContent(enabled, reserved),
 		postrouting: postroutingContent(enabled),
 		killSwitch:  killSwitchJumps(enabled),
 	}
 }
 
-// parsedRule is a validated rule with its addresses parsed.
+// parsedRule is a validated rule with its addresses parsed and its target
+// classified against the host's current LAN addresses.
 type parsedRule struct {
 	domain.FirewallRule
 	source      netip.Prefix // zero for "any"
-	destination netip.Prefix // zero for the host
+	destination netip.Prefix // zero for a legacy host rule
+	toHost      bool         // an inbound rule to the host itself
 }
 
-func parseRule(rule domain.FirewallRule) parsedRule {
-	p := parsedRule{FirewallRule: rule}
+func parseRule(rule domain.FirewallRule, host []netip.Addr) parsedRule {
+	p := parsedRule{FirewallRule: rule, toHost: rule.TargetsHost(host)}
 	if rule.Source != "" {
 		p.source, _ = domain.ParseIPv4Prefix(rule.Source)
 	}
-	if rule.Destination.Kind == domain.DestinationAddress {
-		p.destination, _ = domain.ParseIPv4Prefix(rule.Destination.CIDR)
+	if rule.Destination != "" {
+		p.destination, _ = domain.ParseIPv4Prefix(rule.Destination)
 	}
 	return p
 }
 
-func (r parsedRule) isHostRule() bool {
-	return r.Direction == domain.DirectionInbound && r.Destination.Kind == domain.DestinationHost
-}
+func (r parsedRule) isHostRule() bool { return r.toHost }
+
+// isPortForward reports whether r forwards inbound traffic to another LAN
+// device.
+func (r parsedRule) isPortForward() bool { return r.Direction == domain.DirectionInbound && !r.toHost }
 
 func (r parsedRule) isOutboundAccept() bool {
 	return r.Direction == domain.DirectionOutbound && r.EffectiveAction() == domain.ActionAccept
@@ -195,7 +202,7 @@ func forwardContent(settings domain.FirewallSettings, rules []parsedRule, lan []
 	out = append(out, floodRules(settings, []string{"-i", DeviceName}, "fwd")...)
 	for _, rule := range rules {
 		switch {
-		case rule.IsPortForward():
+		case rule.isPortForward():
 			out = append(out, portForwardAccepts(rule)...)
 		case rule.Direction == domain.DirectionOutbound:
 			out = append(out, outboundRules(rule)...)
@@ -276,7 +283,7 @@ func preroutingContent(rules []parsedRule, reserved hostPorts) [][]string {
 		}
 	}
 	for _, rule := range rules {
-		if !rule.IsPortForward() {
+		if !rule.isPortForward() {
 			continue
 		}
 		for _, proto := range rule.Protocol.Protocols() {
@@ -290,7 +297,7 @@ func preroutingContent(rules []parsedRule, reserved hostPorts) [][]string {
 
 func forwardsEveryTCPPort(rules []parsedRule) bool {
 	return slices.ContainsFunc(rules, func(rule parsedRule) bool {
-		return rule.IsPortForward() && rule.DestinationPort.IsZero() &&
+		return rule.isPortForward() && rule.DestinationPort.IsZero() &&
 			slices.Contains(rule.Protocol.Protocols(), domain.ProtocolTCP)
 	})
 }
@@ -316,7 +323,7 @@ func postroutingContent(rules []parsedRule) [][]string {
 	var out [][]string
 	for _, rule := range rules {
 		switch {
-		case rule.IsPortForward() && !rule.KeepSourceAddress:
+		case rule.isPortForward() && !rule.KeepSourceAddress:
 			for _, proto := range rule.Protocol.Protocols() {
 				match := slices.Concat([]string{"!", "-o", DeviceName, "-d", rule.destination.String()},
 					protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort))

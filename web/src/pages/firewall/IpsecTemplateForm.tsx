@@ -16,7 +16,7 @@ export interface IpsecTemplateFormProps {
   onCancel: () => void;
 }
 
-/** The "IPsec device" template (SPEC §16.2): asks the server for the rules and hands them over. */
+/** The "IPsec router" template (SPEC §16.2): asks the server for the rules and hands them over. */
 export function IpsecTemplateForm({ onInsert, onCancel }: IpsecTemplateFormProps) {
   const { t } = useTranslation();
   const titleId = useId();

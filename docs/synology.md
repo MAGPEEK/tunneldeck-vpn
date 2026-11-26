@@ -113,9 +113,9 @@ This removes the admin account and all sessions; profiles and settings stay. Ope
 
 ## 10. Firewall rules and IPsec
 
-The **Firewall** page controls what crosses the tunnel in both directions, to the NAS itself (**Host**) and to other devices in its LAN; everything no rule allows is dropped, replies always pass, rules apply top to bottom. The concepts (inbound and outbound rules, Host, port forwards, keep source address, the gateway requirement, the kill switch) are explained in [`linux.md`, section 10](linux.md#10-firewall-rules); they are the same on DSM. In short:
+The **Firewall** page controls what crosses the tunnel in both directions, to this device itself and to other devices in the local LAN; everything no rule allows is dropped, replies always pass, rules apply top to bottom. The concepts (inbound and outbound rules, the destination address, port forwards, keep source address, the gateway requirement, the kill switch) are explained in [`linux.md`, section 10](linux.md#10-firewall-rules); they are the same on DSM. In short:
 
-- An inbound rule to the **Host** opens a port of the NAS on the tunnel address (for example DSM's `5001`). Host-access rules of 0.1 become such rules on the first start of 0.2.
+- The destination of an inbound rule is one address in the local LAN. An inbound rule to **this device's own LAN address** (the Firewall page shows it as "This device: 192.168.1.10") opens a port of DSM on the tunnel address (for example DSM's `5001`). Host-access rules of 0.1 become such rules on the first start of 0.2; rules that 0.2.0-alpha stored with the destination "Host" keep working and are stored with this device's address on the next save.
 - An inbound rule to another LAN address is a **port forward**. With **Keep source address** on, the device sees the real remote address and needs the NAS as its gateway.
 - An **outbound** rule sends a LAN device's traffic through the tunnel. The device needs the NAS as gateway, or a route in the LAN router that points to the NAS. While the tunnel is down that traffic is dropped (kill switch).
 
@@ -133,13 +133,17 @@ If it is `0`: Control Panel > Task Scheduler > Create > Triggered Task > User-de
 
 The DSM firewall filters traffic to the NAS itself. TunnelDeck-VPN's chains are first in `INPUT` and `FORWARD` for tunnel traffic, so its rules decide there. *Check on your NAS:* that forwarded traffic between the tunnel and the LAN is not blocked by DSM's own rules (`sudo iptables -S FORWARD | head -5` should show the `TUNNELDECK-FORWARD` jumps first); restart the container after changing DSM firewall settings.
 
-### Example: a LANCOM router in the LAN
+### An IPsec router in the local LAN
 
-Reference case (SPEC §16.2): an IPsec router in the LAN, here a LANCOM router at `192.168.2.2`, builds its IPsec tunnels through the tunnel's public address (mdex public.IP).
+Reference case (SPEC §16.2): an IPsec router in the local LAN, for example at `192.168.1.2`, builds its IPsec tunnels through the tunnel's public address.
 
-1. Firewall page > **Add IPsec device**: a name, device address `192.168.2.2`, optionally the peers' public addresses. The template inserts inbound UDP 500, UDP 4500 and ESP to `192.168.2.2` with keep source address on, and outbound UDP and ESP from `192.168.2.2` to the peers (or `0.0.0.0/0`). Save the changes.
+1. Firewall page > **Add IPsec router**: a name, the router's address `192.168.1.2`, optionally the peers' public addresses. The template inserts inbound UDP 500, UDP 4500 and ESP to `192.168.1.2` with keep source address on, and outbound UDP and ESP from `192.168.1.2` to the peers (or `0.0.0.0/0`). Save the changes.
 2. In the router: a static route for each peer's public address (`/32`) via the NAS's LAN address, or the NAS as default gateway.
 3. In the router's IPsec connection: IKEv2 with current proposals, NAT traversal allowed (the router's own address differs from the public address, so both sides move to UDP 4500), and on both sides an identity that is not an IP address (FQDN or e-mail type).
 4. In each peer: the tunnel's public address as the router's address.
 
-The table of the five rules and the full steps are in [`linux.md`, "Example: an IPsec router in the LAN"](linux.md#example-an-ipsec-router-in-the-lan). What was tested: the end-to-end test runs this case with strongSwan 6.0 on both sides (IKEv2 with PSK and NAT-T in both directions, plain ESP with manually keyed SAs) on both iptables backends, iptables-legacy included, but on a current Docker host kernel, not on DSM's kernel 4.4. *Not tested:* a real LANCOM router, DSM 7.2 itself, and a real mdex public.IP connection.
+The table of the five rules and the full steps are in [`linux.md`, "An IPsec router in the local LAN"](linux.md#an-ipsec-router-in-the-local-lan). What was tested: the end-to-end test runs this case with strongSwan 6.0 on both sides (IKEv2 with PSK and NAT-T in both directions, plain ESP with manually keyed SAs) on both iptables backends, iptables-legacy included, but on a current Docker host kernel, not on DSM's kernel 4.4. *Not tested:* a real IPsec router and DSM 7.2 itself.
+
+#### Example: LANCOM router with mdex
+
+A LANCOM router at `192.168.1.2` uses an mdex public.IP connection on the NAS: the public address is the address of `publicipNN.mdex.de`, which each peer uses as the router's address. The steps are the ones above. *Not tested:* a real LANCOM router and a real mdex public.IP connection.

@@ -53,23 +53,18 @@ type profileRequest struct {
 // firewallRule is the part of a firewall rule the test sends and reads
 // back (GET /api/firewall, the IPsec template).
 type firewallRule struct {
-	ID                string              `json:"id,omitempty"`
-	Name              string              `json:"name"`
-	Direction         string              `json:"direction"`
-	Action            string              `json:"action,omitempty"`
-	Protocol          string              `json:"protocol"`
-	Source            string              `json:"source,omitempty"`
-	Destination       firewallDestination `json:"destination"`
-	DestinationPort   portRange           `json:"destinationPort,omitzero"`
-	PublicPort        portRange           `json:"publicPort,omitzero"`
-	KeepSourceAddress bool                `json:"keepSourceAddress"`
-	Enabled           bool                `json:"enabled"`
-	Comment           string              `json:"comment"`
-}
-
-type firewallDestination struct {
-	Kind string `json:"kind"`
-	CIDR string `json:"cidr,omitempty"`
+	ID                string    `json:"id,omitempty"`
+	Name              string    `json:"name"`
+	Direction         string    `json:"direction"`
+	Action            string    `json:"action,omitempty"`
+	Protocol          string    `json:"protocol"`
+	Source            string    `json:"source,omitempty"`
+	Destination       string    `json:"destination"`
+	DestinationPort   portRange `json:"destinationPort,omitzero"`
+	PublicPort        portRange `json:"publicPort,omitzero"`
+	KeepSourceAddress bool      `json:"keepSourceAddress"`
+	Enabled           bool      `json:"enabled"`
+	Comment           string    `json:"comment"`
 }
 
 type portRange struct {
@@ -78,17 +73,19 @@ type portRange struct {
 
 // firewallState is the part of GET /api/firewall the test checks.
 type firewallState struct {
-	Rules      []firewallRule  `json:"rules"`
-	Settings   map[string]bool `json:"settings"`
-	LANSubnets []string        `json:"lanSubnets"`
-	IPForward  bool            `json:"ipForward"`
+	Rules       []firewallRule  `json:"rules"`
+	Settings    map[string]bool `json:"settings"`
+	HostAddress string          `json:"hostAddress"`
+	LANSubnets  []string        `json:"lanSubnets"`
+	IPForward   bool            `json:"ipForward"`
 }
 
-// hostRule opens one TCP port of this device to the tunnel.
-func hostRule(port int, comment string) firewallRule {
+// hostRule opens one TCP port of this device, whose LAN address is
+// hostAddress, to the tunnel.
+func hostRule(hostAddress string, port int, comment string) firewallRule {
 	return firewallRule{
 		Name: fmt.Sprintf("Host port %d/tcp", port), Direction: "inbound", Protocol: "tcp",
-		Destination: firewallDestination{Kind: "host"}, DestinationPort: portRange{From: port}, Enabled: true, Comment: comment,
+		Destination: hostAddress, DestinationPort: portRange{From: port}, Enabled: true, Comment: comment,
 	}
 }
 

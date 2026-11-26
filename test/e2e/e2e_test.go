@@ -285,10 +285,10 @@ func (sc *scenario) checkHostProtection(t *testing.T, vpnIP netip.Addr) {
 	sc.expectReachable(t, vpnIP, uiPort, false)
 	sc.expectReachable(t, vpnIP, listenerPort, false)
 
-	if err := sc.td.setFirewallRules([]firewallRule{hostRule(uiPort, "")}); !isValidationError(err) {
+	if err := sc.td.setFirewallRules([]firewallRule{hostRule(sc.td.hostAddress(t), uiPort, "")}); !isValidationError(err) {
 		t.Errorf("firewall rule for the UI port: error %v, want validation_failed", err)
 	}
-	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{hostRule(listenerPort, "e2e")}), "open the listener port")
+	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{hostRule(sc.td.hostAddress(t), listenerPort, "e2e")}), "open the listener port")
 	sc.expectReachable(t, vpnIP, listenerPort, true)
 	sc.expectReachable(t, vpnIP, uiPort, false)
 

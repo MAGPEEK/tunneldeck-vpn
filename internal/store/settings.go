@@ -12,18 +12,54 @@ type settingsDocument struct {
 	SchemaVersion     int                      `json:"schemaVersion"`
 	Admin             *domain.AdminAccount     `json:"admin"`
 	Language          domain.Language          `json:"language"`
-	Firewall          domain.Firewall          `json:"firewall"`
+	Firewall          firewallRecord           `json:"firewall"`
 	DesiredConnection domain.DesiredConnection `json:"desiredConnection"`
 	// RemoteAccess was added within schema version 1; files without it get
 	// the defaults.
 	RemoteAccess remoteAccessRecord `json:"remoteAccess"`
 }
 
+// firewallRecord is the firewall as settings.json stores it.
+type firewallRecord struct {
+	domain.FirewallSettings
+	Rules []firewallRuleRecord `json:"rules"`
+}
+
+// firewallRuleRecord is a rule plus the marker of a legacy host rule
+// (domain.LegacyHostRule), which the domain keeps private: schema 2 stored
+// "the host" without an address, and only the running host knows it. The
+// next change of the firewall stores plain addresses instead.
+type firewallRuleRecord struct {
+	domain.FirewallRule
+	LegacyHost bool `json:"legacyHost,omitempty"`
+}
+
+func newFirewallRecord(f domain.Firewall) firewallRecord {
+	record := firewallRecord{FirewallSettings: f.FirewallSettings, Rules: make([]firewallRuleRecord, 0, len(f.Rules))}
+	for _, rule := range f.Rules {
+		record.Rules = append(record.Rules, firewallRuleRecord{FirewallRule: rule, LegacyHost: rule.IsLegacyHost()})
+	}
+	return record
+}
+
+// firewall returns the domain firewall in a new rule list.
+func (r firewallRecord) firewall() domain.Firewall {
+	f := domain.Firewall{FirewallSettings: r.FirewallSettings, Rules: make([]domain.FirewallRule, 0, len(r.Rules))}
+	for _, record := range r.Rules {
+		rule := record.FirewallRule
+		if record.LegacyHost {
+			rule = domain.LegacyHostRule(rule)
+		}
+		f.Rules = append(f.Rules, rule)
+	}
+	return f
+}
+
 func defaultSettings() settingsDocument {
 	return settingsDocument{
 		SchemaVersion: settingsSchemaVersion,
 		Language:      domain.DefaultLanguage,
-		Firewall:      domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{}},
+		Firewall:      firewallRecord{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []firewallRuleRecord{}},
 		RemoteAccess:  remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
 	}
 }
@@ -34,7 +70,7 @@ func (d settingsDocument) clone() settingsDocument {
 		admin := *d.Admin
 		c.Admin = &admin
 	}
-	c.Firewall = cloneFirewall(d.Firewall)
+	c.Firewall.Rules = slices.Clone(d.Firewall.Rules)
 	return c
 }
 
@@ -139,13 +175,13 @@ func (s *Store) SetLanguage(language domain.Language) error {
 func (s *Store) Firewall() domain.Firewall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return cloneFirewall(s.settings.Firewall)
+	return s.settings.Firewall.firewall()
 }
 
 // SetFirewall validates and replaces the firewall settings and the whole
 // rule list (domain.ValidateFirewallRules). Rules without an ID get a new
-// one. It returns what was stored. Checks that need the host (LAN subnets,
-// reserved ports) are the caller's.
+// one. It returns what was stored. Checks that need the host (its LAN,
+// reserved ports, conflicts on the public address) are the caller's.
 func (s *Store) SetFirewall(firewall domain.Firewall) (domain.Firewall, error) {
 	if err := domain.ValidateFirewallRules(firewall.Rules); err != nil {
 		return domain.Firewall{}, err
@@ -159,7 +195,7 @@ func (s *Store) SetFirewall(firewall domain.Firewall) (domain.Firewall, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := s.settings.clone()
-	next.Firewall = stored
+	next.Firewall = newFirewallRecord(stored)
 	if err := s.commitSettings(next); err != nil {
 		return domain.Firewall{}, err
 	}

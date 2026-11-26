@@ -12,6 +12,8 @@ const (
 	legacy    = "iptables-legacy -w "
 	natPrefix = "iptables-legacy -w -t nat "
 	uiPort    = 8080
+	// testHostAddress is the host's LAN address in lanListing.
+	testHostAddress = "192.168.2.10"
 )
 
 // testFirewall holds the stage-1 shaped rules: two enabled host rules and
@@ -23,14 +25,14 @@ var testFirewall = domain.Firewall{Rules: []domain.FirewallRule{
 }}
 
 // hostAccess returns an accepting inbound rule to the host on one port,
-// shaped like a migrated stage-1 host-access rule.
+// shaped like a migrated stage-1 host-access rule: a legacy host rule
+// without an address.
 func hostAccess(id string, proto domain.FirewallProtocol, port int, source string, enabled bool) domain.FirewallRule {
-	return domain.FirewallRule{
+	return domain.LegacyHostRule(domain.FirewallRule{
 		ID: id, Name: fmt.Sprintf("Host port %d/%s", port, proto), Direction: domain.DirectionInbound,
 		Action: domain.ActionAccept, Protocol: proto, Source: source,
-		Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(port),
-		Enabled: enabled,
-	}
+		DestinationPort: domain.SinglePort(port), Enabled: enabled,
+	})
 }
 
 // rulesOnly is a firewall with every protection off; rules without an ID
@@ -61,14 +63,14 @@ func onRule(n int, line string) string { return tagLine(fmt.Sprintf("tdrule:r%d"
 func hostRule(proto domain.FirewallProtocol, ports domain.PortRange) domain.FirewallRule {
 	return domain.FirewallRule{
 		Name: "host", Direction: domain.DirectionInbound, Protocol: proto,
-		Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: ports, Enabled: true,
+		Destination: testHostAddress, DestinationPort: ports, Enabled: true,
 	}
 }
 
 func portForward(proto domain.FirewallProtocol, target string, ports domain.PortRange) domain.FirewallRule {
 	return domain.FirewallRule{
 		Name: "forward", Direction: domain.DirectionInbound, Protocol: proto,
-		Destination:     domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: target},
+		Destination:     target,
 		DestinationPort: ports, Enabled: true,
 	}
 }
@@ -76,7 +78,7 @@ func portForward(proto domain.FirewallProtocol, target string, ports domain.Port
 func outboundRule(proto domain.FirewallProtocol, source, destination string) domain.FirewallRule {
 	return domain.FirewallRule{
 		Name: "outbound", Direction: domain.DirectionOutbound, Protocol: proto, Source: source,
-		Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: destination}, Enabled: true,
+		Destination: destination, Enabled: true,
 	}
 }
 

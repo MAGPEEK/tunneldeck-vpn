@@ -7,12 +7,12 @@ import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const dsm: FirewallRule = {
   id: 'a',
-  name: 'DSM',
+  name: 'Admin UI',
   direction: 'inbound',
   action: 'accept',
   protocol: 'tcp',
   source: '203.0.113.0/24',
-  destination: { kind: 'host' },
+  destination: '192.168.1.10',
   destinationPort: { from: 5001 },
   keepSourceAddress: false,
   enabled: true,
@@ -26,7 +26,7 @@ const web: FirewallRule = {
   action: 'accept',
   protocol: 'tcp',
   source: '',
-  destination: { kind: 'address', cidr: '192.168.2.2' },
+  destination: '192.168.1.2',
   destinationPort: { from: 443 },
   publicPort: { from: 4444 },
   keepSourceAddress: true,
@@ -40,8 +40,8 @@ const office: FirewallRule = {
   direction: 'outbound',
   action: 'accept',
   protocol: 'any',
-  source: '192.168.2.0/24',
-  destination: { kind: 'address', cidr: '10.0.0.0/8' },
+  source: '192.168.1.0/24',
+  destination: '10.0.0.0/8',
   keepSourceAddress: false,
   enabled: true,
   comment: '',
@@ -53,8 +53,9 @@ function state(overrides: Partial<FirewallState> = {}): FirewallState {
   return {
     rules: [dsm, office, web],
     settings: SETTINGS,
-    hostAddress: '192.168.2.10',
-    lanSubnets: ['192.168.2.0/24'],
+    hostAddress: '192.168.1.10',
+    hostAddresses: ['192.168.1.10'],
+    lanSubnets: ['192.168.1.0/24'],
     ipForward: true,
     ...overrides,
   };
@@ -94,24 +95,26 @@ describe('FirewallPage', () => {
   it('shows the host network and the rules of each direction in list order', async () => {
     await openPage();
     expect(
-      screen.getByText('Host: 192.168.2.10 · LAN: 192.168.2.0/24 · IP forwarding: on'),
+      screen.getByText('This device: 192.168.1.10 · Local LAN: 192.168.1.0/24 · IP forwarding: on'),
     ).toBeInTheDocument();
     const inbound = screen.getByRole('table', { name: 'Inbound from VPN' });
     const rows = within(inbound).getAllByRole('row').slice(1);
     expect(rows.map((row) => within(row).getAllByRole('cell')[2]?.textContent)).toEqual([
-      'DSM',
+      'Admin UI',
       'Web server',
     ]);
-    expect(within(inbound).getByText('203.0.113.0/24 :any → Host :5001')).toBeInTheDocument();
     expect(
-      within(inbound).getByText('any :any → 192.168.2.2 :443 (public 4444)'),
+      within(inbound).getByText('203.0.113.0/24 :any → 192.168.1.10 :5001'),
+    ).toBeInTheDocument();
+    expect(
+      within(inbound).getByText('any :any → 192.168.1.2 :443 (public 4444)'),
     ).toBeInTheDocument();
     expect(within(inbound).getByRole('img', { name: 'Source address kept' })).toBeInTheDocument();
     expect(within(inbound).queryByText('Office network')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Outbound to VPN' }));
     const outbound = screen.getByRole('table', { name: 'Outbound to VPN' });
-    expect(within(outbound).getByText('192.168.2.0/24 → 10.0.0.0/8')).toBeInTheDocument();
+    expect(within(outbound).getByText('192.168.1.0/24 → 10.0.0.0/8')).toBeInTheDocument();
     expect(within(outbound).queryByText('Keep source')).not.toBeInTheDocument();
     expect(screen.getByText(/Devices must send this traffic to this host/)).toBeInTheDocument();
   });
@@ -142,7 +145,7 @@ describe('FirewallPage', () => {
     expect(saveButton()).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
 
-    const enabled = screen.getByRole('checkbox', { name: 'Enabled: DSM' });
+    const enabled = screen.getByRole('checkbox', { name: 'Enabled: Admin UI' });
     fireEvent.click(enabled);
     expect(saveButton()).toBeEnabled();
     fireEvent.click(enabled);
@@ -159,7 +162,7 @@ describe('FirewallPage', () => {
     const { fetchMock } = await openPage({
       'PUT /api/firewall': { body: state({ rules: [web, office, dsm] }) },
     });
-    expect(screen.getByRole('button', { name: 'Move DSM up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move Admin UI up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Web server down' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Move Web server up' }));
@@ -178,7 +181,15 @@ describe('FirewallPage', () => {
     const e = within(editor);
 
     expect(e.getByRole('combobox', { name: 'Protocol' })).toHaveValue('tcp+udp');
-    expect(e.getByRole('radio', { name: 'Host (192.168.2.10)' })).toBeChecked();
+    const destination = e.getByRole('textbox', { name: 'Destination (address in the local LAN)' });
+    expect(destination).toHaveValue('');
+    expect(destination).toHaveAttribute('placeholder', '192.168.1.10');
+    fireEvent.click(e.getByRole('button', { name: 'This device’s address: 192.168.1.10' }));
+    expect(destination).toHaveValue('192.168.1.10');
+    expect(
+      e.queryByRole('button', { name: 'This device’s address: 192.168.1.10' }),
+    ).not.toBeInTheDocument();
+    expect(e.getByRole('combobox', { name: 'Action' })).toBeEnabled();
     expect(e.getByRole('textbox', { name: 'Source (optional)' })).toHaveAttribute(
       'placeholder',
       'Any',
@@ -195,9 +206,8 @@ describe('FirewallPage', () => {
     expect(e.queryByRole('checkbox', { name: 'Keep source address' })).not.toBeInTheDocument();
     expect(e.queryByRole('textbox', { name: /ICMP type/ })).not.toBeInTheDocument();
 
-    fireEvent.click(e.getByRole('radio', { name: 'Address' }));
-    expect(e.getByRole('textbox', { name: 'Destination address' })).toBeInTheDocument();
-    expect(e.getByText('Must be inside the LAN: 192.168.2.0/24')).toBeInTheDocument();
+    fireEvent.change(destination, { target: { value: '192.168.1.3' } });
+    expect(e.getByText('Must be inside the local LAN: 192.168.1.0/24')).toBeInTheDocument();
     expect(e.getByRole('textbox', { name: 'Port on the VPN address' })).toBeDisabled();
     fireEvent.change(e.getByRole('textbox', { name: 'Destination port' }), {
       target: { value: '443' },
@@ -217,14 +227,40 @@ describe('FirewallPage', () => {
     expect(e.queryByRole('textbox', { name: 'Source port (optional)' })).not.toBeInTheDocument();
   });
 
+  it('sends a drop rule to this device’s own address without a public port', async () => {
+    const { fetchMock } = await openPage({ 'PUT /api/firewall': { body: state() } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    const e = within(screen.getByRole('region', { name: 'Edit rule' }));
+    fireEvent.change(e.getByRole('textbox', { name: 'Name' }), { target: { value: 'Block SSH' } });
+    fireEvent.click(e.getByRole('button', { name: 'This device’s address: 192.168.1.10' }));
+    fireEvent.change(e.getByRole('combobox', { name: 'Action' }), { target: { value: 'drop' } });
+    fireEvent.change(e.getByRole('textbox', { name: 'Destination port' }), {
+      target: { value: '22' },
+    });
+    expect(e.getByRole('textbox', { name: 'Port on the VPN address' })).toBeDisabled();
+    expect(
+      e.getByText('Rules to this device’s own address use the destination port.'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(sentBody(fetchMock).rules).toHaveLength(4));
+    expect(sentBody(fetchMock).rules[3]).toMatchObject({
+      name: 'Block SSH',
+      action: 'drop',
+      destination: '192.168.1.10',
+      destinationPort: { from: 22 },
+      keepSourceAddress: false,
+    });
+    expect(sentBody(fetchMock).rules[3]).not.toHaveProperty('publicPort');
+  });
+
   it('defaults the public port to the destination port', async () => {
     const { fetchMock } = await openPage({ 'PUT /api/firewall': { body: state() } });
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     const e = within(screen.getByRole('region', { name: 'Edit rule' }));
-    fireEvent.change(e.getByRole('textbox', { name: 'Name' }), { target: { value: 'NAS' } });
-    fireEvent.click(e.getByRole('radio', { name: 'Address' }));
-    fireEvent.change(e.getByRole('textbox', { name: 'Destination address' }), {
-      target: { value: '192.168.2.3' },
+    fireEvent.change(e.getByRole('textbox', { name: 'Name' }), { target: { value: 'Storage' } });
+    fireEvent.change(e.getByRole('textbox', { name: 'Destination (address in the local LAN)' }), {
+      target: { value: '192.168.1.3' },
     });
     fireEvent.change(e.getByRole('textbox', { name: 'Destination port' }), {
       target: { value: '8000-8010' },
@@ -233,18 +269,18 @@ describe('FirewallPage', () => {
       'placeholder',
       '8000-8010',
     );
-    expect(screen.getByText('any :any → 192.168.2.3 :8000-8010')).toBeInTheDocument();
+    expect(screen.getByText('any :any → 192.168.1.3 :8000-8010')).toBeInTheDocument();
 
     fireEvent.click(saveButton());
     await waitFor(() => expect(sentBody(fetchMock).rules).toHaveLength(4));
     expect(sentBody(fetchMock).rules[3]).toEqual({
       id: '',
-      name: 'NAS',
+      name: 'Storage',
       direction: 'inbound',
       action: 'accept',
       protocol: 'tcp+udp',
       source: '',
-      destination: { kind: 'address', cidr: '192.168.2.3' },
+      destination: '192.168.1.3',
       destinationPort: { from: 8000, to: 8010 },
       keepSourceAddress: false,
       enabled: true,
@@ -269,7 +305,7 @@ describe('FirewallPage', () => {
     expect(publicPort).toBeDisabled();
     expect(publicPort).toHaveValue('');
     expect(publicPort).toHaveAttribute('placeholder', 'any');
-    expect(screen.getByText('any :any → 192.168.2.2 :any')).toBeInTheDocument();
+    expect(screen.getByText('any :any → 192.168.1.2 :any')).toBeInTheDocument();
 
     fireEvent.click(saveButton());
     await waitFor(() => expect(sentBody(fetchMock).rules).toHaveLength(3));
@@ -295,7 +331,7 @@ describe('FirewallPage', () => {
       '/firewall',
     );
     await screen.findByRole('table', { name: 'Eingehend vom VPN' });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Aktiv: DSM' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Aktiv: Admin UI' }));
     fireEvent.click(screen.getByRole('button', { name: 'Änderungen speichern' }));
 
     const e = within(await screen.findByRole('region', { name: 'Regel bearbeiten' }));
@@ -309,7 +345,7 @@ describe('FirewallPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Outbound to VPN' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     const e = within(screen.getByRole('region', { name: 'Edit rule' }));
-    expect(e.queryByRole('radio')).not.toBeInTheDocument();
+    expect(e.queryByRole('button', { name: /This device’s address/ })).not.toBeInTheDocument();
     expect(e.getByRole('textbox', { name: 'Source (LAN device or subnet)' })).toBeRequired();
     expect(
       e.getByRole('textbox', { name: 'Destination (address or network behind the VPN)' }),
@@ -324,14 +360,14 @@ describe('FirewallPage', () => {
 
   it('duplicates and deletes rules after an inline confirmation', async () => {
     await openPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate DSM' }));
-    expect(screen.getByRole('cell', { name: 'DSM (copy)' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('DSM (copy)');
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Admin UI' }));
+    expect(screen.getByRole('cell', { name: 'Admin UI (copy)' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Admin UI (copy)');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete DSM (copy)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Admin UI (copy)' }));
     const confirm = screen.getByRole('group', { name: 'Confirm deletion' });
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete rule' }));
-    expect(screen.queryByRole('cell', { name: 'DSM (copy)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Admin UI (copy)' })).not.toBeInTheDocument();
     expect(saveButton()).toBeDisabled();
   });
 
@@ -340,7 +376,7 @@ describe('FirewallPage', () => {
       {
         ...web,
         id: '',
-        name: 'LANCOM: IKE',
+        name: 'Router: IKE',
         protocol: 'udp',
         destinationPort: { from: 500 },
         publicPort: undefined,
@@ -348,20 +384,20 @@ describe('FirewallPage', () => {
       {
         ...office,
         id: '',
-        name: 'LANCOM: outbound ESP',
+        name: 'Router: outbound ESP',
         protocol: 'esp',
-        source: '192.168.2.2',
-        destination: { kind: 'address', cidr: '0.0.0.0/0' },
+        source: '192.168.1.2',
+        destination: '0.0.0.0/0',
       },
     ];
     const { fetchMock } = await openPage({
       'POST /api/firewall/templates/ipsec': { body: { rules: template } },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add IPsec device' }));
-    const form = within(screen.getByRole('form', { name: 'IPsec device' }));
-    fireEvent.change(form.getByRole('textbox', { name: 'Name' }), { target: { value: 'LANCOM' } });
-    fireEvent.change(form.getByRole('textbox', { name: 'Device address' }), {
-      target: { value: '192.168.2.2' },
+    fireEvent.click(screen.getByRole('button', { name: 'Add IPsec router' }));
+    const form = within(screen.getByRole('form', { name: 'IPsec router' }));
+    fireEvent.change(form.getByRole('textbox', { name: 'Name' }), { target: { value: 'Router' } });
+    fireEvent.change(form.getByRole('textbox', { name: 'Router address' }), {
+      target: { value: '192.168.1.2' },
     });
     fireEvent.change(form.getByRole('textbox', { name: 'Peer addresses (optional), line 1' }), {
       target: { value: '198.51.100.7' },
@@ -372,16 +408,16 @@ describe('FirewallPage', () => {
       await screen.findByText('2 rules added. Save changes to apply them.'),
     ).toBeInTheDocument();
     expect(sentBody(fetchMock, 'POST')).toEqual({
-      name: 'LANCOM',
-      deviceAddress: '192.168.2.2',
+      name: 'Router',
+      deviceAddress: '192.168.1.2',
       peers: ['198.51.100.7'],
     });
-    expect(rowOf('LANCOM: IKE')).toHaveAttribute('data-state', 'highlighted');
-    expect(within(rowOf('LANCOM: IKE')).getByText('Not saved')).toBeInTheDocument();
+    expect(rowOf('Router: IKE')).toHaveAttribute('data-state', 'highlighted');
+    expect(within(rowOf('Router: IKE')).getByText('Not saved')).toBeInTheDocument();
     expect(saveButton()).toBeEnabled();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Outbound to VPN' }));
-    expect(rowOf('LANCOM: outbound ESP')).toHaveAttribute('data-state', 'highlighted');
+    expect(rowOf('Router: outbound ESP')).toHaveAttribute('data-state', 'highlighted');
   });
 
   it('shows template field errors in the form', async () => {
@@ -390,10 +426,10 @@ describe('FirewallPage', () => {
         fields: { deviceAddress: 'must be inside a LAN subnet' },
       }),
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add IPsec device' }));
-    const form = within(screen.getByRole('form', { name: 'IPsec device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add IPsec router' }));
+    const form = within(screen.getByRole('form', { name: 'IPsec router' }));
     fireEvent.change(form.getByRole('textbox', { name: 'Name' }), { target: { value: 'X' } });
-    fireEvent.change(form.getByRole('textbox', { name: 'Device address' }), {
+    fireEvent.change(form.getByRole('textbox', { name: 'Router address' }), {
       target: { value: '10.1.1.1' },
     });
     fireEvent.click(form.getByRole('button', { name: 'Add rules' }));
@@ -406,7 +442,7 @@ describe('FirewallPage', () => {
         fields: { 'rules[1].destination': 'must be an IPv4 address or a network' },
       }),
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: DSM' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: Admin UI' }));
     fireEvent.click(saveButton());
 
     expect(await screen.findByText('Some rules need attention.')).toBeInTheDocument();
@@ -425,7 +461,7 @@ describe('FirewallPage', () => {
 
   it('rejects malformed ports before sending', async () => {
     const { fetchMock } = await openPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit DSM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Admin UI' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Destination port' }), {
       target: { value: 'https' },
     });
@@ -445,7 +481,7 @@ describe('FirewallPage', () => {
         problem(500, 'firewall_failed', 'iptables missing'),
       ],
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: DSM' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: Admin UI' }));
     fireEvent.click(saveButton());
     expect(await screen.findByText('Some rules need attention.')).toBeInTheDocument();
 
@@ -463,14 +499,14 @@ describe('FirewallPage', () => {
         'The firewall could not be applied; the previous configuration was restored. iptables: no chain',
       ),
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: DSM' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enabled: Admin UI' }));
     fireEvent.click(saveButton());
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('The firewall could not be applied');
     expect(alert).toHaveTextContent('iptables: no chain');
     expect(alert.closest('[data-tone]')).toHaveAttribute('data-tone', 'danger');
-    expect(screen.getByRole('checkbox', { name: 'Enabled: DSM' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Enabled: Admin UI' })).not.toBeChecked();
     expect(saveButton()).toBeEnabled();
   });
 });

@@ -11,9 +11,9 @@ const (
 	SettingsFileName = "settings.json"
 	ProfilesFileName = "profiles.json"
 
-	// settingsSchemaVersion 2 replaced hostAccessRules by firewall (SPEC
-	// §16.3).
-	settingsSchemaVersion = 2
+	// settingsSchemaVersion 2 replaced hostAccessRules by firewall, 3 made
+	// rule destinations plain addresses (SPEC §16.3).
+	settingsSchemaVersion = 3
 	profilesSchemaVersion = 1
 )
 

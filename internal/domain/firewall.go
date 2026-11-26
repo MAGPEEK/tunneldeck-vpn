@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 )
 
@@ -64,25 +65,6 @@ func (p FirewallProtocol) valid() bool {
 		return true
 	}
 	return false
-}
-
-// DestinationKind distinguishes the host itself from an explicit address.
-type DestinationKind string
-
-// Destination kinds.
-const (
-	// DestinationHost is the host itself (shown as "Host"): its own LAN
-	// address, whatever it currently is.
-	DestinationHost DestinationKind = "host"
-	// DestinationAddress is an IPv4 address or network in CIDR.
-	DestinationAddress DestinationKind = "address"
-)
-
-// FirewallDestination is where a rule's traffic goes. CIDR is set only for
-// DestinationAddress; a bare IPv4 address means a single host.
-type FirewallDestination struct {
-	Kind DestinationKind `json:"kind"`
-	CIDR string          `json:"cidr,omitempty"`
 }
 
 // Port range bounds.
@@ -153,24 +135,30 @@ func (p PortRange) String() string {
 }
 
 // FirewallRule is one line of the two-direction firewall (SPEC §16.1,
-// §16.1a). An empty Source matches any source; an empty Action means
-// accept; a zero SourcePort or DestinationPort matches any port; a zero
-// PublicPort means "same as DestinationPort".
+// §16.1a). Destination is one IPv4 address in the local LAN for inbound
+// rules and an IPv4 address or network in CIDR for outbound rules. An
+// empty Source matches any source; an empty Action means accept; a zero
+// SourcePort or DestinationPort matches any port; a zero PublicPort means
+// "same as DestinationPort".
 type FirewallRule struct {
-	ID                string              `json:"id"`
-	Name              string              `json:"name"`
-	Direction         FirewallDirection   `json:"direction"`
-	Action            FirewallAction      `json:"action"`
-	Protocol          FirewallProtocol    `json:"protocol"`
-	ICMPType          string              `json:"icmpType,omitempty"`
-	Source            string              `json:"source"`
-	SourcePort        PortRange           `json:"sourcePort,omitzero"`
-	Destination       FirewallDestination `json:"destination"`
-	DestinationPort   PortRange           `json:"destinationPort,omitzero"`
-	PublicPort        PortRange           `json:"publicPort,omitzero"`
-	KeepSourceAddress bool                `json:"keepSourceAddress"`
-	Enabled           bool                `json:"enabled"`
-	Comment           string              `json:"comment"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Direction         FirewallDirection `json:"direction"`
+	Action            FirewallAction    `json:"action"`
+	Protocol          FirewallProtocol  `json:"protocol"`
+	ICMPType          string            `json:"icmpType,omitempty"`
+	Source            string            `json:"source"`
+	SourcePort        PortRange         `json:"sourcePort,omitzero"`
+	Destination       string            `json:"destination"`
+	DestinationPort   PortRange         `json:"destinationPort,omitzero"`
+	PublicPort        PortRange         `json:"publicPort,omitzero"`
+	KeepSourceAddress bool              `json:"keepSourceAddress"`
+	Enabled           bool              `json:"enabled"`
+	Comment           string            `json:"comment"`
+	// legacyHost marks an inbound rule that settings schema 2 stored with
+	// the destination "the host itself" and no address; Destination is then
+	// empty. Only the store creates such rules (LegacyHostRule).
+	legacyHost bool
 }
 
 // EffectiveAction returns the action, ActionAccept when none is set.
@@ -181,16 +169,55 @@ func (r FirewallRule) EffectiveAction() FirewallAction {
 	return r.Action
 }
 
+// LegacyHostRule returns r as an inbound rule to the host itself without
+// an address, as settings schema 2 stored it. Such a rule keeps working
+// until the next change of the firewall stores a plain address.
+func LegacyHostRule(r FirewallRule) FirewallRule {
+	r.Direction, r.Destination, r.legacyHost = DirectionInbound, "", true
+	return r
+}
+
+// IsLegacyHost reports whether r was created by LegacyHostRule.
+func (r FirewallRule) IsLegacyHost() bool { return r.legacyHost }
+
+// WithHostAddress returns a legacy host rule as a plain rule to address,
+// the host's current LAN address; without a valid address the destination
+// stays empty. Other rules are returned unchanged.
+func (r FirewallRule) WithHostAddress(address netip.Addr) FirewallRule {
+	if !r.legacyHost {
+		return r
+	}
+	r.legacyHost, r.Destination = false, ""
+	if address.IsValid() {
+		r.Destination = address.String()
+	}
+	return r
+}
+
+// TargetsHost reports whether r is an inbound rule to the host itself: a
+// legacy host rule, or one whose destination is one of host, the host's
+// own LAN addresses as detected now.
+func (r FirewallRule) TargetsHost(host []netip.Addr) bool {
+	if r.Direction != DirectionInbound {
+		return false
+	}
+	if r.legacyHost {
+		return true
+	}
+	addr, err := netip.ParseAddr(r.Destination)
+	return err == nil && slices.Contains(host, addr)
+}
+
 // IsPortForward reports whether r forwards inbound traffic to another LAN
-// device (DNAT) rather than to the host.
-func (r FirewallRule) IsPortForward() bool {
-	return r.Direction == DirectionInbound && r.Destination.Kind == DestinationAddress
+// device (DNAT) rather than to the host, whose own LAN addresses are host.
+func (r FirewallRule) IsPortForward(host []netip.Addr) bool {
+	return r.Direction == DirectionInbound && !r.TargetsHost(host)
 }
 
 // isAnyPortForward reports whether r forwards every port of its tcp/udp
 // protocol to another LAN device.
-func (r FirewallRule) isAnyPortForward() bool {
-	return r.IsPortForward() && r.Protocol.HasPorts() && r.DestinationPort.IsZero()
+func (r FirewallRule) isAnyPortForward(host []netip.Addr) bool {
+	return r.IsPortForward(host) && r.Protocol.HasPorts() && r.DestinationPort.IsZero()
 }
 
 // PublicPorts returns the ports on the shared public address an inbound

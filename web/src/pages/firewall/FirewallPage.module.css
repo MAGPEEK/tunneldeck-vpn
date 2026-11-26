@@ -131,20 +131,6 @@
   gap: var(--space-4);
 }
 
-.radioGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-
-.radioGroup legend {
-  margin-bottom: var(--space-1);
-  padding: 0;
-}
-
 .choice {
   display: inline-flex;
   align-items: center;

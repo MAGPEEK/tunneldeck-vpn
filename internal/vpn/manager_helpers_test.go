@@ -35,7 +35,7 @@ type fakeStore struct {
 func newFakeStore() *fakeStore {
 	s := &fakeStore{
 		profiles: map[string]domain.Profile{},
-		firewall: domain.Firewall{Rules: []domain.FirewallRule{{ID: "r1", Name: "SSH", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(22), Enabled: true}}},
+		firewall: domain.Firewall{Rules: []domain.FirewallRule{{ID: "r1", Name: "SSH", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: "192.168.1.10", DestinationPort: domain.SinglePort(22), Enabled: true}}},
 	}
 	for _, id := range []string{"a", "b"} {
 		s.profiles[id] = domain.Profile{

@@ -1,7 +1,7 @@
 import { ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import type { FirewallState } from '../../api/firewall';
+import { targetsHost, type FirewallState } from '../../api/firewall';
 import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import styles from './HostProtectionCard.module.css';
@@ -15,7 +15,8 @@ export interface HostProtectionCardProps {
 function needsForwarding(firewall: FirewallState): boolean {
   return firewall.rules.some(
     (rule) =>
-      rule.enabled && (rule.direction === 'outbound' || rule.destination.kind === 'address'),
+      rule.enabled &&
+      (rule.direction === 'outbound' || !targetsHost(rule.destination, firewall.hostAddresses)),
   );
 }
 

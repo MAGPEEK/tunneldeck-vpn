@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import { hasPorts } from '../../api/firewall';
-import type { RuleDraft } from './ruleDraft';
+import { isPortForward, type RuleDraft } from './ruleDraft';
 
 export function protocolText(t: TFunction, draft: RuleDraft): string {
   const name = t(`firewall.protocol.${draft.protocol}`);
@@ -10,27 +10,27 @@ export function protocolText(t: TFunction, draft: RuleDraft): string {
 }
 
 /**
- * "203.0.113.0/24 :any → Host :5001" or "any :any → 192.168.2.2 :443 (public 4444)":
+ * "203.0.113.0/24 :any → 192.168.1.10 :5001" or "any :any → 192.168.1.20 :443 (public 4444)":
  * ports appear only for protocols that have them, "any" for an empty port,
- * the public port only when it differs from the destination port.
+ * the public port only for a port forward whose public port differs from the
+ * destination port.
  */
-export function routeText(t: TFunction, draft: RuleDraft): string {
+export function routeText(
+  t: TFunction,
+  draft: RuleDraft,
+  hostAddresses: readonly string[],
+): string {
   const any = t('firewall.any');
   const ports = hasPorts(draft.protocol);
   const withPort = (address: string, port: string) =>
     ports ? `${address} :${port.trim() || any}` : address;
-  const toHost = draft.direction === 'inbound' && draft.destinationKind === 'host';
   const source = withPort(draft.source.trim() || any, draft.sourcePort);
   const destinationPort = draft.destinationPort.trim();
-  const destination = withPort(
-    toHost ? t('firewall.host') : draft.destinationCidr.trim() || any,
-    destinationPort,
-  );
+  const destination = withPort(draft.destination.trim() || any, destinationPort);
   const publicPort = draft.publicPort.trim();
   const showPublic =
     ports &&
-    !toHost &&
-    draft.direction === 'inbound' &&
+    isPortForward(draft, hostAddresses) &&
     destinationPort !== '' &&
     publicPort !== '' &&
     publicPort !== destinationPort;

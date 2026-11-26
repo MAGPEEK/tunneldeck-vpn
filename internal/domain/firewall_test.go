@@ -9,18 +9,28 @@ import (
 	"testing"
 )
 
+// testHost is the host's own LAN address in testNetwork.
+const testHost = "192.168.1.10"
+
+// testNetwork is the host's LAN for the checks that need it: two
+// addresses, one per subnet.
+var testNetwork = HostNetwork{
+	Addresses: []netip.Addr{netip.MustParseAddr(testHost), netip.MustParseAddr("10.10.0.1")},
+	Subnets:   []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24"), netip.MustParsePrefix("10.10.0.0/16")},
+}
+
 // Rule builders for the tables below; each returns a valid rule.
 func hostIn(proto FirewallProtocol, port int) FirewallRule {
 	return FirewallRule{
 		Name: "host", Direction: DirectionInbound, Protocol: proto,
-		Destination: FirewallDestination{Kind: DestinationHost}, DestinationPort: SinglePort(port), Enabled: true,
+		Destination: testHost, DestinationPort: SinglePort(port), Enabled: true,
 	}
 }
 
 func forward(proto FirewallProtocol, target string, port int) FirewallRule {
 	r := FirewallRule{
 		Name: "forward", Direction: DirectionInbound, Protocol: proto,
-		Destination: FirewallDestination{Kind: DestinationAddress, CIDR: target}, Enabled: true,
+		Destination: target, Enabled: true,
 	}
 	if proto.HasPorts() {
 		r.DestinationPort = SinglePort(port)
@@ -31,7 +41,7 @@ func forward(proto FirewallProtocol, target string, port int) FirewallRule {
 func outbound(source, destination string) FirewallRule {
 	return FirewallRule{
 		Name: "outbound", Direction: DirectionOutbound, Protocol: ProtocolAny, Source: source,
-		Destination: FirewallDestination{Kind: DestinationAddress, CIDR: destination}, Enabled: true,
+		Destination: destination, Enabled: true,
 	}
 }
 
@@ -74,35 +84,33 @@ func TestFirewallRuleValidate(t *testing.T) {
 			r.DestinationPort, r.SourcePort = PortRange{}, SinglePort(500)
 		}), nil},
 		{"host with source port", with(hostIn(ProtocolUDP, 500), func(r *FirewallRule) { r.SourcePort = SinglePort(500) }), nil},
-		{"forward udp", forward(ProtocolUDP, "192.168.2.2", 500), nil},
-		{"forward bare /32", forward(ProtocolUDP, "192.168.2.2/32", 500), nil},
-		{"forward shifted range", with(forward(ProtocolTCP, "192.168.2.2", 2000), func(r *FirewallRule) {
+		{"legacy host rule", LegacyHostRule(hostIn(ProtocolTCP, 22)), nil},
+		{"forward udp", forward(ProtocolUDP, "192.168.1.2", 500), nil},
+		{"forward shifted range", with(forward(ProtocolTCP, "192.168.1.2", 2000), func(r *FirewallRule) {
 			r.DestinationPort = PortRange{From: 2000, To: 2010}
 			r.PublicPort = PortRange{From: 1000, To: 1010}
 			r.KeepSourceAddress = true
 		}), nil},
-		{"forward esp", forward(ProtocolESP, "192.168.2.2", 0), nil},
-		{"forward tcp on any port", forward(ProtocolTCP, "192.168.2.2", 0), nil},
-		{"forward tcp+udp on any port", forward(ProtocolTCPUDP, "192.168.2.2", 0), nil},
-		{"forward gre", forward(ProtocolGRE, "192.168.2.2", 0), nil},
-		{"outbound everything", outbound("192.168.2.2", "0.0.0.0/0"), nil},
-		{"outbound tcp port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
+		{"forward esp", forward(ProtocolESP, "192.168.1.2", 0), nil},
+		{"forward tcp on any port", forward(ProtocolTCP, "192.168.1.2", 0), nil},
+		{"forward tcp+udp on any port", forward(ProtocolTCPUDP, "192.168.1.2", 0), nil},
+		{"forward gre", forward(ProtocolGRE, "192.168.1.2", 0), nil},
+		{"outbound everything", outbound("192.168.1.2", "0.0.0.0/0"), nil},
+		{"outbound tcp port", with(outbound("192.168.1.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
 			r.Protocol, r.DestinationPort = ProtocolTCP, SinglePort(443)
 		}), nil},
-		{"outbound drop", with(outbound("192.168.2.0/24", "10.1.0.0/16"), func(r *FirewallRule) { r.Action = ActionDrop }), nil},
-		{"outbound udp on any port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) { r.Protocol = ProtocolUDP }), nil},
-		{"outbound reject tcp on any port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
+		{"outbound drop", with(outbound("192.168.1.0/24", "10.1.0.0/16"), func(r *FirewallRule) { r.Action = ActionDrop }), nil},
+		{"outbound udp on any port", with(outbound("192.168.1.0/24", "10.0.0.0/8"), func(r *FirewallRule) { r.Protocol = ProtocolUDP }), nil},
+		{"outbound reject tcp on any port", with(outbound("192.168.1.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
 			r.Protocol, r.Action = ProtocolTCP, ActionReject
 		}), nil},
+		{"outbound to one address", outbound("192.168.1.2", "198.51.100.7"), nil},
 
 		{"no name", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Name = "  " }), []string{"name"}},
 		{"long name", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Name = strings.Repeat("ä", 65) }), []string{"name"}},
 		{"bad direction", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Direction = "sideways" }), []string{"direction"}},
 		{"bad action", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Action = "log" }), []string{"action"}},
-		{"forward drops", with(forward(ProtocolUDP, "192.168.2.2", 500), func(r *FirewallRule) { r.Action = ActionDrop }), []string{"action"}},
 		{"bad protocol", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Protocol = "sctp" }), []string{"protocol"}},
-		{"forward any", forward(ProtocolAny, "192.168.2.2", 0), []string{"protocol"}},
-		{"forward icmp", forward(ProtocolICMP, "192.168.2.2", 0), []string{"protocol"}},
 		{"host accept any", with(hostIn(ProtocolAny, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }), []string{"protocol"}},
 		{"icmp type on tcp", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ICMPType = "echo-request" }), []string{"icmpType"}},
 		{"unknown icmp type", with(hostIn(ProtocolICMP, 0), func(r *FirewallRule) {
@@ -115,18 +123,18 @@ func TestFirewallRuleValidate(t *testing.T) {
 		{"ipv6 source", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Source = "fd00::1" }), []string{"source"}},
 		{"outbound without source", outbound("", "0.0.0.0/0"), []string{"source"}},
 		{"outbound from everywhere", outbound("0.0.0.0/0", "10.0.0.0/8"), []string{"source"}},
-		{"outbound to this device", with(outbound("192.168.2.2", "0.0.0.0/0"), func(r *FirewallRule) {
-			r.Destination = FirewallDestination{Kind: DestinationHost}
-		}), []string{"destination"}},
-		{"host with address", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Destination.CIDR = "192.168.2.1" }), []string{"destination"}},
-		{"unknown destination kind", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Destination.Kind = "lan" }), []string{"destination"}},
-		{"bad destination", forward(ProtocolUDP, "192.168.2.300", 500), []string{"destination"}},
-		{"forward to a network", forward(ProtocolUDP, "192.168.2.0/24", 500), []string{"destination"}},
-		{"port on esp", with(forward(ProtocolESP, "192.168.2.2", 0), func(r *FirewallRule) { r.DestinationPort = SinglePort(1) }), []string{"destinationPort"}},
+		{"outbound without destination", outbound("192.168.1.2", ""), []string{"destination"}},
+		{"outbound bad destination", outbound("192.168.1.2", "10.0.0.1/8"), []string{"destination"}},
+		{"inbound without destination", forward(ProtocolUDP, "", 500), []string{"destination"}},
+		{"bad destination", forward(ProtocolUDP, "192.168.1.300", 500), []string{"destination"}},
+		{"ipv6 destination", forward(ProtocolUDP, "fd00::2", 500), []string{"destination"}},
+		{"inbound /32", forward(ProtocolUDP, "192.168.1.2/32", 500), []string{"destination"}},
+		{"inbound to a network", forward(ProtocolUDP, "192.168.1.0/24", 500), []string{"destination"}},
+		{"port on esp", with(forward(ProtocolESP, "192.168.1.2", 0), func(r *FirewallRule) { r.DestinationPort = SinglePort(1) }), []string{"destinationPort"}},
 		{"source port on icmp", with(hostIn(ProtocolICMP, 0), func(r *FirewallRule) {
 			r.DestinationPort, r.SourcePort = PortRange{}, SinglePort(1)
 		}), []string{"sourcePort"}},
-		{"any-port forward with a public port", with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) {
+		{"any-port forward with a public port", with(forward(ProtocolTCP, "192.168.1.2", 0), func(r *FirewallRule) {
 			r.PublicPort = SinglePort(80)
 		}), []string{"publicPort"}},
 		{"any-port host rule with a public port", with(hostIn(ProtocolUDP, 0), func(r *FirewallRule) {
@@ -137,14 +145,14 @@ func TestFirewallRuleValidate(t *testing.T) {
 		{"reversed range", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.DestinationPort = PortRange{From: 30, To: 20} }), []string{"destinationPort"}},
 		{"range too long", with(hostIn(ProtocolTCP, 1), func(r *FirewallRule) { r.DestinationPort = PortRange{From: 1, To: 1001} }), []string{"destinationPort"}},
 		{"bad source port", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.SourcePort = SinglePort(70000) }), []string{"sourcePort"}},
-		{"host public port differs", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.PublicPort = SinglePort(2222) }), []string{"publicPort"}},
-		{"public port on outbound", with(outbound("192.168.2.2", "0.0.0.0/0"), func(r *FirewallRule) {
+		{"public port on outbound", with(outbound("192.168.1.2", "0.0.0.0/0"), func(r *FirewallRule) {
 			r.Protocol, r.PublicPort = ProtocolTCP, SinglePort(1)
 		}), []string{"publicPort"}},
-		{"public range length differs", with(forward(ProtocolTCP, "192.168.2.2", 80), func(r *FirewallRule) {
+		{"public range length differs", with(forward(ProtocolTCP, "192.168.1.2", 80), func(r *FirewallRule) {
 			r.PublicPort = PortRange{From: 8080, To: 8081}
 		}), []string{"publicPort"}},
-		{"keep source on host rule", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.KeepSourceAddress = true }), []string{"keepSourceAddress"}},
+		{"keep source on outbound rule", with(outbound("192.168.1.2", "0.0.0.0/0"), func(r *FirewallRule) { r.KeepSourceAddress = true }),
+			[]string{"keepSourceAddress"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -156,29 +164,16 @@ func TestFirewallRuleValidate(t *testing.T) {
 }
 
 func TestValidateFirewallRules(t *testing.T) {
-	ike := forward(ProtocolUDP, "192.168.2.2", 500)
 	tests := []struct {
 		name       string
 		rules      []FirewallRule
 		wantFields []string
 	}{
 		{"empty list", nil, nil},
-		{"IPsec device", []FirewallRule{
-			ike, forward(ProtocolUDP, "192.168.2.2", 4500), forward(ProtocolESP, "192.168.2.2", 0),
-			outbound("192.168.2.2", "0.0.0.0/0"),
+		{"IPsec router", []FirewallRule{
+			forward(ProtocolUDP, "192.168.1.2", 500), forward(ProtocolUDP, "192.168.1.2", 4500), forward(ProtocolESP, "192.168.1.2", 0),
+			outbound("192.168.1.2", "0.0.0.0/0"),
 		}, nil},
-		{"same forward from two sources", []FirewallRule{
-			with(ike, func(r *FirewallRule) { r.Source = "198.51.100.1" }),
-			with(ike, func(r *FirewallRule) { r.Source = "198.51.100.2" }),
-		}, nil},
-		{"overlapping host rules", []FirewallRule{
-			hostIn(ProtocolTCP, 22),
-			with(hostIn(ProtocolTCP, 20), func(r *FirewallRule) { r.DestinationPort.To, r.Source = 30, "10.0.0.0/8" }),
-		}, nil},
-		{"drop above a forward", []FirewallRule{
-			with(hostIn(ProtocolUDP, 500), func(r *FirewallRule) { r.Action = ActionDrop }), ike,
-		}, nil},
-		{"same port, other protocol", []FirewallRule{ike, forward(ProtocolTCP, "192.168.2.3", 500)}, nil},
 		{"duplicate id", []FirewallRule{
 			with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = "a" }),
 			with(hostIn(ProtocolTCP, 23), func(r *FirewallRule) { r.ID = "a" }),
@@ -193,51 +188,202 @@ func TestValidateFirewallRules(t *testing.T) {
 		{"duplicate match", []FirewallRule{hostIn(ProtocolTCP, 22), with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) {
 			r.Action, r.Enabled = ActionDrop, false
 		})}, []string{"rules[1].name"}},
-		{"bare and /32 duplicate", []FirewallRule{outbound("192.168.2.2", "0.0.0.0/0"), outbound("192.168.2.2/32", "0.0.0.0/0")},
+		{"duplicate legacy host rules", []FirewallRule{LegacyHostRule(hostIn(ProtocolTCP, 22)), LegacyHostRule(hostIn(ProtocolTCP, 22))},
 			[]string{"rules[1].name"}},
-		{"forward clashes with host rule", []FirewallRule{hostIn(ProtocolUDP, 500), ike}, []string{"rules[1].destinationPort"}},
-		{"forwards to two devices", []FirewallRule{ike, forward(ProtocolUDP, "192.168.2.3", 500)}, []string{"rules[1].destinationPort"}},
-		{"tcp+udp overlaps udp", []FirewallRule{ike, with(forward(ProtocolTCPUDP, "192.168.2.3", 400), func(r *FirewallRule) {
-			r.DestinationPort = PortRange{From: 400, To: 600}
-		})}, []string{"rules[1].destinationPort"}},
-		{"public port range overlap", []FirewallRule{ike, with(forward(ProtocolUDP, "192.168.2.3", 9500), func(r *FirewallRule) {
-			r.PublicPort = SinglePort(500)
-		})}, []string{"rules[1].publicPort"}},
-		{"second esp forward", []FirewallRule{forward(ProtocolESP, "192.168.2.2", 0), forward(ProtocolESP, "192.168.2.3", 0)},
-			[]string{"rules[1].protocol"}},
+		{"legacy host rule beside a rule to an address", []FirewallRule{LegacyHostRule(hostIn(ProtocolTCP, 22)), hostIn(ProtocolTCP, 22)}, nil},
+		{"bare and /32 duplicate", []FirewallRule{outbound("192.168.1.2", "0.0.0.0/0"), outbound("192.168.1.2/32", "0.0.0.0/0")},
+			[]string{"rules[1].name"}},
 		{"invalid rule", []FirewallRule{hostIn(ProtocolTCP, 22), hostIn(ProtocolTCP, 70000)}, []string{"rules[1].destinationPort"}},
-		{"any-port forward clashes with a later forward", []FirewallRule{
-			forward(ProtocolTCP, "192.168.2.2", 0), forward(ProtocolTCP, "192.168.2.3", 443),
-		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
-		{"any-port forward clashes with an earlier forward", []FirewallRule{
-			with(forward(ProtocolUDP, "192.168.2.3", 9500), func(r *FirewallRule) { r.PublicPort = SinglePort(500) }),
-			forward(ProtocolTCPUDP, "192.168.2.2", 0),
-		}, []string{"rules[0].publicPort", "rules[1].destinationPort"}},
-		{"any-port forward clashes with a host rule", []FirewallRule{
-			hostIn(ProtocolTCP, 22), forward(ProtocolTCP, "192.168.2.2", 0),
-		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
-		{"two any-port forwards to different devices", []FirewallRule{
-			forward(ProtocolTCP, "192.168.2.2", 0), forward(ProtocolTCP, "192.168.2.3", 0),
-		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
-		{"any-port forward to the same device from two sources", []FirewallRule{
-			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.1" }),
-			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.2" }),
-		}, nil},
-		{"any-port forward of another protocol", []FirewallRule{forward(ProtocolTCP, "192.168.2.2", 0), ike}, nil},
-		{"disabled any-port forward", []FirewallRule{
-			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Enabled = false }),
-			forward(ProtocolTCP, "192.168.2.3", 443),
-		}, nil},
-		{"any-port host rule beside a forward", []FirewallRule{
-			with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }),
-			forward(ProtocolTCP, "192.168.2.3", 443),
-		}, nil},
+		{"conflicts need the host's LAN", []FirewallRule{forward(ProtocolUDP, "192.168.1.2", 500), forward(ProtocolUDP, "192.168.1.3", 500)}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateFirewallRules(tt.rules)
 			assertFields(t, err, tt.wantFields)
 			assertCoded(t, err)
+		})
+	}
+}
+
+func TestCheckInboundDestinations(t *testing.T) {
+	ike := forward(ProtocolUDP, "192.168.1.2", 500)
+	tests := []struct {
+		name       string
+		rules      []FirewallRule
+		wantFields []string
+	}{
+		{"rules to the host and to devices", []FirewallRule{
+			hostIn(ProtocolTCP, 22), forward(ProtocolTCP, "10.10.4.5", 80), ike, outbound("172.16.0.0/12", "0.0.0.0/0"),
+		}, nil},
+		{"rule to the host's second address", []FirewallRule{with(forward(ProtocolAny, "10.10.0.1", 0), func(r *FirewallRule) {
+			r.Action = ActionDrop
+		})}, nil},
+		{"host drop and reject", []FirewallRule{
+			with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Action = ActionDrop }),
+			with(hostIn(ProtocolICMP, 0), func(r *FirewallRule) { r.DestinationPort, r.Action = PortRange{}, ActionReject }),
+		}, nil},
+		{"host public port differs", []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) {
+			r.PublicPort = SinglePort(2222)
+		})}, []string{"rules[0].publicPort"}},
+		{"keep source on a host rule", []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) {
+			r.KeepSourceAddress = true
+		})}, []string{"rules[0].keepSourceAddress"}},
+		{"legacy host rule drops", []FirewallRule{with(LegacyHostRule(hostIn(ProtocolTCP, 22)), func(r *FirewallRule) {
+			r.Action = ActionDrop
+		})}, nil},
+		{"forward drops", []FirewallRule{with(ike, func(r *FirewallRule) { r.Action = ActionDrop })}, []string{"rules[0].action"}},
+		{"forward any", []FirewallRule{with(forward(ProtocolAny, "192.168.1.2", 0), func(r *FirewallRule) { r.Action = ActionReject })},
+			[]string{"rules[0].action", "rules[0].protocol"}},
+		{"forward icmp", []FirewallRule{forward(ProtocolICMP, "192.168.1.2", 0)}, []string{"rules[0].protocol"}},
+		{"forward outside the LAN", []FirewallRule{forward(ProtocolTCP, "172.16.0.9", 81)}, []string{"rules[0].destination"}},
+		{"disabled forward outside the LAN", []FirewallRule{with(forward(ProtocolTCP, "172.16.0.9", 82), func(r *FirewallRule) {
+			r.Enabled = false
+		})}, nil},
+		{"invalid rules are skipped", []FirewallRule{with(forward(ProtocolTCP, "172.16.0.9", 82), func(r *FirewallRule) { r.Name = "" })}, nil},
+
+		{"same forward from two sources", []FirewallRule{
+			with(ike, func(r *FirewallRule) { r.Source = "198.51.100.1" }),
+			with(ike, func(r *FirewallRule) { r.Source = "198.51.100.2" }),
+		}, nil},
+		{"overlapping host rules", []FirewallRule{
+			hostIn(ProtocolTCP, 22),
+			with(hostIn(ProtocolTCP, 20), func(r *FirewallRule) { r.DestinationPort.To, r.Source = 30, "10.0.0.0/8" }),
+		}, nil},
+		{"host rules to both host addresses", []FirewallRule{hostIn(ProtocolUDP, 500), forward(ProtocolUDP, "10.10.0.1", 500)}, nil},
+		{"drop above a forward", []FirewallRule{
+			with(hostIn(ProtocolUDP, 500), func(r *FirewallRule) { r.Action = ActionDrop }), ike,
+		}, nil},
+		{"same port, other protocol", []FirewallRule{ike, forward(ProtocolTCP, "192.168.1.3", 500)}, nil},
+		{"forward clashes with host rule", []FirewallRule{hostIn(ProtocolUDP, 500), ike}, []string{"rules[1].destinationPort"}},
+		{"forward clashes with legacy host rule", []FirewallRule{LegacyHostRule(hostIn(ProtocolUDP, 500)), ike},
+			[]string{"rules[1].destinationPort"}},
+		{"forwards to two devices", []FirewallRule{ike, forward(ProtocolUDP, "192.168.1.3", 500)}, []string{"rules[1].destinationPort"}},
+		{"tcp+udp overlaps udp", []FirewallRule{ike, with(forward(ProtocolTCPUDP, "192.168.1.3", 400), func(r *FirewallRule) {
+			r.DestinationPort = PortRange{From: 400, To: 600}
+		})}, []string{"rules[1].destinationPort"}},
+		{"public port range overlap", []FirewallRule{ike, with(forward(ProtocolUDP, "192.168.1.3", 9500), func(r *FirewallRule) {
+			r.PublicPort = SinglePort(500)
+		})}, []string{"rules[1].publicPort"}},
+		{"second esp forward", []FirewallRule{forward(ProtocolESP, "192.168.1.2", 0), forward(ProtocolESP, "192.168.1.3", 0)},
+			[]string{"rules[1].protocol"}},
+		{"any-port forward clashes with a later forward", []FirewallRule{
+			forward(ProtocolTCP, "192.168.1.2", 0), forward(ProtocolTCP, "192.168.1.3", 443),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"any-port forward clashes with an earlier forward", []FirewallRule{
+			with(forward(ProtocolUDP, "192.168.1.3", 9500), func(r *FirewallRule) { r.PublicPort = SinglePort(500) }),
+			forward(ProtocolTCPUDP, "192.168.1.2", 0),
+		}, []string{"rules[0].publicPort", "rules[1].destinationPort"}},
+		{"any-port forward clashes with a host rule", []FirewallRule{
+			hostIn(ProtocolTCP, 22), forward(ProtocolTCP, "192.168.1.2", 0),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"two any-port forwards to different devices", []FirewallRule{
+			forward(ProtocolTCP, "192.168.1.2", 0), forward(ProtocolTCP, "192.168.1.3", 0),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"any-port forward to the same device from two sources", []FirewallRule{
+			with(forward(ProtocolTCP, "192.168.1.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.1" }),
+			with(forward(ProtocolTCP, "192.168.1.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.2" }),
+		}, nil},
+		{"any-port forward of another protocol", []FirewallRule{forward(ProtocolTCP, "192.168.1.2", 0), ike}, nil},
+		{"disabled any-port forward", []FirewallRule{
+			with(forward(ProtocolTCP, "192.168.1.2", 0), func(r *FirewallRule) { r.Enabled = false }),
+			forward(ProtocolTCP, "192.168.1.3", 443),
+		}, nil},
+		{"any-port host rule beside a forward", []FirewallRule{
+			with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }),
+			forward(ProtocolTCP, "192.168.1.3", 443),
+		}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckInboundDestinations(tt.rules, testNetwork)
+			assertFields(t, err, tt.wantFields)
+			assertCoded(t, err)
+		})
+	}
+}
+
+// TestCheckInboundDestinationsFollowsTheHost re-classifies a rule when the
+// host's address changes: a drop rule to the former address is no longer
+// a rule to the host.
+func TestCheckInboundDestinationsFollowsTheHost(t *testing.T) {
+	rules := []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Action = ActionDrop })}
+	if err := CheckInboundDestinations(rules, testNetwork); err != nil {
+		t.Fatalf("drop to the host: %v", err)
+	}
+	moved := testNetwork
+	moved.Addresses = []netip.Addr{netip.MustParseAddr("192.168.1.11")}
+	assertFields(t, CheckInboundDestinations(rules, moved), []string{"rules[0].action"})
+}
+
+func TestCheckInboundDestinationsCodes(t *testing.T) {
+	tests := []struct {
+		name    string
+		rule    FirewallRule
+		network HostNetwork
+		field   string
+		want    FieldIssue
+	}{
+		{"outside the LAN", forward(ProtocolUDP, "172.16.0.9", 500),
+			HostNetwork{Subnets: []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}},
+			"rules[0].destination", Issue("firewall_destination_not_in_lan", "subnets", "192.168.1.0/24")},
+		{"no LAN", forward(ProtocolUDP, "192.168.1.2", 500), HostNetwork{}, "rules[0].destination", Issue("firewall_lan_not_detected")},
+		{"public port to the host", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.PublicPort = SinglePort(2222) }),
+			testNetwork, "rules[0].publicPort", Issue("firewall_public_port_own_address")},
+		{"forward drops", with(forward(ProtocolUDP, "192.168.1.2", 500), func(r *FirewallRule) { r.Action = ActionDrop }),
+			testNetwork, "rules[0].action", Issue("firewall_forward_accepts_only")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var v *ValidationError
+			if !errors.As(CheckInboundDestinations([]FirewallRule{tt.rule}, tt.network), &v) {
+				t.Fatal("want a validation error")
+			}
+			if got := v.Issues[tt.field]; !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("issue = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLegacyHostRule(t *testing.T) {
+	rule := LegacyHostRule(hostIn(ProtocolTCP, 22))
+	if !rule.IsLegacyHost() || rule.Destination != "" || !rule.TargetsHost(nil) || rule.IsPortForward(nil) {
+		t.Fatalf("legacy rule = %+v", rule)
+	}
+	resolved := rule.WithHostAddress(netip.MustParseAddr(testHost))
+	if resolved.IsLegacyHost() || resolved.Destination != testHost || !resolved.TargetsHost(testNetwork.Addresses) {
+		t.Errorf("resolved = %+v", resolved)
+	}
+	if got := rule.WithHostAddress(netip.Addr{}); got.IsLegacyHost() || got.Destination != "" {
+		t.Errorf("resolved without an address = %+v", got)
+	}
+	plain := forward(ProtocolUDP, "192.168.1.2", 500)
+	if got := plain.WithHostAddress(netip.MustParseAddr(testHost)); !reflect.DeepEqual(got, plain) {
+		t.Errorf("plain rule changed: %+v", got)
+	}
+	data, err := json.Marshal(rule)
+	if err != nil || strings.Contains(string(data), "legacy") || strings.Contains(string(data), "kind") {
+		t.Errorf("legacy rule JSON = %s, %v; want no legacy marker", data, err)
+	}
+}
+
+func TestTargetsHost(t *testing.T) {
+	tests := []struct {
+		name string
+		rule FirewallRule
+		want bool
+	}{
+		{"host address", hostIn(ProtocolTCP, 22), true},
+		{"second host address", forward(ProtocolTCP, "10.10.0.1", 22), true},
+		{"other device", forward(ProtocolTCP, "192.168.1.2", 22), false},
+		{"outbound to the host address", outbound("192.168.1.2", testHost), false},
+		{"legacy", LegacyHostRule(forward(ProtocolTCP, "", 22)), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.rule.TargetsHost(testNetwork.Addresses); got != tt.want {
+				t.Errorf("TargetsHost = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -249,12 +395,12 @@ func TestCheckReservedPorts(t *testing.T) {
 		rules      []FirewallRule
 		wantFields []string
 	}{
-		{"unrelated", []FirewallRule{hostIn(ProtocolTCP, 22), outbound("192.168.2.2", "0.0.0.0/0")}, nil},
+		{"unrelated", []FirewallRule{hostIn(ProtocolTCP, 22), outbound("192.168.1.2", "0.0.0.0/0")}, nil},
 		{"UI port", []FirewallRule{hostIn(ProtocolTCP, ui)}, []string{"rules[0].destinationPort"}},
 		{"UI port in a disabled udp range", []FirewallRule{with(hostIn(ProtocolUDP, 8000), func(r *FirewallRule) {
 			r.DestinationPort.To, r.Enabled = 8999, false
 		})}, []string{"rules[0].destinationPort"}},
-		{"UI port as public port", []FirewallRule{with(forward(ProtocolTCP, "192.168.2.2", 80), func(r *FirewallRule) {
+		{"UI port as public port", []FirewallRule{with(forward(ProtocolTCP, "192.168.1.2", 80), func(r *FirewallRule) {
 			r.PublicPort = SinglePort(ui)
 		})}, []string{"rules[0].publicPort"}},
 		{"UI port closed by a drop rule", []FirewallRule{with(hostIn(ProtocolTCP, ui), func(r *FirewallRule) { r.Action = ActionDrop })}, nil},
@@ -262,8 +408,8 @@ func TestCheckReservedPorts(t *testing.T) {
 		{"remote access port on udp", []FirewallRule{hostIn(ProtocolUDP, remote)}, nil},
 		{"remote access port disabled", []FirewallRule{with(hostIn(ProtocolTCP, remote), func(r *FirewallRule) { r.Enabled = false })}, nil},
 		{"any-port host rule", []FirewallRule{with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} })}, nil},
-		{"any-port forward", []FirewallRule{forward(ProtocolTCPUDP, "192.168.2.2", 0)}, nil},
-		{"outbound to the UI port", []FirewallRule{with(outbound("192.168.2.2", "0.0.0.0/0"), func(r *FirewallRule) {
+		{"any-port forward", []FirewallRule{forward(ProtocolTCPUDP, "192.168.1.2", 0)}, nil},
+		{"outbound to the UI port", []FirewallRule{with(outbound("192.168.1.2", "0.0.0.0/0"), func(r *FirewallRule) {
 			r.Protocol, r.DestinationPort = ProtocolTCP, SinglePort(ui)
 		})}, nil},
 	}
@@ -279,36 +425,12 @@ func TestCheckReservedPorts(t *testing.T) {
 	}
 }
 
-func TestCheckLANDestinations(t *testing.T) {
-	lan := []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24"), netip.MustParsePrefix("10.10.0.0/16")}
-	rules := []FirewallRule{
-		forward(ProtocolUDP, "192.168.2.2", 500),
-		forward(ProtocolTCP, "10.10.4.5/32", 80),
-		forward(ProtocolTCP, "172.16.0.9", 81),
-		with(forward(ProtocolTCP, "172.16.0.9", 82), func(r *FirewallRule) { r.Enabled = false }),
-		hostIn(ProtocolTCP, 22),
-		outbound("172.16.0.0/12", "0.0.0.0/0"),
+func TestHostNetworkAddress(t *testing.T) {
+	if got := testNetwork.Address(); got.String() != testHost {
+		t.Errorf("Address = %v, want %s", got, testHost)
 	}
-	assertFields(t, CheckLANDestinations(rules, lan), []string{"rules[2].destination"})
-	err := CheckLANDestinations(rules[:1], nil)
-	assertFields(t, err, []string{"rules[0].destination"})
-	if !strings.Contains(err.Error(), "none detected") {
-		t.Errorf("err = %v, want it to say no LAN was detected", err)
-	}
-}
-
-func TestCheckLANDestinationsCodes(t *testing.T) {
-	rules := []FirewallRule{forward(ProtocolUDP, "172.16.0.9", 500)}
-	var v *ValidationError
-	if !errors.As(CheckLANDestinations(rules, []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")}), &v) {
-		t.Fatal("want a validation error")
-	}
-	want := Issue("firewall_destination_outside_lan", "subnets", "192.168.2.0/24")
-	if got := v.Issues["rules[0].destination"]; !reflect.DeepEqual(got, want) {
-		t.Errorf("issue = %+v, want %+v", got, want)
-	}
-	if !errors.As(CheckLANDestinations(rules, nil), &v) || v.Issues["rules[0].destination"].Code != "firewall_lan_not_detected" {
-		t.Errorf("issues = %+v, want firewall_lan_not_detected", v.Issues)
+	if got := (HostNetwork{}).Address(); got.IsValid() {
+		t.Errorf("Address without addresses = %v, want none", got)
 	}
 }
 
@@ -350,12 +472,12 @@ func TestParseIPv4Prefix(t *testing.T) {
 }
 
 func TestFirewallJSON(t *testing.T) {
-	firewall := Firewall{FirewallSettings: DefaultFirewallSettings(), Rules: []FirewallRule{forward(ProtocolESP, "192.168.2.2", 0)}}
+	firewall := Firewall{FirewallSettings: DefaultFirewallSettings(), Rules: []FirewallRule{forward(ProtocolESP, "192.168.1.2", 0)}}
 	data, err := json.Marshal(firewall)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"dropInvalid":true`, `"rules":[`, `"destination":{"kind":"address","cidr":"192.168.2.2"}`} {
+	for _, want := range []string{`"dropInvalid":true`, `"rules":[`, `"destination":"192.168.1.2"`} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("JSON %s lacks %s", data, want)
 		}

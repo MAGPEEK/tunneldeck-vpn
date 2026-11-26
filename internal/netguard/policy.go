@@ -208,12 +208,14 @@ func indexOfMissing(want []policyRule, present []bool, rule policyRule) int {
 	return -1
 }
 
-// needsPolicyRules reports whether firewall routes any traffic besides the
-// replies from the VPN address.
-func needsPolicyRules(firewall domain.Firewall) bool {
+// mayNeedPolicyRules reports whether firewall may route traffic besides
+// the replies from the VPN address: it has an enabled accepting outbound
+// rule, or an enabled accepting inbound rule to an address, which is a
+// port forward unless the address is the host's own (wantedPolicyRules
+// decides with the LAN).
+func mayNeedPolicyRules(firewall domain.Firewall) bool {
 	for _, rule := range firewall.Rules {
-		if rule.Enabled && (rule.IsPortForward() ||
-			(rule.Direction == domain.DirectionOutbound && rule.EffectiveAction() == domain.ActionAccept)) {
+		if rule.Enabled && rule.EffectiveAction() == domain.ActionAccept && !rule.IsLegacyHost() {
 			return true
 		}
 	}
@@ -228,16 +230,17 @@ func needsPolicyRules(firewall domain.Firewall) bool {
 func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule {
 	var exclusions, routes []policyRule
 	var sources []netip.Prefix
+	host := hostAddresses(lan)
 	for _, rule := range firewall.Rules {
 		if !rule.Enabled {
 			continue
 		}
-		parsed := parseRule(rule)
+		parsed := parseRule(rule, host)
 		switch {
 		case parsed.isOutboundAccept():
 			sources = appendPrefix(sources, parsed.source)
 			routes = appendPolicyRule(routes, newPolicyRule(outboundPriority, parsed.source, parsed.destination, routingTable))
-		case parsed.IsPortForward():
+		case parsed.isPortForward():
 			sources = appendPrefix(sources, parsed.destination)
 			for _, rr := range replyRules(parsed) {
 				routes = appendPolicyRule(routes, rr)

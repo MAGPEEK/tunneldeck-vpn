@@ -128,25 +128,26 @@ func (sc *lanScenario) checkLANSelfChecks(t *testing.T) {
 
 // checkMigration: the container started with the version 1 settings.json
 // of testdata/. Its two host-access rules are inbound rules to the host
-// with generated names; the file itself is rewritten as version 2 only by
-// the first change, here saving the migrated rules unchanged.
+// with generated names, shown with the host's LAN address; the file itself
+// is rewritten as version 3 only by the first change, here saving the
+// migrated rules unchanged, which stores that address.
 func (sc *lanScenario) checkMigration(t *testing.T) {
 	if version, _ := sc.settingsDocument(t); version != 1 {
 		t.Errorf("settings.json schemaVersion before any change = %d, want 1 (written only on the next change)", version)
 	}
+	state := sc.firewall(t)
 	want := []firewallRule{
 		{
 			ID: "r-dsm", Name: "Host port 5001/tcp", Direction: "inbound", Action: "accept", Protocol: "tcp",
-			Destination: firewallDestination{Kind: "host"}, DestinationPort: portRange{From: 5001}, Enabled: true,
+			Destination: state.HostAddress, DestinationPort: portRange{From: 5001}, Enabled: true,
 			Comment: "DSM over HTTPS",
 		},
 		{
 			ID: "r-snmp", Name: "Host port 161/udp", Direction: "inbound", Action: "accept", Protocol: "udp",
-			Source: "10.8.0.0/24", Destination: firewallDestination{Kind: "host"}, DestinationPort: portRange{From: 161},
+			Source: "10.8.0.0/24", Destination: state.HostAddress, DestinationPort: portRange{From: 161},
 		},
 	}
-	state := sc.firewall(t)
-	if !slices.Equal(state.Rules, want) {
+	if state.HostAddress == "" || !slices.Equal(state.Rules, want) {
 		t.Fatalf("migrated rules = %+v, want %+v", state.Rules, want)
 	}
 	for _, setting := range []string{"dropInvalid", "mssClamp", "synFloodProtection", "pingLimit"} {
@@ -157,8 +158,8 @@ func (sc *lanScenario) checkMigration(t *testing.T) {
 
 	sc.td.must(t, sc.td.setFirewallRules(state.Rules), "save the migrated rules")
 	version, keys := sc.settingsDocument(t)
-	if version != 2 || slices.Contains(keys, "hostAccessRules") || !slices.Contains(keys, "firewall") {
-		t.Errorf("settings.json after the first change: schemaVersion %d, keys %q; want 2 with firewall and without hostAccessRules", version, keys)
+	if version != 3 || slices.Contains(keys, "hostAccessRules") || !slices.Contains(keys, "firewall") {
+		t.Errorf("settings.json after the first change: schemaVersion %d, keys %q; want 3 with firewall and without hostAccessRules", version, keys)
 	}
 	if again := sc.firewall(t); !slices.Equal(again.Rules, want) {
 		t.Errorf("rules after saving them unchanged = %+v, want %+v", again.Rules, want)
@@ -194,7 +195,7 @@ func (sc *lanScenario) firewall(t *testing.T) firewallState {
 func webForward(keepSource bool, source string) firewallRule {
 	return firewallRule{
 		Name: "Web server", Direction: "inbound", Action: "accept", Protocol: "tcp", Source: source,
-		Destination:     firewallDestination{Kind: "address", CIDR: lanWebAddress.String()},
+		Destination:     lanWebAddress.String(),
 		DestinationPort: portRange{From: lanWebPort}, PublicPort: portRange{From: publicHTTPPort},
 		KeepSourceAddress: keepSource, Enabled: true,
 	}
@@ -205,7 +206,7 @@ func webForward(keepSource bool, source string) firewallRule {
 func webOutbound() firewallRule {
 	return firewallRule{
 		Name: "lan-web to the remote network", Direction: "outbound", Action: "accept", Protocol: "any",
-		Source: lanWebAddress.String(), Destination: firewallDestination{Kind: "address", CIDR: remoteNetwork.String()},
+		Source: lanWebAddress.String(), Destination: remoteNetwork.String(),
 		Enabled: true,
 	}
 }
@@ -243,7 +244,7 @@ func (sc *lanScenario) checkAnyPortForward(t *testing.T) {
 	t.Cleanup(func() { _, _ = sc.stack.tryExec(lanWebService, "pkill", "-f", "httpd -p "+listener) })
 	forward := firewallRule{
 		Name: "Everything to lan-web", Direction: "inbound", Action: "accept", Protocol: "tcp",
-		Destination: firewallDestination{Kind: "address", CIDR: lanWebAddress.String()}, Enabled: true,
+		Destination: lanWebAddress.String(), Enabled: true,
 	}
 	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{forward}), "forward every TCP port to lan-web")
 	sc.expectWebClientOn(t, lanWebPort, sc.host.lanAddress.String())

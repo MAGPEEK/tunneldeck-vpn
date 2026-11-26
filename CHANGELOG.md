@@ -14,13 +14,17 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Changed
 
+- **Breaking:** the firewall destination kind "Host" is gone. An inbound rule's `destination` is now a plain string holding one IPv4 address in the local LAN; an outbound rule's is an address or CIDR network (`"destination": "192.168.1.10"` instead of `{"kind": …, "cidr": …}`). On every apply, an inbound rule to one of the host's own LAN addresses opens a service on the host (allow, drop or reject; the port on the VPN address must be empty or equal to the destination port), and a rule to any other LAN address is a port forward (always allow). `GET /api/firewall` also returns `hostAddresses`, all of the host's LAN addresses. Validation codes: new `firewall_destination_not_in_lan`, `firewall_public_port_own_address` and `firewall_template_own_address` (the IPsec template refuses the host's own address); removed `firewall_outbound_to_host`, `firewall_host_takes_no_address`, `firewall_destination_kind_invalid`, `firewall_public_port_host` and `firewall_destination_outside_lan`; an empty destination is `required`.
+- **Breaking:** `settings.json` schema version 3. Destinations are stored as plain strings. Rules saved with the destination "Host" keep working: the Firewall page shows them with the host's current LAN address, and the next save stores that address. Older TunnelDeck-VPN versions refuse to start with a version 3 file.
+- Web UI: generic wording. The Firewall page shows "This device: 192.168.1.10 · Local LAN: 192.168.1.0/24" (de: "Dieses Gerät", "Lokales LAN"); the inbound destination is an address field "Destination (address in the local LAN)" with the one-click suggestion "This device’s address: 192.168.1.10"; the template is "IPsec router" (de: "IPsec-Router"); examples use 192.168.1.0/24, and no brand or device-type names appear (the dashboard card reads "This device shielded from tunnel"). The guides keep real-world specifics only in a marked "Example: LANCOM router with mdex" subsection.
+- System page: a self-check that only turns a feature off (`warning: true`, such as `rule-counters`) shows a warning icon and tone instead of a failure.
 - Re-applying the firewall leaves every chain whose content is unchanged untouched, so counters survive reconnects and unrelated rule changes; a changed chain is rebuilt with the existing DROP-safe refill and starts its counters at zero.
 - Firewall rule IDs must be 1 to 64 letters, digits, underscores or hyphens (generated IDs always are).
-- Web UI: the destination "This device" is now called "Host" (de: "Host"), shown with the detected address, e.g. "Host (192.168.2.10)"; the API kind stays `host`. Port inputs show the placeholder "any" (de: "beliebig"), and the rule list shows "any" for an empty source or destination port. "Public port" is now "Port on the VPN address" (de: "Port auf der VPN-Adresse") with a clearer hint; it is disabled while the destination port is empty, and an any-port forward explains that every port except the web UI ports goes to the device.
+- Web UI: port inputs show the placeholder "any" (de: "beliebig"), and the rule list shows "any" for an empty source or destination port. "Public port" is now "Port on the VPN address" (de: "Port auf der VPN-Adresse") with a clearer hint; it is disabled while the destination port is empty, and an any-port forward explains that every port except the web UI ports goes to the device.
 
 ### Fixed
 
-- LAN detection no longer lists link-local addresses (169.254.0.0/16, for example on an unplugged NAS port) as LAN subnets.
+- LAN detection no longer lists link-local addresses (169.254.0.0/16, for example on an unplugged network port) as LAN subnets.
 
 ## [0.2.0-alpha.1] - 2026-11-26
 

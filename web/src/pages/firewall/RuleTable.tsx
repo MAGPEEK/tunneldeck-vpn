@@ -6,7 +6,7 @@ import { Button } from '../../components/Button';
 import { StatePill } from '../../components/StatePill';
 import { Table, type Column } from '../../components/Table';
 import styles from './FirewallPage.module.css';
-import type { RuleDraft } from './ruleDraft';
+import { isPortForward, type RuleDraft } from './ruleDraft';
 import { protocolText, routeText, ruleName } from './ruleText';
 
 export interface RuleTableProps {
@@ -14,6 +14,8 @@ export interface RuleTableProps {
   /** The drafts of this direction in list order. */
   drafts: RuleDraft[];
   errorKeys: ReadonlySet<string>;
+  /** The host's own LAN addresses, which tell rules to the host from port forwards. */
+  hostAddresses: readonly string[];
   onChange: (key: string, change: Partial<RuleDraft>) => void;
   onMove: (key: string, step: -1 | 1) => void;
   onEdit: (key: string) => void;
@@ -22,7 +24,17 @@ export interface RuleTableProps {
 }
 
 export function RuleTable(props: RuleTableProps) {
-  const { direction, drafts, errorKeys, onChange, onMove, onEdit, onDuplicate, onDelete } = props;
+  const {
+    direction,
+    drafts,
+    errorKeys,
+    hostAddresses,
+    onChange,
+    onMove,
+    onEdit,
+    onDuplicate,
+    onDelete,
+  } = props;
   const { t } = useTranslation();
   const [confirmingKey, setConfirmingKey] = useState<string>();
   const inbound = direction === 'inbound';
@@ -97,7 +109,7 @@ export function RuleTable(props: RuleTableProps) {
     {
       key: 'route',
       header: t('firewall.column.route'),
-      render: (draft) => <span className={styles.mono}>{routeText(t, draft)}</span>,
+      render: (draft) => <span className={styles.mono}>{routeText(t, draft, hostAddresses)}</span>,
     },
     ...(inbound
       ? [
@@ -105,7 +117,7 @@ export function RuleTable(props: RuleTableProps) {
             key: 'keepSource',
             header: t('firewall.column.keepSource'),
             render: (draft: RuleDraft) =>
-              draft.keepSourceAddress && draft.destinationKind === 'address' ? (
+              draft.keepSourceAddress && isPortForward(draft, hostAddresses) ? (
                 <Check size={16} role="img" aria-label={t('firewall.keepSourceOn')} />
               ) : null,
           },

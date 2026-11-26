@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"net/netip"
 )
 
 // The types below freeze the JSON shapes a migration step reads and
@@ -43,6 +44,7 @@ type firewallRuleV2 struct {
 
 type destinationV2 struct {
 	Kind string `json:"kind"`
+	CIDR string `json:"cidr,omitempty"`
 }
 
 type portRangeV2 struct {
@@ -81,5 +83,68 @@ func migrateSettingsV1ToV2(doc map[string]json.RawMessage) error {
 	}
 	delete(doc, "hostAccessRules")
 	doc["firewall"] = raw
+	return nil
+}
+
+// migrateSettingsV2ToV3 makes every rule destination a plain string (SPEC
+// §16.3): {"kind":"address","cidr":X} becomes X, a /32 written as the bare
+// address; {"kind":"host"} becomes an empty destination with
+// "legacyHost": true, because only the running host knows its address.
+// Every other field of the rules stays as it is.
+func migrateSettingsV2ToV3(doc map[string]json.RawMessage) error {
+	raw, ok := doc["firewall"]
+	if !ok {
+		return nil
+	}
+	var firewall map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &firewall); err != nil {
+		return fmt.Errorf("firewall: %w", err)
+	}
+	rawRules, ok := firewall["rules"]
+	if !ok {
+		return nil
+	}
+	var rules []map[string]json.RawMessage
+	if err := json.Unmarshal(rawRules, &rules); err != nil {
+		return fmt.Errorf("firewall.rules: %w", err)
+	}
+	for i, rule := range rules {
+		if err := migrateDestinationV2ToV3(rule); err != nil {
+			return fmt.Errorf("firewall.rules[%d]: %w", i, err)
+		}
+	}
+	if err := setJSON(firewall, "rules", rules); err != nil {
+		return err
+	}
+	return setJSON(doc, "firewall", firewall)
+}
+
+func migrateDestinationV2ToV3(rule map[string]json.RawMessage) error {
+	if rule == nil {
+		return fmt.Errorf("is not an object")
+	}
+	var destination destinationV2
+	if raw, ok := rule["destination"]; ok {
+		if err := json.Unmarshal(raw, &destination); err != nil {
+			return fmt.Errorf("destination: %w", err)
+		}
+	}
+	plain := destination.CIDR
+	if prefix, err := netip.ParsePrefix(plain); err == nil && prefix.IsSingleIP() {
+		plain = prefix.Addr().String()
+	}
+	if destination.Kind == "host" {
+		plain = ""
+		rule["legacyHost"] = json.RawMessage("true")
+	}
+	return setJSON(rule, "destination", plain)
+}
+
+func setJSON(object map[string]json.RawMessage, key string, value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", key, err)
+	}
+	object[key] = raw
 	return nil
 }

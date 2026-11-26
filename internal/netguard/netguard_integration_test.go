@@ -156,21 +156,21 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 // and ESP forwarded to target, an outbound rule for target and every
 // global protection.
 func integrationFirewall(target string) domain.Firewall {
-	destination := domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: target}
+	destination := target
 	return domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{
 		hostAccess("ssh", domain.ProtocolTCP, 22, "", true),
-		{ID: "wg", Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
-			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(51820), Enabled: true},
-		{ID: "ping", Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",
-			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, Enabled: true},
+		domain.LegacyHostRule(domain.FirewallRule{ID: "wg", Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
+			DestinationPort: domain.SinglePort(51820), Enabled: true}),
+		domain.LegacyHostRule(domain.FirewallRule{ID: "ping", Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",
+			Enabled: true}),
 		{ID: "range", Name: "Range", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: destination,
 			DestinationPort: domain.PortRange{From: 9000, To: 9010}, PublicPort: domain.PortRange{From: 8000, To: 8010}, Enabled: true},
 		{ID: "esp", Name: "ESP", Direction: domain.DirectionInbound, Protocol: domain.ProtocolESP, Destination: destination,
 			KeepSourceAddress: true, Enabled: true},
 		{ID: "out", Name: "Out", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny, Source: target,
-			Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: "0.0.0.0/0"}, Enabled: true},
-		{ID: "telnet", Name: "Reject telnet", Direction: domain.DirectionInbound, Action: domain.ActionReject, Protocol: domain.ProtocolTCPUDP,
-			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(23), Enabled: true},
+			Destination: "0.0.0.0/0", Enabled: true},
+		domain.LegacyHostRule(domain.FirewallRule{ID: "telnet", Name: "Reject telnet", Direction: domain.DirectionInbound, Action: domain.ActionReject, Protocol: domain.ProtocolTCPUDP,
+			DestinationPort: domain.SinglePort(23), Enabled: true}),
 	}}
 }
 

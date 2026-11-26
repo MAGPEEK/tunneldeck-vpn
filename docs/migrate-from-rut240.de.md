@@ -46,7 +46,7 @@ Was mit jeder Zeile passiert, wenn sie unter **Zusätzliche Optionen** eingefüg
 | `tls-version-min 1.2` | bleibt | TunnelDeck-VPN setzt `tls-version-min 1.2` ohnehin, wenn keine zusätzliche Option eine TLS-Version festlegt. |
 | `explicit-exit-notify 2` | bleibt bei UDP | Entfällt mit Warnung, wenn der Transport TCP ist, weil OpenVPN es dort ignoriert. |
 | `fast-io` | entfällt mit Warnung | Veraltet; OpenVPN 2.7 ignoriert es. |
-| `redirect-gateway def1` | entfällt mit Warnung | Das Routing übernimmt TunnelDeck-VPN; die NAS behält ihre eigene Standardroute. |
+| `redirect-gateway def1` | entfällt mit Warnung | Das Routing übernimmt TunnelDeck-VPN; dieses Gerät behält seine eigene Standardroute. |
 
 Zeilen, die Skripte starten oder Dateien anfassen (`up`, `script-security`, `log`, ...), werden abgelehnt; das Formular nennt die Zeile.
 
@@ -61,9 +61,9 @@ data-ciphers-fallback none
 
 Der Tunnel ist dann unverschlüsselt, wenn der Server das erlaubt, und weicht sonst auf ChaCha20-Poly1305 aus. Dashboard und Formular zeigen einen Hinweis, dass der Datenverkehr nicht verschlüsselt ist. Eine `cipher`-Zeile in den zusätzlichen Optionen entfällt mit einem Verweis auf das Profilfeld.
 
-## Die NAS von außen erreichen
+## Dieses Gerät von außen erreichen
 
-Am RUT240 war die Weboberfläche des Routers über den Tunnel erreichbar. In TunnelDeck-VPN ersetzt das der **Fernzugriff per HTTPS** (System > Fernzugriff, Standardport 8443): die eigene Oberfläche von TunnelDeck-VPN unter `https://<VPN-Adresse>:8443` mit selbst signiertem oder hochgeladenem Zertifikat. Siehe [`synology.de.md`](synology.de.md#6-fernzugriff-über-den-tunnel). Andere Ports der NAS sind aus dem Tunnel nur über eine Eingangsregel auf der Seite **Firewall** erreichbar (Ziel „Host“), andere LAN-Geräte über eine Portweiterleitung. Alles andere bleibt gesperrt.
+Am RUT240 war die Weboberfläche des Routers über den Tunnel erreichbar. In TunnelDeck-VPN ersetzt das der **Fernzugriff per HTTPS** (System > Fernzugriff, Standardport 8443): die eigene Oberfläche von TunnelDeck-VPN unter `https://<VPN-Adresse>:8443` mit selbst signiertem oder hochgeladenem Zertifikat. Siehe [`synology.de.md`](synology.de.md#6-fernzugriff-über-den-tunnel). Andere Ports dieses Geräts sind aus dem Tunnel nur über eine Eingangsregel auf der Seite **Firewall** an die eigene LAN-Adresse dieses Geräts erreichbar (zum Beispiel `192.168.1.10`), andere Geräte im lokalen LAN über eine Eingangsregel an ihre Adresse (zum Beispiel `192.168.1.20`), also eine Portweiterleitung. Alles andere bleibt gesperrt.
 
 ## Empfehlung: Wechsel auf Stufe 30
 

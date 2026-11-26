@@ -1,6 +1,6 @@
 import {
   hasPorts,
-  type DestinationKind,
+  targetsHost,
   type FirewallAction,
   type FirewallDirection,
   type FirewallProtocol,
@@ -19,8 +19,7 @@ export interface RuleDraft {
   icmpType: string;
   source: string;
   sourcePort: string;
-  destinationKind: DestinationKind;
-  destinationCidr: string;
+  destination: string;
   destinationPort: string;
   publicPort: string;
   keepSourceAddress: boolean;
@@ -76,8 +75,7 @@ export function toDraft(rule: FirewallRule, highlighted = false): RuleDraft {
     icmpType: rule.icmpType ?? '',
     source: rule.source,
     sourcePort: formatPort(rule.sourcePort),
-    destinationKind: rule.destination.kind,
-    destinationCidr: rule.destination.cidr ?? '',
+    destination: rule.destination,
     destinationPort: formatPort(rule.destinationPort),
     publicPort: formatPort(rule.publicPort),
     keepSourceAddress: rule.keepSourceAddress,
@@ -98,8 +96,7 @@ export function newDraft(direction: FirewallDirection): RuleDraft {
     icmpType: '',
     source: '',
     sourcePort: '',
-    destinationKind: direction === 'inbound' ? 'host' : 'address',
-    destinationCidr: '',
+    destination: '',
     destinationPort: '',
     publicPort: '',
     keepSourceAddress: false,
@@ -113,9 +110,14 @@ export function duplicateDraft(draft: RuleDraft, name: string): RuleDraft {
   return { ...draft, key: draftKey(), id: '', name, highlighted: false };
 }
 
+/** Whether the inbound rule goes to one of the host's own LAN addresses. */
+export function isToHost(draft: RuleDraft, hostAddresses: readonly string[]): boolean {
+  return draft.direction === 'inbound' && targetsHost(draft.destination, hostAddresses);
+}
+
 /** Whether the rule forwards inbound traffic to another LAN device. */
-export function isPortForward(draft: RuleDraft): boolean {
-  return draft.direction === 'inbound' && draft.destinationKind === 'address';
+export function isPortForward(draft: RuleDraft, hostAddresses: readonly string[]): boolean {
+  return draft.direction === 'inbound' && !isToHost(draft, hostAddresses);
 }
 
 /** The port fields the editor shows for the draft's protocol, direction and destination. */
@@ -141,11 +143,11 @@ function port(text: string): PortRange | undefined {
  * The rule as the API takes it. Fields that do not apply to the protocol,
  * direction or destination are dropped, so switching back and forth in the
  * editor loses nothing until the rule is saved. An empty port means any
- * port; a forward on any port has no public port.
+ * port; a forward on any port has no public port. `hostAddresses` decide
+ * whether an inbound rule goes to the host or is a port forward.
  */
-export function toRule(draft: RuleDraft): FirewallRule {
-  const forward = isPortForward(draft);
-  const toHost = draft.direction === 'inbound' && draft.destinationKind === 'host';
+export function toRule(draft: RuleDraft, hostAddresses: readonly string[]): FirewallRule {
+  const forward = isPortForward(draft, hostAddresses);
   const rule: FirewallRule = {
     id: draft.id,
     name: draft.name.trim(),
@@ -153,9 +155,7 @@ export function toRule(draft: RuleDraft): FirewallRule {
     action: forward ? 'accept' : draft.action,
     protocol: draft.protocol,
     source: draft.source.trim(),
-    destination: toHost
-      ? { kind: 'host' }
-      : { kind: 'address', cidr: draft.destinationCidr.trim() },
+    destination: draft.destination.trim(),
     keepSourceAddress: forward && draft.keepSourceAddress,
     enabled: draft.enabled,
     comment: draft.comment.trim(),
@@ -177,11 +177,11 @@ export function toRule(draft: RuleDraft): FirewallRule {
 export function draftsDiffer(
   drafts: readonly RuleDraft[],
   saved: readonly FirewallRule[],
+  hostAddresses: readonly string[],
 ): boolean {
-  return (
-    JSON.stringify(drafts.map(toRule)) !==
-    JSON.stringify(saved.map((rule) => toRule(toDraft(rule))))
-  );
+  const rules = (list: readonly RuleDraft[]) =>
+    JSON.stringify(list.map((draft) => toRule(draft, hostAddresses)));
+  return rules(drafts) !== rules(saved.map((rule) => toDraft(rule)));
 }
 
 /** Moves the draft `key` one place up or down among the drafts of its direction. */

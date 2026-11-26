@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "admin": {
+    "username": "admin",
+    "passwordHash": "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA"
+  },
+  "language": "de",
+  "firewall": {
+    "dropInvalid": true,
+    "mssClamp": false,
+    "synFloodProtection": true,
+    "pingLimit": true,
+    "rules": [
+      {
+        "id": "r-ssh",
+        "name": "SSH",
+        "direction": "inbound",
+        "action": "accept",
+        "protocol": "tcp",
+        "source": "203.0.113.0/24",
+        "destination": {"kind": "host"},
+        "destinationPort": {"from": 22},
+        "keepSourceAddress": false,
+        "enabled": true,
+        "comment": "admin access"
+      },
+      {
+        "id": "r-ike",
+        "name": "Router: IKE",
+        "direction": "inbound",
+        "action": "accept",
+        "protocol": "udp",
+        "source": "",
+        "destination": {"kind": "address", "cidr": "192.168.1.2/32"},
+        "destinationPort": {"from": 500},
+        "publicPort": {"from": 500},
+        "keepSourceAddress": true,
+        "enabled": true,
+        "comment": ""
+      },
+      {
+        "id": "r-out",
+        "name": "Router: outbound",
+        "direction": "outbound",
+        "action": "accept",
+        "protocol": "esp",
+        "source": "192.168.1.2",
+        "destination": {"kind": "address", "cidr": "0.0.0.0/0"},
+        "keepSourceAddress": false,
+        "enabled": false,
+        "comment": ""
+      }
+    ]
+  },
+  "desiredConnection": {
+    "activeProfileId": "",
+    "wantConnected": false
+  },
+  "remoteAccess": {
+    "enabled": false,
+    "port": 8443,
+    "certificateSource": "selfSigned"
+  }
+}

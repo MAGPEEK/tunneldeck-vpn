@@ -50,8 +50,8 @@ func testCountersSurviveUnchangedReinstall(t *testing.T, backend BackendPreferen
 		t.Fatalf("LANSubnets = %v, %v; want the container's network", lan, err)
 	}
 
-	udp := domain.FirewallRule{ID: "udp", Name: "UDP 5000", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP,
-		Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(5000), Enabled: true}
+	udp := domain.LegacyHostRule(domain.FirewallRule{ID: "udp", Name: "UDP 5000", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP,
+		DestinationPort: domain.SinglePort(5000), Enabled: true})
 	firewall := domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{udp}}
 	install(t, g, firewall)
 	sendUDP(t, tun, 5000, 3)
@@ -67,7 +67,7 @@ func testCountersSurviveUnchangedReinstall(t *testing.T, backend BackendPreferen
 	withOutbound := firewall
 	withOutbound.Rules = append([]domain.FirewallRule{udp}, domain.FirewallRule{
 		ID: "out", Name: "Out", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny,
-		Source: lanTarget(t, lan[0]), Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: "198.51.100.0/24"},
+		Source: lanTarget(t, lan[0]), Destination: "198.51.100.0/24",
 		Enabled: true,
 	})
 	install(t, g, withOutbound)

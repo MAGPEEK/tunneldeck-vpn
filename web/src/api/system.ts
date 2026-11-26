@@ -3,6 +3,8 @@ import { request } from './client';
 export interface CheckResult {
   id: string;
   ok: boolean;
+  /** A failed check that only turns a feature off; shown as a warning, not a failure. */
+  warning?: boolean;
   detail: string;
   hint?: string;
 }

@@ -66,7 +66,7 @@ func TestLanguage(t *testing.T) {
 func hostRule(port int) domain.FirewallRule {
 	return domain.FirewallRule{
 		Name: fmt.Sprintf("Host port %d/tcp", port), Direction: domain.DirectionInbound, Action: domain.ActionAccept,
-		Protocol: domain.ProtocolTCP, Destination: domain.FirewallDestination{Kind: domain.DestinationHost},
+		Protocol: domain.ProtocolTCP, Destination: "192.168.1.10",
 		DestinationPort: domain.SinglePort(port), Enabled: true,
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -18,17 +19,17 @@ func firewallBody(rules ...string) string {
 
 // Rules as the UI sends them.
 const (
-	sshRule      = `{"name":"SSH","direction":"inbound","protocol":"tcp","destination":{"kind":"host"},"destinationPort":{"from":22},"enabled":true}`
-	ikeForward   = `{"name":"IKE","direction":"inbound","protocol":"udp","destination":{"kind":"address","cidr":"192.168.2.2"},"destinationPort":{"from":500},"keepSourceAddress":true,"enabled":true}`
-	anyPortWeb   = `{"name":"Web","direction":"inbound","protocol":"tcp","destination":{"kind":"address","cidr":"192.168.2.3"},"enabled":true}`
-	lancomOutput = `{"name":"LANCOM out","direction":"outbound","protocol":"any","source":"192.168.2.2","destination":{"kind":"address","cidr":"0.0.0.0/0"},"enabled":true}`
+	sshRule      = `{"name":"SSH","direction":"inbound","protocol":"tcp","destination":"192.168.2.10","destinationPort":{"from":22},"enabled":true}`
+	ikeForward   = `{"name":"IKE","direction":"inbound","protocol":"udp","destination":"192.168.2.2","destinationPort":{"from":500},"keepSourceAddress":true,"enabled":true}`
+	anyPortWeb   = `{"name":"Web","direction":"inbound","protocol":"tcp","destination":"192.168.2.3","enabled":true}`
+	routerOutput = `{"name":"Router out","direction":"outbound","protocol":"any","source":"192.168.2.2","destination":"0.0.0.0/0","enabled":true}`
 )
 
 func TestGetFirewall(t *testing.T) {
 	env := newTestEnv(t)
 	body := strings.TrimSpace(env.do(t, http.MethodGet, "/api/firewall", "").Body.String())
 	want := `{"rules":[],"settings":{"dropInvalid":false,"mssClamp":false,"synFloodProtection":false,"pingLimit":false},` +
-		`"hostAddress":"192.168.2.10","lanSubnets":["192.168.2.0/24"],"ipForward":true,"counters":{},"countersAvailable":true}`
+		`"hostAddress":"192.168.2.10","hostAddresses":["192.168.2.10"],"lanSubnets":["192.168.2.0/24"],"ipForward":true,"counters":{},"countersAvailable":true}`
 	if body != want {
 		t.Errorf("body = %s\nwant %s", body, want)
 	}
@@ -48,14 +49,14 @@ func TestGetFirewallWithoutNetworkDetection(t *testing.T) {
 	rec := env.do(t, http.MethodGet, "/api/firewall", "")
 	assertStatus(t, rec, http.StatusOK)
 	body := rec.Body.String()
-	if !strings.Contains(body, `"hostAddress":"","lanSubnets":[],"ipForward":false`) || strings.Contains(body, "boom") {
+	if !strings.Contains(body, `"hostAddress":"","hostAddresses":[],"lanSubnets":[],"ipForward":false`) || strings.Contains(body, "boom") {
 		t.Errorf("body = %s, want empty network values and no error", body)
 	}
 }
 
 func TestPutFirewall(t *testing.T) {
 	env := newTestEnv(t)
-	body := `{"rules":[` + sshRule + `,` + ikeForward + `,` + lancomOutput + `],` +
+	body := `{"rules":[` + sshRule + `,` + ikeForward + `,` + routerOutput + `],` +
 		`"settings":{"dropInvalid":true,"mssClamp":false,"synFloodProtection":true,"pingLimit":false}}`
 	rec := env.do(t, http.MethodPut, "/api/firewall", body)
 	assertStatus(t, rec, http.StatusOK)
@@ -69,7 +70,7 @@ func TestPutFirewall(t *testing.T) {
 			t.Errorf("rule without ID: %+v", rule)
 		}
 	}
-	if !got.Rules[1].KeepSourceAddress || got.Rules[1].Destination.CIDR != "192.168.2.2" || got.Rules[2].Direction != domain.DirectionOutbound {
+	if !got.Rules[1].KeepSourceAddress || got.Rules[1].Destination != "192.168.2.2" || got.Rules[2].Direction != domain.DirectionOutbound {
 		t.Errorf("rules = %+v", got.Rules)
 	}
 	stored := env.firewallStore.Firewall()
@@ -105,7 +106,7 @@ func TestPutFirewallRejects(t *testing.T) {
 		{name: "rule without name", body: firewallBody(strings.Replace(sshRule, `"SSH"`, `""`, 1)), wantFields: []string{"rules[0].name"}},
 		{name: "unknown protocol", body: firewallBody(strings.Replace(sshRule, `"tcp"`, `"sctp"`, 1)), wantFields: []string{"rules[0].protocol"}},
 		{name: "unknown direction", body: firewallBody(strings.Replace(sshRule, `"inbound"`, `"sideways"`, 1)), wantFields: []string{"rules[0].direction"}},
-		{name: "outbound without source", body: firewallBody(strings.Replace(lancomOutput, `"source":"192.168.2.2",`, ``, 1)), wantFields: []string{"rules[0].source"}},
+		{name: "outbound without source", body: firewallBody(strings.Replace(routerOutput, `"source":"192.168.2.2",`, ``, 1)), wantFields: []string{"rules[0].source"}},
 		{name: "range too long", body: firewallBody(strings.Replace(sshRule, `{"from":22}`, `{"from":1000,"to":3000}`, 1)), wantFields: []string{"rules[0].destinationPort"}},
 		{name: "duplicate rule", body: firewallBody(sshRule, sshRule), wantFields: []string{"rules[1].name"}},
 		{
@@ -137,6 +138,11 @@ func TestPutFirewallRejects(t *testing.T) {
 			prepare:    func(e *testEnv) { e.firewall.networkErr = errBoom },
 			wantFields: []string{"rules[0].destination"},
 		},
+		{name: "destination missing", body: firewallBody(strings.Replace(ikeForward, `"destination":"192.168.2.2",`, ``, 1)), wantFields: []string{"rules[0].destination"}},
+		{name: "destination of the former shape", body: firewallBody(strings.Replace(sshRule, `"192.168.2.10"`, `{"kind":"host"}`, 1)), status: http.StatusBadRequest, code: CodeBadRequest},
+		{name: "drop to another device", body: firewallBody(strings.Replace(ikeForward, `"keepSourceAddress":true,`, `"action":"drop",`, 1)), wantFields: []string{"rules[0].action"}},
+		{name: "public port to this device", body: firewallBody(strings.Replace(sshRule, `"enabled"`, `"publicPort":{"from":2222},"enabled"`, 1)), wantFields: []string{"rules[0].publicPort"}},
+		{name: "keep source to this device", body: firewallBody(strings.Replace(sshRule, `"enabled"`, `"keepSourceAddress":true,"enabled"`, 1)), wantFields: []string{"rules[0].keepSourceAddress"}},
 		{name: "unknown rule field", body: firewallBody(strings.Replace(sshRule, `"enabled"`, `"x":1,"enabled"`, 1)), status: http.StatusBadRequest, code: CodeBadRequest},
 		{name: "wrong type", body: `{"rules":[],"settings":{"dropInvalid":"yes"}}`, status: http.StatusBadRequest, code: CodeBadRequest},
 	}
@@ -242,9 +248,9 @@ func TestIPsecTemplate(t *testing.T) {
 		wantRules int
 		wantPeer  string
 	}{
-		{name: "no peers", body: `{"name":"LANCOM","deviceAddress":"192.168.2.2"}`, wantRules: 5},
-		{name: "empty peers", body: `{"name":"LANCOM","deviceAddress":"192.168.2.2","peers":[]}`, wantRules: 5},
-		{name: "two peers", body: `{"name":" LANCOM ","deviceAddress":"192.168.2.2","peers":["203.0.113.7","198.51.100.0/24"]}`, wantRules: 10, wantPeer: "203.0.113.7/32"},
+		{name: "no peers", body: `{"name":"Router","deviceAddress":"192.168.2.2"}`, wantRules: 5},
+		{name: "empty peers", body: `{"name":"Router","deviceAddress":"192.168.2.2","peers":[]}`, wantRules: 5},
+		{name: "two peers", body: `{"name":" Router ","deviceAddress":"192.168.2.2","peers":["203.0.113.7","198.51.100.0/24"]}`, wantRules: 10, wantPeer: "203.0.113.7/32"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -256,7 +262,7 @@ func TestIPsecTemplate(t *testing.T) {
 				t.Fatalf("got %d rules, want %d: %+v", len(got), tt.wantRules, got)
 			}
 			first := got[0]
-			if first.Name != "LANCOM: IKE" || first.Destination.CIDR != "192.168.2.2" || first.Source != tt.wantPeer || first.ID != "" {
+			if first.Name != "Router: IKE" || first.Destination != "192.168.2.2" || first.Source != tt.wantPeer || first.ID != "" {
 				t.Errorf("first rule = %+v", first)
 			}
 			if err := domain.ValidateFirewallRules(got); err != nil {
@@ -281,6 +287,7 @@ func TestIPsecTemplateRejects(t *testing.T) {
 		{name: "name too long", body: `{"name":"` + strings.Repeat("n", domain.MaxIPsecTemplateNameLength+1) + `","deviceAddress":"192.168.2.2"}`, wantFields: []string{"name"}},
 		{name: "device is a network", body: `{"name":"x","deviceAddress":"192.168.2.0/24"}`, wantFields: []string{"deviceAddress"}},
 		{name: "device outside the LAN", body: `{"name":"x","deviceAddress":"10.0.0.2"}`, wantFields: []string{"deviceAddress"}},
+		{name: "device is this device", body: `{"name":"x","deviceAddress":"192.168.2.10"}`, wantFields: []string{"deviceAddress"}},
 		{name: "bad peer", body: `{"name":"x","deviceAddress":"192.168.2.2","peers":["203.0.113.7","nope"]}`, wantFields: []string{"peers[1]"}},
 		{name: "unknown field", body: `{"name":"x","deviceAddress":"192.168.2.2","psk":"x"}`, status: http.StatusBadRequest, code: CodeBadRequest},
 	}
@@ -357,4 +364,43 @@ func TestGetDevices(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "boom") {
 		t.Errorf("body = %s, want no internal detail", rec.Body.String())
 	}
+}
+
+// TestGetFirewallResolvesLegacyHostRules shows a rule stored with the
+// former destination "host" with the host's current address, and nothing
+// when no address is detected; the next PUT stores that plain address.
+func TestGetFirewallResolvesLegacyHostRules(t *testing.T) {
+	env := newTestEnv(t)
+	env.firewallStore.firewall = domain.Firewall{Rules: []domain.FirewallRule{domain.LegacyHostRule(hostPortRule("old", domain.ProtocolTCP, 22))}}
+	rec := env.do(t, http.MethodGet, "/api/firewall", "")
+	assertStatus(t, rec, http.StatusOK)
+	if body := rec.Body.String(); !strings.Contains(body, `"destination":"192.168.2.10"`) || strings.Contains(body, "kind") ||
+		strings.Contains(body, "legacy") {
+		t.Errorf("body = %s, want the rule to the host address", body)
+	}
+	if !env.firewallStore.Firewall().Rules[0].IsLegacyHost() {
+		t.Error("reading changed the stored rule")
+	}
+
+	got := decode[firewallResponse](t, rec)
+	put := env.do(t, http.MethodPut, "/api/firewall", `{"rules":`+string(mustJSON(t, got.Rules))+`,"settings":`+allSettings+`}`)
+	assertStatus(t, put, http.StatusOK)
+	if stored := env.firewallStore.Firewall().Rules[0]; stored.IsLegacyHost() || stored.Destination != "192.168.2.10" {
+		t.Errorf("stored after PUT = %+v", stored)
+	}
+
+	env.firewall.networkErr = errBoom
+	env.firewallStore.firewall = domain.Firewall{Rules: []domain.FirewallRule{domain.LegacyHostRule(hostPortRule("old", domain.ProtocolTCP, 22))}}
+	if got := decode[firewallResponse](t, env.do(t, http.MethodGet, "/api/firewall", "")); got.Rules[0].Destination != "" {
+		t.Errorf("rule without a detected address = %+v", got.Rules[0])
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

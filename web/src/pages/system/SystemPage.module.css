@@ -51,6 +51,10 @@
   color: var(--state-danger-text);
 }
 
+.warn {
+  color: var(--state-warning-text);
+}
+
 .checkText {
   display: flex;
   flex-direction: column;
@@ -127,6 +131,11 @@
 
 .danger {
   color: var(--state-danger-text);
+  font-size: var(--font-size-sm);
+}
+
+.warnText {
+  color: var(--state-warning-text);
   font-size: var(--font-size-sm);
 }
 
