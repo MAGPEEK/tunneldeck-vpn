@@ -697,6 +697,7 @@
     "upload": "Upload certificate",
     "uploaded": "Certificate uploaded.",
     "vpnIpHint": "Set the public address in the profile if your provider uses a different one.",
+    "editProfile": "Edit profile",
     "url": "Address"
   },
   "fieldError": {

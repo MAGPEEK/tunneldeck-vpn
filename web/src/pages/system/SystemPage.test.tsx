@@ -198,6 +198,28 @@ describe('SystemPage', () => {
     expect(
       await within(card).findByRole('link', { name: 'https://vpn.example.com:8443' }),
     ).toHaveAttribute('href', 'https://vpn.example.com:8443');
+    expect(within(card).queryByRole('link', { name: 'Edit profile' })).not.toBeInTheDocument();
+  });
+
+  it('falls back to the VPN IP and links the profile where the public address is set', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': { body: { ...REMOTE, enabled: true, listening: true } },
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', vpnIp: '172.21.31.170' }),
+        },
+        'GET /api/profiles': { body: [makeProfile()] },
+      }),
+      '/system',
+    );
+    const card = await remoteCard();
+    expect(
+      await within(card).findByRole('link', { name: 'https://172.21.31.170:8443' }),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Edit profile' })).toHaveAttribute(
+      'href',
+      '/profiles/p1',
+    );
   });
 
   it('shows a neutral note when this build has no remote access', async () => {

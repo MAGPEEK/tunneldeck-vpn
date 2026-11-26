@@ -5,7 +5,7 @@ import { Link } from 'react-router';
 import type { ConnectionStatus } from '../../api/connection';
 import type { FirewallState } from '../../api/firewall';
 import type { Profile } from '../../api/profiles';
-import { AdvisoryList } from '../../advisories/AdvisoryList';
+import { AdvisoryList, AdvisoryNotice } from '../../advisories/AdvisoryList';
 import { Button } from '../../components/Button';
 import { translateDynamic } from '../../i18n/dynamic';
 import { protocolName } from '../profiles/profileText';
@@ -30,8 +30,9 @@ export interface ConnectionCardProps {
   showLine?: boolean;
   /**
    * Renders what follows the card (the connection details) with the
-   * Connect, Reconnect and Disconnect buttons as its footer. Without it the
-   * buttons sit at the end of the card.
+   * Connect, Reconnect and Disconnect buttons as its footer; the advisories
+   * then follow as a notice box at the very bottom. Without it the buttons
+   * and advisories sit at the end of the card.
    */
   details?: (actions: ReactNode) => ReactNode;
 }
@@ -89,9 +90,10 @@ export function ConnectionCard(props: ConnectionCardProps) {
           />
         )}
         {!props.details && actions}
-        <AdvisoryList advisories={advisories} />
+        {!props.details && <AdvisoryList advisories={advisories} />}
       </section>
       {props.details?.(actions)}
+      {props.details && <AdvisoryNotice advisories={advisories} />}
     </>
   );
 }

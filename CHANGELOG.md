@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-26
+
+### Changed
+
+- Dashboard: the advisories of the profile (for example "The data channel uses no cipher") moved from the connection card to a notice box at the very bottom, below "Connection details".
+- System page, remote access: when the URL falls back to the VPN IP because the profile names no public address, the hint links to the profile ("Edit profile"), where the public address is set.
+
 ## [0.2.1] - 2026-11-26
 
 ### Changed

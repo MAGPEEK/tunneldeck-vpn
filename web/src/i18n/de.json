@@ -697,6 +697,7 @@
     "upload": "Zertifikat hochladen",
     "uploaded": "Zertifikat hochgeladen.",
     "vpnIpHint": "Tragen Sie die öffentliche Adresse im Profil ein, falls Ihr Anbieter eine andere verwendet.",
+    "editProfile": "Profil bearbeiten",
     "url": "Adresse"
   },
   "fieldError": {

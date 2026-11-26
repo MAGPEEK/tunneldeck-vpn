@@ -44,7 +44,7 @@ function RemoteAccessUrl({ remote }: { remote: RemoteAccess }) {
     <dl className={styles.values}>
       <dt>{t('remoteAccess.url')}</dt>
       <dd>
-        <RemoteAccessAddress target={target} />
+        <RemoteAccessAddress target={target} profileId={profile?.id} />
       </dd>
     </dl>
   );

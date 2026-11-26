@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionState, ConnectionStatus } from '../../api/connection';
 import { makeFirewall, makeProfile, makeStatus } from '../../test/fixtures';
@@ -63,6 +63,18 @@ describe('ConnectionCard', () => {
     renderCard(connected);
     expect(screen.queryByRole('heading', { name: 'Office' })).not.toBeInTheDocument();
     expect(screen.getAllByText('OpenVPN')).toHaveLength(1);
+  });
+
+  it('hands the actions to the details and puts the advisories in notices below them', () => {
+    renderCard(connected, {
+      details: (actions) => <aside aria-label="Details">{actions}</aside>,
+    });
+    const details = screen.getByRole('complementary', { name: 'Details' });
+    expect(within(details).getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+    const notice = screen.getByText('Recommendations');
+    expect(details.compareDocumentPosition(notice)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelectorAll('[data-tone="danger"]')).toHaveLength(1);
+    expect(screen.getByRole('list', { name: 'Advisories' }).closest('section')).toBeNull();
   });
 
   it('places the actions below the connection line', () => {
