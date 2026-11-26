@@ -54,7 +54,7 @@ Die Compose-Datei gibt dem Container das Host-Netzwerk, `NET_ADMIN` und `/dev/ne
 
 1. `http://<NAS-IP>:8194` öffnen. TunnelDeck-VPN lauscht auf der Adresse der Schnittstelle mit der Standardroute; andere Adresse und Port setzt `TUNNELDECK_LISTEN` (Beispiel `192.168.1.10:9000`). Durch den VPN-Tunnel ist die Oberfläche nie erreichbar; Fernzugriff über das VPN gibt es nur per HTTPS (Seite System, Standardport 8443, frei wählbar).
 2. Das Admin-Konto anlegen (Passwort mit mindestens 12 Zeichen).
-3. **System** öffnen und prüfen, ob alle Selbsttests bestanden sind: TUN-Gerät, iptables, `ip`, `NET_ADMIN`. Jeder fehlgeschlagene Test zeigt einen Hinweis.
+3. **System** öffnen und prüfen, ob alle Selbsttests bestanden sind: TUN-Gerät, iptables, `ip`, `NET_ADMIN`, IP-Weiterleitung und die LAN-Subnetze (Abschnitt 10). Jeder fehlgeschlagene Test zeigt einen Hinweis.
 
 Der Integritätsstatus im Container Manager zeigt, ob der Webserver antwortet. Ob der Tunnel steht, zeigt er nicht; das zeigt das Dashboard.
 
@@ -88,7 +88,7 @@ Die Anmeldeseite ist danach aus dem Internet erreichbar. Ein langes Admin-Passwo
 
 Den ganzen Ordner `docker/tunneldeck` sichern (Hyper Backup oder Kopie):
 
-- `settings.json`: Admin-Konto, Host-Zugriffsregeln, Fernzugriff, gewünschte Verbindung,
+- `settings.json`: Admin-Konto, Firewall-Regeln und -Einstellungen, Fernzugriff, gewünschte Verbindung,
 - `profiles.json`: Profile; geheime Felder verschlüsselt,
 - `secret.key`: der Schlüssel zu diesen Geheimnissen.
 
@@ -110,3 +110,36 @@ sudo docker exec tunneldeck tunneldeck reset-admin
 ```
 
 Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleiben. Danach die Oberfläche öffnen und das Konto neu anlegen. Alternativ `TUNNELDECK_RESET_ADMIN: "1"` setzen, neu starten, Konto anlegen und die Variable wieder entfernen; solange sie gesetzt ist, wird bei jedem Start zurückgesetzt.
+
+## 10. Firewall-Regeln und IPsec
+
+Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zur NAS selbst (**Dieses Gerät**) und zu anderen Geräten in ihrem LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, Dieses Gerät, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:
+
+- Eine eingehende Regel an **Dieses Gerät** öffnet einen Port der NAS an der Tunneladresse (zum Beispiel `5001` von DSM). Host-Zugriffsregeln von 0.1 werden beim ersten Start von 0.2 zu solchen Regeln.
+- Eine eingehende Regel an eine andere LAN-Adresse ist eine **Portweiterleitung**. Mit **Quelladresse behalten** sieht das Gerät die echte entfernte Adresse und braucht die NAS als Gateway.
+- Eine **ausgehende** Regel schickt den Verkehr eines LAN-Geräts durch den Tunnel. Das Gerät braucht die NAS als Gateway oder eine Route im LAN-Router, die auf die NAS zeigt. Solange der Tunnel nicht steht, wird dieser Verkehr verworfen (Kill-Switch).
+
+### IP-Weiterleitung auf DSM
+
+Portweiterleitungen und ausgehende Regeln brauchen die IPv4-Weiterleitung auf der NAS. Container Manager (Docker) schaltet sie normalerweise ein. Der Selbsttest **ip-forward** auf der Seite System zeigt den Wert; per SSH:
+
+```sh
+cat /proc/sys/net/ipv4/ip_forward     # 1 heißt an
+```
+
+Steht sie auf `0`: Systemsteuerung > Aufgabenplaner > Erstellen > Ausgelöste Aufgabe > Benutzerdefiniertes Skript, Benutzer `root`, Ereignis **Hochfahren**, Skript `sysctl -w net.ipv4.ip_forward=1`; einmal von Hand ausführen. *Auf der NAS prüfen:* ob DSM den Wert auch ohne die Aufgabe behält. TunnelDeck-VPN ändert ihn nie.
+
+### DSM-Firewall und weitergeleiteter Verkehr
+
+Die DSM-Firewall filtert Verkehr an die NAS selbst. Die Ketten von TunnelDeck-VPN stehen für Tunnelverkehr an erster Stelle in `INPUT` und `FORWARD`, dort entscheiden also seine Regeln. *Auf der NAS prüfen:* dass DSMs eigene Regeln weitergeleiteten Verkehr zwischen Tunnel und LAN nicht sperren (`sudo iptables -S FORWARD | head -5` sollte zuerst die Sprünge nach `TUNNELDECK-FORWARD` zeigen); nach Änderungen an der DSM-Firewall den Container neu starten.
+
+### Beispiel: ein LANCOM-Router im LAN
+
+Referenzfall (SPEC §16.2): Ein IPsec-Router im LAN, hier ein LANCOM-Router unter `192.168.2.2`, baut seine IPsec-Tunnel über die öffentliche Adresse des Tunnels auf (mdex public.IP).
+
+1. Seite Firewall > **IPsec-Gerät hinzufügen**: ein Name, Geräteadresse `192.168.2.2`, optional die öffentlichen Adressen der Gegenstellen. Die Vorlage fügt eingehend UDP 500, UDP 4500 und ESP an `192.168.2.2` mit behaltener Quelladresse ein und ausgehend UDP und ESP von `192.168.2.2` an die Gegenstellen (oder `0.0.0.0/0`). Die Änderungen speichern.
+2. Im Router: eine statische Route für die öffentliche Adresse jeder Gegenstelle (`/32`) über die LAN-Adresse der NAS, oder die NAS als Default-Gateway.
+3. In der IPsec-Verbindung des Routers: IKEv2 mit aktuellen Proposals, NAT-Traversal erlaubt (die eigene Adresse des Routers unterscheidet sich von der öffentlichen Adresse, beide Seiten wechseln daher auf UDP 4500), und auf beiden Seiten eine Identität, die keine IP-Adresse ist (Typ FQDN oder E-Mail).
+4. In jeder Gegenstelle: die öffentliche Adresse des Tunnels als Adresse des Routers.
+
+Die Tabelle der fünf Regeln und die ausführlichen Schritte stehen in [`linux.de.md`, „Beispiel: ein IPsec-Router im LAN“](linux.de.md#beispiel-ein-ipsec-router-im-lan). Geprüft: Der End-to-End-Test spielt diesen Fall mit strongSwan 6.0 auf beiden Seiten durch (IKEv2 mit PSK und NAT-T in beide Richtungen, reines ESP mit manuell gesetzten Schlüsseln), mit beiden iptables-Backends, iptables-legacy eingeschlossen, aber auf einem aktuellen Kernel eines Docker-Hosts, nicht auf dem Kernel 4.4 von DSM. *Nicht geprüft:* ein echter LANCOM-Router, DSM 7.2 selbst und eine echte mdex-public.IP-Verbindung.

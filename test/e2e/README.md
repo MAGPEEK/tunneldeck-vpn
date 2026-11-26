@@ -7,10 +7,10 @@ Drives a real TunnelDeck-VPN image through its HTTP API against throwaway OpenVP
 Requirements: Docker with Compose v2, Go (see `go.mod`), a Linux kernel with `/dev/net/tun` (Docker Desktop on Windows or macOS works: its Linux VM provides it).
 
 ```sh
-go test -tags e2e -v -count=1 -timeout 30m ./test/e2e/
+go test -tags e2e -v -count=1 -timeout 45m ./test/e2e/
 ```
 
-The test builds both images, starts the stack, runs the matrix and removes everything again: containers, the network, volumes and the two images it built (`tunneldeck-e2e:local`, `tunneldeck-e2e-server:local`). Base images and the build cache stay. Set `E2E_KEEP_STACK=1` to keep the stack for debugging; remove it afterwards with
+The test builds the three images, starts the stack, runs the matrix and the firewall cases and removes everything again: containers, the networks, volumes and the images it built (`tunneldeck-e2e:local`, `tunneldeck-e2e-server:local`, `tunneldeck-e2e-node:local`). Only the firewall cases: `-run 'TestEndToEnd/firewall'`. Base images and the build cache stay. Set `E2E_KEEP_STACK=1` to keep the stack for debugging; remove it afterwards with
 
 ```sh
 docker compose -f test/e2e/compose.yml -p tunneldeck-e2e down -v --rmi all
@@ -18,7 +18,7 @@ docker compose -f test/e2e/compose.yml -p tunneldeck-e2e down -v --rmi all
 
 Without the `e2e` tag, `go test ./...` skips this package.
 
-Duration: about 7 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-25, three backends); each scenario takes 35–47 s, most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart. A cold build adds the image build time.
+Duration: about 10 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-26): about 7 minutes for the matrix on three backends, where each scenario takes 33–54 s, most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart. A cold build adds the image build time.
 
 ## Topology
 
@@ -75,9 +75,46 @@ TunnelDeck-VPN shares the backend of the host's firewall (SPEC §6): it counts t
 8. Disconnect: main table and rules are exactly as before; variant A: `10.99.0.1` is no longer reachable.
 9. Restart: connect, `docker compose restart` the TunnelDeck-VPN container, sign in again; the tunnel comes back by itself, routing is as in step 5 and the firewall is installed.
 
+## Firewall topology
+
+The firewall cases (SPEC §16) add a LAN behind TunnelDeck-VPN. They use variant A without remote networks, so only the outbound rules' policy routing sends LAN traffic into the tunnel, and run on both backends: `tunneldeck-lan-nft` (only nf_tables) and `tunneldeck-lan-legacy` (only legacy).
+
+```
+   VPN side (server-a's namespace)              TunnelDeck "host"                 LAN 10.95.0.0/24
+   ┌──────────────────────────────┐   tunnel   ┌────────────────────────┐   ┌──────────────────────────┐
+   │ server-a  tun0 10.94.1.1     │ ◀────────▶ │ tunneldeck-lan-nft     │   │ lan-web    10.95.0.10    │
+   │ probe     198.18.0.1 (lo)    │            │   LAN 10.95.0.2        │◀─▶│  HTTP :80, /cgi-bin/     │
+   │ remote0   10.99.0.1/24       │            │ tunneldeck-lan-legacy  │   │  source = client address │
+   │ peer-ipsec 198.18.0.2 (lo)   │            │   LAN 10.95.0.3        │   │ lan-ipsec  10.95.0.20    │
+   │  inner0   10.96.2.1/24       │            │ ip_forward=1           │   │  inner0 10.96.1.1/24     │
+   └──────────────────────────────┘            └────────────────────────┘   └──────────────────────────┘
+```
+
+- The LAN network is a Docker bridge with a fixed subnet. `lan-web` and `lan-ipsec` get their default route via the TunnelDeck-VPN under test (set by the test), as LAN devices that use the host as gateway. The test image `node/` (Alpine, busybox httpd, strongSwan 6.0, iproute2) serves all three nodes.
+- `peer-ipsec` shares server-a's network namespace (`network_mode: service:server-a`): it sits on the VPN side like the probe and reaches the LAN router only through the tunnel's address, the "public address" the server sees.
+- The two LAN TunnelDecks listen on `0.0.0.0:8194` (`TUNNELDECK_LISTEN`): with two networks the default-route address need not be the one Docker publishes the port to. The firewall keeps the UI port closed to the tunnel as before.
+- Each starts with `testdata/settings-v1.json` (schema version 1, two host-access rules, the test admin's argon2id hash) copied to `/data` on the first start, so the migration runs against a real file.
+
+## Firewall assertions per backend
+
+Each case is a subtest of `firewall-lan-nft` and `firewall-lan-legacy`:
+
+1. `self-checks`: every self-check passes, `ip-forward` included, and `lan-subnets` names 10.95.0.0/24; `GET /api/firewall` reports the LAN and `ipForward: true`.
+2. `migration-v1`: before any change `settings.json` still has `schemaVersion: 1`; `GET /api/firewall` lists the two host-access rules as inbound rules to this device (`Host port 5001/tcp`, `Host port 161/udp` with its source and disabled state, IDs and comments kept) with every protection on; saving them unchanged writes `schemaVersion: 2` with `firewall` and without `hostAccessRules`, and the rules read back the same.
+3. `port-forward-masquerade`: public port 8080 → `lan-web:80`; the probe gets lan-web's answer through the tunnel address, and lan-web saw TunnelDeck's LAN address as client.
+4. `port-forward-keep-source`: the same rule with `keepSourceAddress`; lan-web saw the probe's address `198.18.0.1` and answered through TunnelDeck (policy rule 7191).
+5. `port-forward-source-restriction`: the rule with source 203.0.113.0/24 gives the probe no answer.
+6. `outbound-policy-routing`: an outbound rule `10.95.0.10 → 10.99.0.0/24` (protocol any) adds `7190: from 10.95.0.10 to 10.99.0.0/24 lookup 7194`; lan-web pings 10.99.0.1 behind the server, lan-ipsec (no rule) does not.
+7. `ipsec-nat-t`: `POST /api/firewall/templates/ipsec` for 10.95.0.20 with peer 198.18.0.2 returns five rules (inbound ones keep the source), which are saved as the firewall. Both strongSwan endpoints load an IKEv2 PSK connection (AES-GCM, ECP-256; IDs, not addresses, since the addresses differ by NAT). `peer-initiates`: peer-ipsec initiates to the tunnel address; `lan-initiates`: lan-ipsec initiates to 198.18.0.2 (outbound rules). Each time both sides list the SA as `ESTABLISHED`/`INSTALLED` and `TUNNEL-in-UDP`, and the inner networks 10.96.1.0/24 and 10.96.2.0/24 ping each other in both directions. TunnelDeck masquerades the LAN router behind the tunnel address, so IKE always detects NAT and uses NAT-T (UDP 4500); raw ESP never occurs with IKE in this setup.
+8. `esp-forwarding`: the template's ESP forward with plain ESP (protocol 50): manually keyed tunnel-mode SAs (`ip xfrm`, AES-GCM) between 198.18.0.2 and the tunnel address on the peer and between 198.18.0.2 and 10.95.0.20 on lan-ipsec; the peer pings lan-ipsec's inner address 10.97.1.1 from 10.97.2.1. The answer proves the ESP packet reached lan-ipsec with the peer's own source and the reply ESP went back through the tunnel.
+9. `kill-switch`: with lan-web's outbound rule and the port forward, the test gives the host its own route to 10.99.0.0/24 via server-a outside the tunnel (and server-a a route back), plus a counting rule in `mangle POSTROUTING` (a table TunnelDeck never touches) for lan-web's packets to that network leaving by any interface but `tdvpn0`. Then the tunnel drops: OpenVPN's UDP is blocked in `OUTPUT` and the OpenVPN process is killed, so the state leaves `connected` and `tdvpn0` disappears while TunnelDeck keeps reconnecting. lan-web's pings get no answer and the counter stays at 0; the port forward does not answer. After lifting the block the tunnel comes back, lan-web reaches 10.99.0.1 and the forward answers again. After a disconnect the pings again get no answer with 0 leaked packets. Control: without the outbound rule the same pings take the host's route, get answers and are counted, which proves both the leak path and the counter work.
+
+Duration of the firewall cases: 75–85 s per backend (Docker Desktop on Windows, 2026-11-26), most of it the kill switch (reconnect backoff) and the IPsec handshakes.
+
 ## Not covered
 
 - The daily reconnect (SPEC §4.3).
+- Firewall: a real LANCOM (or other vendor's) IPsec router, IKEv1, certificates for IPsec, GRE forwarding, port ranges and shifted public ports, drop/reject rules, ICMP rules, the global protections' limits (SYN flood, ping limit) under load, and the web UI's Firewall page.
 - A real `network_mode: host` deployment on a physical host, and interplay with ufw, firewalld or Docker's own chains (ufw was checked once by hand in a container lab; see `docs/linux.md`).
 - arm64 (the test runs on the build machine's architecture only).
 - Uploaded remote-access certificates, `.ovpn` import and the web UI itself.

@@ -54,7 +54,7 @@ The compose file gives the container host networking, `NET_ADMIN` and `/dev/net/
 
 1. Open `http://<NAS-IP>:8194`. TunnelDeck-VPN listens on the address of the interface that holds the default route; set `TUNNELDECK_LISTEN` to choose another address or port (example `192.168.1.10:9000`). The UI is never reachable through the VPN tunnel; remote access over the VPN is HTTPS only (System page, default port 8443, freely selectable).
 2. Create the admin account (password of at least 12 characters).
-3. Open **System** and check that every self-check passes: TUN device, iptables, `ip`, `NET_ADMIN`. Each failed check shows a hint.
+3. Open **System** and check that every self-check passes: TUN device, iptables, `ip`, `NET_ADMIN`, IP forwarding and the LAN subnets (section 10). Each failed check shows a hint.
 
 The container's health status in Container Manager shows whether the web server answers. It does not show whether the tunnel is up; the dashboard shows that.
 
@@ -88,7 +88,7 @@ The login page then becomes reachable from the internet. Use a long admin passwo
 
 Back up the whole folder `docker/tunneldeck` (Hyper Backup or a copy):
 
-- `settings.json`: admin account, host-access rules, remote access, desired connection,
+- `settings.json`: admin account, firewall rules and settings, remote access, desired connection,
 - `profiles.json`: profiles; secret fields encrypted,
 - `secret.key`: the key for those secrets.
 
@@ -110,3 +110,36 @@ sudo docker exec tunneldeck tunneldeck reset-admin
 ```
 
 This removes the admin account and all sessions; profiles and settings stay. Open the UI and create the account again. Alternatively set `TUNNELDECK_RESET_ADMIN: "1"`, restart, sign up again, and remove the variable; it resets at every start while it is set.
+
+## 10. Firewall rules and IPsec
+
+The **Firewall** page controls what crosses the tunnel in both directions, to the NAS itself (**This device**) and to other devices in its LAN; everything no rule allows is dropped, replies always pass, rules apply top to bottom. The concepts (inbound and outbound rules, This device, port forwards, keep source address, the gateway requirement, the kill switch) are explained in [`linux.md`, section 10](linux.md#10-firewall-rules); they are the same on DSM. In short:
+
+- An inbound rule to **This device** opens a port of the NAS on the tunnel address (for example DSM's `5001`). Host-access rules of 0.1 become such rules on the first start of 0.2.
+- An inbound rule to another LAN address is a **port forward**. With **Keep source address** on, the device sees the real remote address and needs the NAS as its gateway.
+- An **outbound** rule sends a LAN device's traffic through the tunnel. The device needs the NAS as gateway, or a route in the LAN router that points to the NAS. While the tunnel is down that traffic is dropped (kill switch).
+
+### IP forwarding on DSM
+
+Port forwards and outbound rules need IPv4 forwarding on the NAS. Container Manager (Docker) normally turns it on. The **ip-forward** self-check on the System page shows the value; over SSH:
+
+```sh
+cat /proc/sys/net/ipv4/ip_forward     # 1 means on
+```
+
+If it is `0`: Control Panel > Task Scheduler > Create > Triggered Task > User-defined script, user `root`, event **Boot-up**, script `sysctl -w net.ipv4.ip_forward=1`; run it once by hand. *Check on your NAS:* whether DSM keeps the value without the task. TunnelDeck-VPN never changes it.
+
+### DSM firewall and forwarded traffic
+
+The DSM firewall filters traffic to the NAS itself. TunnelDeck-VPN's chains are first in `INPUT` and `FORWARD` for tunnel traffic, so its rules decide there. *Check on your NAS:* that forwarded traffic between the tunnel and the LAN is not blocked by DSM's own rules (`sudo iptables -S FORWARD | head -5` should show the `TUNNELDECK-FORWARD` jumps first); restart the container after changing DSM firewall settings.
+
+### Example: a LANCOM router in the LAN
+
+Reference case (SPEC §16.2): an IPsec router in the LAN, here a LANCOM router at `192.168.2.2`, builds its IPsec tunnels through the tunnel's public address (mdex public.IP).
+
+1. Firewall page > **Add IPsec device**: a name, device address `192.168.2.2`, optionally the peers' public addresses. The template inserts inbound UDP 500, UDP 4500 and ESP to `192.168.2.2` with keep source address on, and outbound UDP and ESP from `192.168.2.2` to the peers (or `0.0.0.0/0`). Save the changes.
+2. In the router: a static route for each peer's public address (`/32`) via the NAS's LAN address, or the NAS as default gateway.
+3. In the router's IPsec connection: IKEv2 with current proposals, NAT traversal allowed (the router's own address differs from the public address, so both sides move to UDP 4500), and on both sides an identity that is not an IP address (FQDN or e-mail type).
+4. In each peer: the tunnel's public address as the router's address.
+
+The table of the five rules and the full steps are in [`linux.md`, "Example: an IPsec router in the LAN"](linux.md#example-an-ipsec-router-in-the-lan). What was tested: the end-to-end test runs this case with strongSwan 6.0 on both sides (IKEv2 with PSK and NAT-T in both directions, plain ESP with manually keyed SAs) on both iptables backends, iptables-legacy included, but on a current Docker host kernel, not on DSM's kernel 4.4. *Not tested:* a real LANCOM router, DSM 7.2 itself, and a real mdex public.IP connection.

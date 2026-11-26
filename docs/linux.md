@@ -55,18 +55,19 @@ docker compose logs -f
 
 1. Open `http://<host-ip>:8194`. TunnelDeck-VPN listens on the address of the interface that holds the default route (the log shows `listening address=...`). Set `TUNNELDECK_LISTEN` to choose another address or port (example `192.168.1.10:9000`). The UI is never reachable through the VPN tunnel; remote access over the VPN is HTTPS only (System page, default port 8443, freely selectable).
 2. Create the admin account (password of at least 12 characters).
-3. Open **System** and check that every self-check passes: TUN device, iptables (it names the backend in use), `ip`, `NET_ADMIN`. Each failed check shows a hint.
+3. Open **System** and check that every self-check passes: TUN device, iptables (it names the backend in use), `ip`, `NET_ADMIN`, IP forwarding (section 10) and the LAN subnets. Each failed check shows a hint.
 
 The Docker health status shows whether the web server answers, not whether the tunnel is up.
 
 ## 4. Firewall: TunnelDeck-VPN, ufw, firewalld and Docker
 
-What TunnelDeck-VPN changes on the host (SPEC §6):
+What TunnelDeck-VPN changes on the host (SPEC §6, §16):
 
-- Chain `TUNNELDECK-INPUT`, jumped to from position 1 of `INPUT` for traffic arriving on `tdvpn0`: accept established connections, accept the ports you allow under **Host access** (and the remote-access port while it is on), drop everything else.
-- Chain `TUNNELDECK-FORWARD`, jumped to from position 1 of `FORWARD` for traffic in or out of `tdvpn0`: drop everything (nothing is forwarded in this version).
-- Routing table `7194` with a default route via `tdvpn0`, and the rule `from <VPN address> lookup 7194`, so replies to connections that came in through the tunnel leave through it. The main routing table is not touched; the only entry that appears there while connected is the kernel's own route for the tunnel subnet.
-- The chains are installed at start, re-applied before every connect and whenever host-access rules change, and removed when the container stops.
+- Chain `TUNNELDECK-INPUT`, jumped to from position 1 of `INPUT` for traffic arriving on `tdvpn0`: accept established connections, apply the inbound firewall rules to **This device** (and accept the remote-access port while it is on), drop everything else.
+- Chain `TUNNELDECK-FORWARD`, jumped to from position 1 of `FORWARD` for traffic in or out of `tdvpn0` and for the traffic of every outbound rule: accept port forwards and outbound rules, drop everything else. Without such rules nothing is forwarded.
+- Chains `TUNNELDECK-PREROUTING` and `TUNNELDECK-POSTROUTING` in the `nat` table: the address translation of port forwards and outbound rules (section 10).
+- Routing table `7194` with a default route via `tdvpn0`, and the rule `from <VPN address> lookup 7194`, so replies to connections that came in through the tunnel leave through it; while connected also the policy rules of the firewall (priorities 7100–7191). The main routing table is not touched; the only entry that appears there while connected is the kernel's own route for the tunnel subnet.
+- The chains are installed at start, re-applied before every connect and whenever the firewall changes, and removed when the container stops.
 
 Check the state with the backend TunnelDeck-VPN uses (the iptables self-check on the System page names it):
 
@@ -87,15 +88,15 @@ ip rule show; ip route show table 7194
 
 The iptables self-check on the System page and the start log (`iptables backend binary=... reason=...`) name the choice and the reason. To override it, set `TUNNELDECK_IPTABLES` to `nft` or `legacy` (default `auto`).
 
-On a shared backend the rules still interact, in a fixed order: TunnelDeck-VPN inserts its jump at position 1 of `INPUT`, so for traffic arriving on `tdvpn0` its chain decides first and that decision wins. A port opened under **Host access** (or the remote-access port) is reachable even if the host firewall would drop it; everything else from the tunnel is dropped even if the host firewall allows it. Traffic on other interfaces never enters TunnelDeck-VPN's chains. Rules in another *table* (firewalld's own nftables table, or the other backend on a mixed host) are evaluated separately and can still drop what TunnelDeck-VPN accepts.
+On a shared backend the rules still interact, in a fixed order: TunnelDeck-VPN inserts its jump at position 1 of `INPUT`, so for traffic arriving on `tdvpn0` its chain decides first and that decision wins. A port opened by an inbound rule to **This device** (or the remote-access port) is reachable even if the host firewall would drop it; everything else from the tunnel is dropped even if the host firewall allows it. Traffic on other interfaces never enters TunnelDeck-VPN's chains. Rules in another *table* (firewalld's own nftables table, or the other backend on a mixed host) are evaluated separately and can still drop what TunnelDeck-VPN accepts.
 
 ### ufw
 
 With ufw's usual `default deny incoming`:
 
 - Allow the UI port from your LAN, otherwise ufw blocks the browser: `sudo ufw allow from 192.168.1.0/24 to any port 8194 proto tcp`.
-- **Same backend** (the normal case: ufw on nft, TunnelDeck-VPN shows `using iptables-nft`): TunnelDeck-VPN's jump sits before ufw's chains in `INPUT`, so TunnelDeck-VPN alone decides about tunnel traffic. A host-access rule opens the port; ufw's own allow rules (for example `ufw allow 22`) open nothing on the tunnel. `ufw reload` keeps TunnelDeck-VPN's jump first.
-- **Different backends** (only when `TUNNELDECK_IPTABLES` forces the other backend, or the host mixes both and the other one holds more rules): a host-access rule alone is not enough, because ufw still drops the port. Allow it in ufw too:
+- **Same backend** (the normal case: ufw on nft, TunnelDeck-VPN shows `using iptables-nft`): TunnelDeck-VPN's jump sits before ufw's chains in `INPUT`, so TunnelDeck-VPN alone decides about tunnel traffic. A firewall rule to **This device** opens the port; ufw's own allow rules (for example `ufw allow 22`) open nothing on the tunnel. `ufw reload` keeps TunnelDeck-VPN's jump first.
+- **Different backends** (only when `TUNNELDECK_IPTABLES` forces the other backend, or the host mixes both and the other one holds more rules): a TunnelDeck-VPN rule alone is not enough, because ufw still drops the port. Allow it in ufw too:
 
   ```sh
   sudo ufw allow in on tdvpn0 to any port 8443 proto tcp
@@ -103,7 +104,7 @@ With ufw's usual `default deny incoming`:
 
   The rule can be added while `tdvpn0` does not exist. A port allowed only in ufw stays closed, because TunnelDeck-VPN drops it.
 
-Both cases were verified in a container lab (Alpine, ufw 0.36.2 on iptables-nft, TunnelDeck-VPN connected to a test server, probes through the tunnel). The end-to-end test covers the shared case with automatic detection: a host rule in nf_tables that drops TCP from the tunnel, and host-access rules that still open their port. Not verified on a full distribution install such as Ubuntu or Debian.
+Both cases were verified in a container lab (Alpine, ufw 0.36.2 on iptables-nft, TunnelDeck-VPN connected to a test server, probes through the tunnel). The end-to-end test covers the shared case with automatic detection: a host rule in nf_tables that drops TCP from the tunnel, and firewall rules to this device that still open their port. Not verified on a full distribution install such as Ubuntu or Debian.
 
 ### firewalld
 
@@ -118,7 +119,7 @@ or keep a stricter zone for `tdvpn0` and add the ports there (`--add-port=8443/t
 
 ### Docker's own chains
 
-Docker's chains (`DOCKER-USER`, `DOCKER-FORWARD`, the `nat` chains) sit in `FORWARD` and `nat`, not in `INPUT`, so they do not change what reaches the host through the tunnel. TunnelDeck-VPN runs with host networking and publishes no ports. *Unverified:* after a Docker daemon restart Docker may put its `FORWARD` jumps above TunnelDeck-VPN's until TunnelDeck-VPN re-installs its chains (next connect or container restart). This version forwards nothing, so this has no effect yet.
+Docker's chains (`DOCKER-USER`, `DOCKER-FORWARD`, the `nat` chains) sit in `FORWARD` and `nat`, not in `INPUT`, so they do not change what reaches the host through the tunnel. TunnelDeck-VPN runs with host networking and publishes no ports. Its `FORWARD` and `nat` jumps are inserted at position 1, before Docker's. *Unverified:* after a Docker daemon restart Docker may put its `FORWARD` jumps above TunnelDeck-VPN's until TunnelDeck-VPN re-installs its chains (next connect, next firewall change or container restart); Docker's chains only handle traffic of its own bridges, so port forwards and outbound rules between the tunnel and the LAN should not be affected.
 
 ## 5. HTTPS in the LAN with a reverse proxy
 
@@ -160,7 +161,7 @@ To reach the UI from the internet through the VPN address (SPEC §8.1), open **S
 
 Back up the data directory (`./data` next to the compose file):
 
-- `settings.json`: admin account, host-access rules, remote access, desired connection,
+- `settings.json`: admin account, firewall rules and settings, remote access, desired connection,
 - `profiles.json`: profiles; secret fields encrypted,
 - `secret.key`: the key for those secrets.
 
@@ -188,3 +189,63 @@ docker exec tunneldeck tunneldeck reset-admin
 ```
 
 This removes the admin account and all sessions; profiles and settings stay. Open the UI and create the account again. Alternatively set `TUNNELDECK_RESET_ADMIN: "1"`, restart, sign up again and remove the variable; it resets at every start while it is set.
+
+## 10. Firewall rules
+
+The **Firewall** page controls what crosses the tunnel, in both directions, to this host and to any device in its LAN (SPEC §16). Everything no rule allows is dropped in both directions; replies to allowed connections always pass. Rules apply in list order, top to bottom.
+
+### Concepts
+
+- **Inbound** rules (tab "Inbound from VPN") match traffic that arrives through the tunnel at the tunnel's address, the *public address* (with mdex public.IP: the address of `publicipNN.mdex.de`). *Source* limits the remote addresses (empty = any).
+- **This device** is the host TunnelDeck-VPN runs on, whatever its LAN address. An inbound rule to This device opens a port of the host itself (this replaces the former "Host access" list; `settings.json` of 0.1 is migrated on start). The web UI port can never be opened, and the remote-access port is reserved.
+- A **port forward** is an inbound rule to another LAN address: traffic to the *public port* is translated (DNAT) to the destination address and *destination port*. The destination must lie in a LAN subnet of the host (the System page and the Firewall page list them). ESP and GRE forward the whole protocol to one device.
+- **Keep source address** off (default): TunnelDeck-VPN replaces the sender with its own LAN address (masquerade), so the device answers the host without any route change, but sees only the host as client. On: the device sees the real remote address and must send its replies back through the host, so the host must be its gateway (default route, or a route for the remote addresses). Needed where the remote address matters, for example IKE.
+- **Outbound** rules (tab "Outbound to VPN") send traffic of a LAN device or subnet (*source*, required) to a destination behind the VPN (*destination*, `0.0.0.0/0` = everything) through the tunnel, translated to the tunnel address. LAN-to-LAN traffic of that source stays in the LAN.
+- **Gateway requirement:** the host only sees traffic that is sent to it. A device with an outbound rule (or a port forward with keep source address) needs the host as its default gateway, or a static route for the destination network pointing to the host, set on the device or in the LAN router. The host itself needs IP forwarding.
+- **Kill switch:** while the tunnel is down, traffic of outbound rules is dropped; it never leaves through the host's normal internet connection. Port forwards stop with the tunnel, since nothing arrives.
+
+### IP forwarding
+
+Port forwards and outbound rules need IPv4 forwarding on the host. Docker turns it on when it starts, so a Docker host normally has it. The **ip-forward** self-check on the System page and the line "IP forwarding: on/off" on the Firewall page show the current value. Check it on the host:
+
+```sh
+sysctl net.ipv4.ip_forward     # "net.ipv4.ip_forward = 1" means on
+```
+
+If it is `0`, switch it on and keep it on after a reboot:
+
+```sh
+sudo sysctl -w net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward = 1' | sudo tee /etc/sysctl.d/90-tunneldeck.conf
+```
+
+TunnelDeck-VPN reads the value but never changes it. Rules to This device work without forwarding.
+
+### Example: an IPsec router in the LAN
+
+Reference case (SPEC §16.2): an IPsec router in the LAN, for example a LANCOM router at `192.168.2.2`, builds IPsec tunnels to remote peers using the tunnel's public address instead of its own internet connection. The remote peers connect to the public address; TunnelDeck-VPN forwards IKE and ESP to the router.
+
+1. On the Firewall page choose **Add IPsec device**, enter a name, the router's address `192.168.2.2` and, optionally, the peers' public addresses. The template inserts five rules per peer (without peers once, for any source):
+
+   | Direction | Protocol | Port | Source → destination | Keep source address |
+   |---|---|---|---|---|
+   | Inbound | UDP | 500 (IKE) | peer → `192.168.2.2` | on |
+   | Inbound | UDP | 4500 (NAT-T) | peer → `192.168.2.2` | on |
+   | Inbound | ESP | – | peer → `192.168.2.2` | on |
+   | Outbound | UDP | – | `192.168.2.2` → peer (or `0.0.0.0/0`) | – |
+   | Outbound | ESP | – | `192.168.2.2` → peer (or `0.0.0.0/0`) | – |
+
+   Save the changes.
+2. On the router, send the IPsec traffic to the host: a static route for each peer's public address (`/32`) with the host's LAN address as gateway, or the host as default gateway if the router has no other internet connection. The outbound rules carry the router's own IKE and ESP packets through the tunnel with the public address, which is what the peers expect.
+3. On the router, configure the IPsec connection to each peer as usual, with these points:
+   - IKEv2 with current proposals (for example AES-GCM, SHA-256, ECP-256).
+   - NAT traversal must be allowed. The router's own address (`192.168.2.2`) differs from the public address the peer connects to, so both sides detect NAT and move IKE and ESP to UDP 4500.
+   - Use an identity that is not the router's IP address (FQDN or e-mail type), on both sides, since the addresses differ because of the NAT.
+4. On each peer, use the tunnel's public address as the router's address.
+
+While the tunnel is down, the router's IPsec packets are dropped (kill switch) and its SAs fail over or expire as configured; they come back when the tunnel does.
+
+What was tested and what was not:
+
+- **Lab-tested** by the end-to-end test (`test/e2e/README.md`), on both iptables backends: strongSwan 6.0 as the LAN router and as the peer on the VPN side, PSK, IKEv2 with AES-GCM and ECP-256. The template rules are applied through the API, IKEv2 is established in both directions (peer to router and router to peer), both sides report NAT-T (`TUNNEL-in-UDP`), and the networks behind both ends ping each other through the SA. Plain ESP (protocol 50, without UDP encapsulation) through the ESP forward was tested with manually keyed SAs, because IKE always chooses NAT-T in this setup. Also tested: port forwards with and without keep source address, a source restriction, an outbound rule for one LAN device and the kill switch after a tunnel drop and after a disconnect.
+- **Not tested:** a real LANCOM router (or any other vendor's device), certificates instead of PSK, IKEv1, a real mdex public.IP connection, and the MTU of IPsec inside the OpenVPN tunnel with large packets. If large transfers stall while small ones work, lower the MTU or the TCP MSS of the IPsec connection on the router.

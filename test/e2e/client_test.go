@@ -50,23 +50,38 @@ type profileRequest struct {
 	Secrets  map[string]string `json:"secrets"`
 }
 
-// firewallRule is the part of a firewall rule the test sends.
+// firewallRule is the part of a firewall rule the test sends and reads
+// back (GET /api/firewall, the IPsec template).
 type firewallRule struct {
-	Name            string              `json:"name"`
-	Direction       string              `json:"direction"`
-	Protocol        string              `json:"protocol"`
-	Destination     firewallDestination `json:"destination"`
-	DestinationPort portRange           `json:"destinationPort"`
-	Enabled         bool                `json:"enabled"`
-	Comment         string              `json:"comment"`
+	ID                string              `json:"id,omitempty"`
+	Name              string              `json:"name"`
+	Direction         string              `json:"direction"`
+	Action            string              `json:"action,omitempty"`
+	Protocol          string              `json:"protocol"`
+	Source            string              `json:"source,omitempty"`
+	Destination       firewallDestination `json:"destination"`
+	DestinationPort   portRange           `json:"destinationPort,omitzero"`
+	PublicPort        portRange           `json:"publicPort,omitzero"`
+	KeepSourceAddress bool                `json:"keepSourceAddress"`
+	Enabled           bool                `json:"enabled"`
+	Comment           string              `json:"comment"`
 }
 
 type firewallDestination struct {
 	Kind string `json:"kind"`
+	CIDR string `json:"cidr,omitempty"`
 }
 
 type portRange struct {
 	From int `json:"from"`
+}
+
+// firewallState is the part of GET /api/firewall the test checks.
+type firewallState struct {
+	Rules      []firewallRule  `json:"rules"`
+	Settings   map[string]bool `json:"settings"`
+	LANSubnets []string        `json:"lanSubnets"`
+	IPForward  bool            `json:"ipForward"`
 }
 
 // hostRule opens one TCP port of this device to the tunnel.

@@ -33,7 +33,7 @@ const (
 )
 
 // TestEndToEnd runs every server variant against TunnelDeck on both
-// iptables backends.
+// iptables backends, then the firewall cases with a LAN behind TunnelDeck.
 func TestEndToEnd(t *testing.T) {
 	s := startStack(t)
 	for _, v := range variants {
@@ -52,6 +52,9 @@ func TestEndToEnd(t *testing.T) {
 				})
 			}
 		})
+	}
+	for _, h := range lanHosts {
+		t.Run("firewall-"+h.backend.name, func(t *testing.T) { runLANScenario(t, s, h) })
 	}
 }
 

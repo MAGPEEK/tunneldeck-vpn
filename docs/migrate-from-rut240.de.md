@@ -63,7 +63,7 @@ Der Tunnel ist dann unverschlüsselt, wenn der Server das erlaubt, und weicht so
 
 ## Die NAS von außen erreichen
 
-Am RUT240 war die Weboberfläche des Routers über den Tunnel erreichbar. In TunnelDeck-VPN ersetzt das der **Fernzugriff per HTTPS** (System > Fernzugriff, Standardport 8443): die eigene Oberfläche von TunnelDeck-VPN unter `https://<VPN-Adresse>:8443` mit selbst signiertem oder hochgeladenem Zertifikat. Siehe [`synology.de.md`](synology.de.md#6-fernzugriff-über-den-tunnel). Andere Ports der NAS sind aus dem Tunnel nur über eine Regel auf der Seite **Host-Zugriff** erreichbar; alles andere bleibt gesperrt.
+Am RUT240 war die Weboberfläche des Routers über den Tunnel erreichbar. In TunnelDeck-VPN ersetzt das der **Fernzugriff per HTTPS** (System > Fernzugriff, Standardport 8443): die eigene Oberfläche von TunnelDeck-VPN unter `https://<VPN-Adresse>:8443` mit selbst signiertem oder hochgeladenem Zertifikat. Siehe [`synology.de.md`](synology.de.md#6-fernzugriff-über-den-tunnel). Andere Ports der NAS sind aus dem Tunnel nur über eine Eingangsregel auf der Seite **Firewall** erreichbar (Ziel „Dieses Gerät“), andere LAN-Geräte über eine Portweiterleitung. Alles andere bleibt gesperrt.
 
 ## Empfehlung: Wechsel auf Stufe 30
 

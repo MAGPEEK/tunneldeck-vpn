@@ -1,6 +1,6 @@
 # End-to-end test stack, driven by e2e_test.go:
 #
-#   go test -tags e2e -v -timeout 30m ./test/e2e/
+#   go test -tags e2e -v -timeout 45m ./test/e2e/
 #
 # Topology and assertions: README.md. Nothing here is published or reaches
 # the internet apart from the image builds.
@@ -24,6 +24,21 @@ x-tunneldeck: &tunneldeck
   ports: ["127.0.0.1::8194"]
   environment:
     TUNNELDECK_LOG_LEVEL: debug
+
+# A TunnelDeck that routes between the tunnel and the LAN network. With two
+# networks the default-route address the UI listens on by default need not
+# be the one Docker publishes the port to, so it listens on all addresses;
+# the firewall still keeps the UI port closed to the tunnel.
+x-tunneldeck-lan: &tunneldeck-lan
+  <<: *tunneldeck
+  environment:
+    TUNNELDECK_LOG_LEVEL: debug
+    TUNNELDECK_LISTEN: 0.0.0.0:8194
+  sysctls:
+    net.ipv4.ip_forward: "1"
+  configs:
+    - source: settings-v1
+      target: /e2e/settings-v1.json
 
 services:
   server-a:
@@ -67,5 +82,84 @@ services:
         iptables-nft -w -A INPUT -i tdvpn0 -p tcp -j DROP; } &&
         exec /usr/local/bin/tunneldeck
 
+  # Firewall part (README.md, "Firewall topology"): two TunnelDecks with a
+  # second interface on the LAN network, one per iptables backend; the LAN
+  # devices use the one under test as their gateway. Each starts with a
+  # settings.json of schema version 1, copied only on the first start, so
+  # the migration to version 2 runs against a real file.
+  tunneldeck-lan-nft:
+    <<: *tunneldeck-lan
+    networks:
+      e2e: {}
+      lan:
+        ipv4_address: 10.95.0.2
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        rm -f /usr/sbin/xtables-legacy-multi &&
+        { [ -e /data/settings.json ] || cp /e2e/settings-v1.json /data/settings.json; } &&
+        exec /usr/local/bin/tunneldeck
+
+  tunneldeck-lan-legacy:
+    <<: *tunneldeck-lan
+    networks:
+      e2e: {}
+      lan:
+        ipv4_address: 10.95.0.3
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        rm -f /usr/sbin/xtables-nft-multi &&
+        { [ -e /data/settings.json ] || cp /e2e/settings-v1.json /data/settings.json; } &&
+        exec /usr/local/bin/tunneldeck
+
+  # A LAN device behind TunnelDeck with a web server that reports the client
+  # address it sees.
+  lan-web:
+    image: tunneldeck-e2e-node:local
+    build: node
+    command: [web]
+    cap_add: [NET_ADMIN]
+    networks:
+      lan:
+        ipv4_address: 10.95.0.10
+
+  # The IPsec router in the LAN (stand-in for a LANCOM): strongSwan with the
+  # inner network 10.96.1.0/24 behind it.
+  lan-ipsec:
+    image: tunneldeck-e2e-node:local
+    command: [ipsec]
+    cap_add: [NET_ADMIN]
+    environment:
+      INNER_ADDRESS: 10.96.1.1/24
+    networks:
+      lan:
+        ipv4_address: 10.95.0.20
+
+  # The IPsec peer on the VPN side: strongSwan in server-a's network
+  # namespace, i.e. on the far side of the tunnel like the probe, with its
+  # own IKE address 198.18.0.2 and the inner network 10.96.2.0/24.
+  peer-ipsec:
+    image: tunneldeck-e2e-node:local
+    command: [ipsec]
+    cap_add: [NET_ADMIN]
+    network_mode: service:server-a
+    depends_on: [server-a]
+    environment:
+      PUBLIC_ADDRESS: 198.18.0.2/32
+      INNER_ADDRESS: 10.96.2.1/24
+
+configs:
+  settings-v1:
+    file: testdata/settings-v1.json
+
 networks:
   e2e: {}
+  # The LAN of the TunnelDeck host. The subnet is fixed so the LAN devices
+  # and the firewall rules can name addresses.
+  lan:
+    ipam:
+      config:
+        - subnet: 10.95.0.0/24

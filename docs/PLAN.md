@@ -76,7 +76,7 @@ SPEC §16.1, §16.3: `domain.FirewallRule` with validation; store schema v1 → 
 
 SPEC §16.4: Firewall page with inbound/outbound tabs, reordering, "This device" picker, gateway hints, "IPsec device" template; i18n de/en; tests. Orchestrator reviews the page visually.
 
-## [ ] 19. Firewall end-to-end — careful — after: 18
+## [x] 19. Firewall end-to-end — careful — after: 18
 
 Extend `test/e2e`: inbound port forward to a LAN container (with and without keepSourceAddress), ESP + UDP 500/4500 forwarding to a strongSwan "LANCOM stand-in" that establishes IPsec with a peer on the VPN side, outbound policy routing from one LAN container, kill switch when the tunnel drops, migration from a v1 settings file. Docs: firewall section in `docs/linux*.md`, `docs/synology*.md`, LANCOM IPsec example.
 

@@ -63,7 +63,7 @@ The tunnel is then unencrypted when the server allows it, and falls back to ChaC
 
 ## Reaching the NAS from outside
 
-On the RUT240, the router's web UI was reachable over the tunnel. In TunnelDeck-VPN that is replaced by **remote access over HTTPS** (System > Remote access, default port 8443): TunnelDeck-VPN's own UI on `https://<VPN-address>:8443` with a self-signed or uploaded certificate. See [`synology.md`](synology.md#6-remote-access-over-the-tunnel). Other NAS ports become reachable from the tunnel only through a rule on the **Host access** page; everything else stays blocked.
+On the RUT240, the router's web UI was reachable over the tunnel. In TunnelDeck-VPN that is replaced by **remote access over HTTPS** (System > Remote access, default port 8443): TunnelDeck-VPN's own UI on `https://<VPN-address>:8443` with a self-signed or uploaded certificate. See [`synology.md`](synology.md#6-remote-access-over-the-tunnel). Other NAS ports become reachable from the tunnel only through an inbound rule on the **Firewall** page (destination "This device"); other LAN devices through a port-forward rule. Everything else stays blocked.
 
 ## Recommendation: move to level 30
 
