@@ -7,7 +7,7 @@ import {
   reconnect,
   type ConnectionStatus,
 } from '../api/connection';
-import { getFirewall } from '../api/firewall';
+import { getFirewall, getFirewallDevices } from '../api/firewall';
 import { getDrivers, getProfile, getProfiles } from '../api/profiles';
 import { queryKeys } from '../api/queryKeys';
 import { getRemoteAccess } from '../api/remoteAccess';
@@ -39,6 +39,10 @@ export function useDrivers() {
 
 export function useFirewall() {
   return useQuery({ queryKey: queryKeys.firewall, queryFn: getFirewall });
+}
+
+export function useFirewallDevices() {
+  return useQuery({ queryKey: queryKeys.firewallDevices, queryFn: getFirewallDevices });
 }
 
 export function useSystem() {

@@ -6,6 +6,7 @@ export const queryKeys = {
   profile: (id: string) => ['profiles', id] as const,
   drivers: ['drivers'] as const,
   firewall: ['firewall'] as const,
+  firewallDevices: ['firewall', 'devices'] as const,
   system: ['system'] as const,
   remoteAccess: ['remote-access'] as const,
   importDraft: ['import-draft'] as const,

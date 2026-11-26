@@ -1,19 +1,24 @@
-import { useId } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { FirewallAction, FirewallProtocol } from '../../api/firewall';
+import { hasPorts, type FirewallAction, type FirewallDirection } from '../../api/firewall';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
 import fieldStyles from '../../components/Field.module.css';
 import { Notice } from '../../components/Notice';
+import { DevicePicker } from './DevicePicker';
 import styles from './FirewallPage.module.css';
-import { isPortForward, isToHost, visiblePortFields, type RuleDraft } from './ruleDraft';
-
-const ACTIONS: FirewallAction[] = ['accept', 'drop', 'reject'];
-const PROTOCOLS: FirewallProtocol[] = ['tcp', 'udp', 'tcp+udp', 'icmp', 'esp', 'gre', 'any'];
+import { FlowStrip } from './FlowStrip';
+import { editorSteps, type EditorIntent, type EditorStep } from './intents';
+import { isPortForward, type RuleDraft } from './ruleDraft';
+import { ruleCreates, ruleSummary } from './ruleSummary';
+import { suggestedName, type RuleContext } from './ruleText';
+import { PortField, ServicePicker } from './ServicePicker';
+import { detectService, serviceChange, type ServiceId } from './services';
 
 /** API field names the editor shows next to a control; others are listed on top. */
 const SHOWN_FIELDS = new Set([
   'name',
+  'direction',
   'action',
   'protocol',
   'icmpType',
@@ -26,37 +31,96 @@ const SHOWN_FIELDS = new Set([
   'comment',
 ]);
 
+/** Fields inside "Restrict and advanced", which opens when one of them has an error. */
+const ADVANCED_FIELDS = ['source', 'sourcePort', 'publicPort', 'keepSourceAddress', 'comment'];
+
+const SERVICE_FIELDS = ['protocol', 'destinationPort', 'icmpType'];
+
 export interface RuleEditorProps {
   draft: RuleDraft;
+  intent: EditorIntent;
+  /** Created from an intent card in this editing session. */
+  isNew: boolean;
   errors: Record<string, string>;
+  context: RuleContext;
   hostAddress: string;
-  hostAddresses: readonly string[];
-  lanSubnets: string[];
+  lanSubnets: readonly string[];
+  devicesFailed: boolean;
   onChange: (change: Partial<RuleDraft>) => void;
   onDone: () => void;
+  onCancel: () => void;
 }
 
-export function RuleEditor({
-  draft,
-  errors,
-  hostAddress,
-  hostAddresses,
-  lanSubnets,
-  onChange,
-  onDone,
-}: RuleEditorProps) {
+/** The inline step editor of SPEC §16.4: live flow strip, numbered steps, summary. */
+export function RuleEditor(props: RuleEditorProps) {
+  const { draft, intent, isNew, errors, context, onChange } = props;
   const { t } = useTranslation();
   const titleId = useId();
-  const inbound = draft.direction === 'inbound';
-  const forward = isPortForward(draft, hostAddresses);
-  const ports = visiblePortFields(draft);
+  const hasError = (fields: string[]) => fields.some((field) => errors[field] !== undefined);
+  const [service, setService] = useState<ServiceId>(() =>
+    hasError(SERVICE_FIELDS) ? 'custom' : detectService(draft),
+  );
+  const [nameTouched, setNameTouched] = useState(!isNew);
+  const [advancedOpen, setAdvancedOpen] = useState(() => hasError(ADVANCED_FIELDS));
   const other = Object.entries(errors).filter(([field]) => !SHOWN_FIELDS.has(field));
+
+  const change = (patch: Partial<RuleDraft>, nextService: ServiceId = service) => {
+    const next = { ...draft, ...patch };
+    onChange(
+      nameTouched ? patch : { ...patch, name: suggestedName(t, next, nextService, context) },
+    );
+  };
+  const chooseService = (id: ServiceId) => {
+    setService(id);
+    change(serviceChange(id, draft), id);
+  };
+
+  const steps = editorSteps(intent, draft);
+  const stepBody: Record<EditorStep, () => ReactNode> = {
+    rule: () => <RuleStep {...props} onChange={change} />,
+    device: () => <DeviceStep {...props} onChange={change} />,
+    destination: () => (
+      <Field
+        label={t('firewall.editor.destinationOutbound')}
+        hint={t('firewall.editor.destinationOutboundHint')}
+        placeholder={t('firewall.editor.destinationOutboundPlaceholder')}
+        className={styles.monoField}
+        value={draft.destination}
+        spellCheck={false}
+        error={errors.destination}
+        onChange={(event) => change({ destination: event.currentTarget.value })}
+      />
+    ),
+    service: () => (
+      <ServicePicker
+        draft={draft}
+        service={service}
+        errors={errors}
+        onService={chooseService}
+        onChange={change}
+      />
+    ),
+    name: () => (
+      <Field
+        label={t('firewall.editor.name')}
+        value={draft.name}
+        maxLength={64}
+        required
+        error={errors.name}
+        onChange={(event) => {
+          setNameTouched(true);
+          onChange({ name: event.currentTarget.value });
+        }}
+      />
+    ),
+  };
 
   return (
     <section className={styles.editor} aria-labelledby={titleId}>
       <h3 id={titleId} className={styles.editorTitle}>
-        {t('firewall.editor.title')}
+        {isNew ? t(`firewall.intent.${intent}.title`) : t('firewall.editor.title')}
       </h3>
+      <FlowStrip draft={draft} context={context} />
       {other.length > 0 && (
         <Notice tone="danger">
           {other.map(([field, message]) => (
@@ -64,256 +128,243 @@ export function RuleEditor({
           ))}
         </Notice>
       )}
+      <ol className={styles.steps}>
+        {steps.map((step, index) => (
+          <li key={step} className={styles.step}>
+            <fieldset className={styles.stepSet}>
+              <legend className={styles.stepLegend}>
+                <span className={styles.stepNumber} aria-hidden="true">
+                  {index + 1}
+                </span>
+                {t(`firewall.step.${step}`)}
+              </legend>
+              {stepBody[step]()}
+            </fieldset>
+          </li>
+        ))}
+      </ol>
+      <div className={styles.summary} aria-live="polite">
+        <h4 className={styles.summaryTitle}>{t('firewall.editor.summary')}</h4>
+        {ruleSummary(t, draft, context).map((sentence) => (
+          <p key={sentence}>{sentence}</p>
+        ))}
+      </div>
+      <details
+        className={styles.details}
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
+        <summary>{t('firewall.editor.advanced')}</summary>
+        <AdvancedFields draft={draft} errors={errors} context={context} onChange={change} />
+      </details>
+      <details className={styles.details}>
+        <summary>{t('firewall.editor.creates')}</summary>
+        <ul className={styles.creates}>
+          {ruleCreates(t, draft, context).map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </details>
+      <div className={styles.editorButtons}>
+        {isNew && <Button onClick={props.onCancel}>{t('firewall.editor.cancel')}</Button>}
+        <Button onClick={props.onDone}>{t('firewall.editor.done')}</Button>
+      </div>
+    </section>
+  );
+}
+
+const DIRECTIONS: FirewallDirection[] = ['inbound', 'outbound'];
+
+/** Direction and action for a custom rule; drop or reject for a block. */
+function RuleStep({ draft, intent, errors, context, onChange }: RuleEditorProps) {
+  const { t } = useTranslation();
+  const forward = isPortForward(draft, context.hostAddresses);
+  const actions: FirewallAction[] =
+    intent === 'block' ? ['drop', 'reject'] : ['accept', 'drop', 'reject'];
+  return (
+    <div className={styles.editorGrid}>
+      {intent === 'custom' && (
+        <Field label={t('firewall.editor.direction')} error={errors.direction}>
+          {(control) => (
+            <select
+              {...control}
+              value={draft.direction}
+              onChange={(event) =>
+                onChange({ direction: event.currentTarget.value as FirewallDirection })
+              }
+            >
+              {DIRECTIONS.map((direction) => (
+                <option key={direction} value={direction}>
+                  {t(`firewall.direction.${direction}`)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      )}
+      <Field
+        label={t('firewall.editor.action')}
+        hint={forward ? t('firewall.editor.actionForwardHint') : undefined}
+        error={errors.action}
+      >
+        {(control) => (
+          <select
+            {...control}
+            value={forward ? 'accept' : draft.action}
+            disabled={forward}
+            onChange={(event) => onChange({ action: event.currentTarget.value as FirewallAction })}
+          >
+            {actions.map((action) => (
+              <option key={action} value={action}>
+                {t(`firewall.action.${action}`)}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+    </div>
+  );
+}
+
+/** Inbound: the LAN device traffic goes to. Outbound: the device or subnet it comes from. */
+function DeviceStep(props: RuleEditorProps) {
+  const { draft, errors, context, hostAddress, lanSubnets, onChange } = props;
+  const { t } = useTranslation();
+  if (draft.direction === 'outbound') {
+    return (
+      <DevicePicker
+        label={t('firewall.device.sourceLabel')}
+        value={draft.source}
+        onChange={(source) => onChange({ source })}
+        devices={context.devices}
+        devicesFailed={props.devicesFailed}
+        hostAddress=""
+        hostAddresses={context.hostAddresses}
+        placeholder={t('firewall.device.sourcePlaceholder')}
+        hint={t('firewall.device.gatewayHint')}
+        error={errors.source}
+      />
+    );
+  }
+  return (
+    <DevicePicker
+      label={t('firewall.device.label')}
+      value={draft.destination}
+      onChange={(destination) => onChange({ destination })}
+      devices={context.devices}
+      devicesFailed={props.devicesFailed}
+      hostAddress={hostAddress}
+      hostAddresses={context.hostAddresses}
+      placeholder="192.168.1.10"
+      hint={
+        lanSubnets.length > 0
+          ? t('firewall.device.lanHint', { subnets: lanSubnets.join(', ') })
+          : undefined
+      }
+      error={errors.destination}
+    />
+  );
+}
+
+interface AdvancedFieldsProps {
+  draft: RuleDraft;
+  errors: Record<string, string>;
+  context: RuleContext;
+  onChange: (change: Partial<RuleDraft>) => void;
+}
+
+/** Sender, port on the VPN address, the sender the device sees, comment. Empty = any. */
+function AdvancedFields({ draft, errors, context, onChange }: AdvancedFieldsProps) {
+  const { t } = useTranslation();
+  const inbound = draft.direction === 'inbound';
+  const forward = isPortForward(draft, context.hostAddresses);
+  const ports = hasPorts(draft.protocol);
+  const anyPort = draft.destinationPort.trim() === '';
+  return (
+    <div className={styles.advanced}>
       <div className={styles.editorGrid}>
-        <Field
-          label={t('firewall.editor.name')}
-          value={draft.name}
-          maxLength={64}
-          required
-          error={errors.name}
-          onChange={(event) => onChange({ name: event.currentTarget.value })}
-        />
-        <Field
-          label={t('firewall.editor.action')}
-          hint={forward ? t('firewall.editor.actionForwardHint') : undefined}
-          error={errors.action}
-        >
-          {(control) => (
-            <select
-              {...control}
-              value={forward ? 'accept' : draft.action}
-              disabled={forward}
-              onChange={(event) =>
-                onChange({ action: event.currentTarget.value as FirewallAction })
-              }
-            >
-              {ACTIONS.map((action) => (
-                <option key={action} value={action}>
-                  {t(`firewall.action.${action}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label={t('firewall.editor.protocol')} error={errors.protocol}>
-          {(control) => (
-            <select
-              {...control}
-              value={draft.protocol}
-              onChange={(event) =>
-                onChange({ protocol: event.currentTarget.value as FirewallProtocol })
-              }
-            >
-              {PROTOCOLS.map((protocol) => (
-                <option key={protocol} value={protocol}>
-                  {t(`firewall.protocol.${protocol}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        {draft.protocol === 'icmp' && (
+        {inbound && (
           <Field
-            label={t('firewall.editor.icmpType')}
-            hint={t('firewall.editor.icmpTypeHint')}
+            label={t('firewall.editor.source')}
+            placeholder={t('firewall.editor.sourcePlaceholder')}
             className={styles.monoField}
-            value={draft.icmpType}
+            value={draft.source}
             spellCheck={false}
-            error={errors.icmpType}
-            onChange={(event) => onChange({ icmpType: event.currentTarget.value })}
+            error={errors.source}
+            onChange={(event) => onChange({ source: event.currentTarget.value })}
           />
         )}
-      </div>
-
-      <div className={styles.editorGrid}>
-        <Field
-          label={t(inbound ? 'firewall.editor.source' : 'firewall.editor.sourceOutbound')}
-          placeholder={t(
-            inbound
-              ? 'firewall.editor.sourcePlaceholder'
-              : 'firewall.editor.sourceOutboundPlaceholder',
-          )}
-          className={styles.monoField}
-          value={draft.source}
-          required={!inbound}
-          spellCheck={false}
-          error={errors.source}
-          onChange={(event) => onChange({ source: event.currentTarget.value })}
-        />
-        {ports.includes('sourcePort') && (
-          <PortInput
+        {ports && (
+          <PortField
             label={t('firewall.editor.sourcePort')}
             value={draft.sourcePort}
             error={errors.sourcePort}
             onChange={(sourcePort) => onChange({ sourcePort })}
           />
         )}
-      </div>
-
-      {inbound ? (
-        <InboundDestination
-          draft={draft}
-          errors={errors}
-          hostAddress={hostAddress}
-          hostAddresses={hostAddresses}
-          lanSubnets={lanSubnets}
-          onChange={onChange}
-        />
-      ) : (
-        <div className={styles.editorGrid}>
-          <Field
-            label={t('firewall.editor.destinationOutbound')}
-            placeholder={t('firewall.editor.destinationOutboundPlaceholder')}
-            className={styles.monoField}
-            value={draft.destination}
-            required
-            spellCheck={false}
-            error={errors.destination}
-            onChange={(event) => onChange({ destination: event.currentTarget.value })}
+        {forward && ports && (
+          <PortField
+            label={t('firewall.editor.publicPort')}
+            hint={t(
+              anyPort ? 'firewall.editor.publicPortAnyHint' : 'firewall.editor.publicPortHint',
+            )}
+            value={anyPort ? '' : draft.publicPort}
+            placeholder={draft.destinationPort.trim() || undefined}
+            disabled={anyPort}
+            error={errors.publicPort}
+            onChange={(publicPort) => onChange({ publicPort })}
           />
-          {ports.includes('destinationPort') && (
-            <PortInput
-              label={t('firewall.editor.destinationPort')}
-              value={draft.destinationPort}
-              error={errors.destinationPort}
-              onChange={(destinationPort) => onChange({ destinationPort })}
-            />
-          )}
-        </div>
-      )}
-
+        )}
+      </div>
+      {forward && <SenderSeen draft={draft} error={errors.keepSourceAddress} onChange={onChange} />}
       <Field
         label={t('firewall.editor.comment')}
         value={draft.comment}
         error={errors.comment}
         onChange={(event) => onChange({ comment: event.currentTarget.value })}
       />
-      <div className={styles.editorButtons}>
-        <Button onClick={onDone}>{t('firewall.editor.done')}</Button>
-      </div>
-    </section>
+    </div>
   );
 }
 
-interface InboundDestinationProps {
+interface SenderSeenProps {
   draft: RuleDraft;
-  errors: Record<string, string>;
-  hostAddress: string;
-  hostAddresses: readonly string[];
-  lanSubnets: string[];
+  error: string | undefined;
   onChange: (change: Partial<RuleDraft>) => void;
 }
 
-function InboundDestination({
-  draft,
-  errors,
-  hostAddress,
-  hostAddresses,
-  lanSubnets,
-  onChange,
-}: InboundDestinationProps) {
+/** "Sender seen by the device: this device / original" (= keepSourceAddress). */
+function SenderSeen({ draft, error, onChange }: SenderSeenProps) {
   const { t } = useTranslation();
   const name = useId();
-  const toHost = isToHost(draft, hostAddresses);
-  const ports = visiblePortFields(draft);
-  const anyPort = draft.destinationPort.trim() === '';
-  const publicPortDisabled = toHost || anyPort;
-  const suggestHost = hostAddress !== '' && draft.destination.trim() !== hostAddress;
+  const options = [
+    { keep: false, label: t('firewall.editor.senderHost') },
+    { keep: true, label: t('firewall.editor.senderOriginal') },
+  ];
   return (
-    <>
-      <div className={styles.editorGrid}>
-        <div>
-          <Field
-            label={t('firewall.editor.destination')}
-            hint={
-              lanSubnets.length > 0
-                ? t('firewall.editor.lanHint', { subnets: lanSubnets.join(', ') })
-                : undefined
-            }
-            placeholder="192.168.1.10"
-            className={styles.monoField}
-            value={draft.destination}
-            required
-            spellCheck={false}
-            error={errors.destination}
-            onChange={(event) => onChange({ destination: event.currentTarget.value })}
-          />
-          {suggestHost && (
-            <Button variant="ghost" onClick={() => onChange({ destination: hostAddress })}>
-              {t('firewall.editor.useHostAddress', { address: hostAddress })}
-            </Button>
-          )}
-        </div>
-        {ports.includes('destinationPort') && (
-          <PortInput
-            label={t('firewall.editor.destinationPort')}
-            hint={!toHost && anyPort ? t('firewall.editor.anyPortForwardHint') : undefined}
-            value={draft.destinationPort}
-            error={errors.destinationPort}
-            onChange={(destinationPort) => onChange({ destinationPort })}
-          />
-        )}
-        {ports.includes('publicPort') && (
-          <PortInput
-            label={t('firewall.editor.publicPort')}
-            hint={t(
-              toHost ? 'firewall.editor.publicPortHostHint' : 'firewall.editor.publicPortHint',
-            )}
-            value={publicPortDisabled ? '' : draft.publicPort}
-            placeholder={draft.destinationPort.trim() || undefined}
-            disabled={publicPortDisabled}
-            error={errors.publicPort}
-            onChange={(publicPort) => onChange({ publicPort })}
-          />
-        )}
-      </div>
-      {!toHost && (
-        <div className={styles.checkboxField}>
-          <label className={styles.choice}>
+    <fieldset className={styles.stepSet} aria-describedby={`${name}-hint`}>
+      <legend className={fieldStyles.label}>{t('firewall.editor.senderSeen')}</legend>
+      <div className={styles.presets}>
+        {options.map((option) => (
+          <label key={String(option.keep)} className={styles.preset}>
             <input
-              type="checkbox"
-              checked={draft.keepSourceAddress}
-              aria-describedby={`${name}-keep-hint`}
-              onChange={(event) => onChange({ keepSourceAddress: event.currentTarget.checked })}
+              type="radio"
+              name={name}
+              checked={draft.keepSourceAddress === option.keep}
+              onChange={() => onChange({ keepSourceAddress: option.keep })}
             />
-            {t('firewall.editor.keepSource')}
+            {option.label}
           </label>
-          <p id={`${name}-keep-hint`} className={fieldStyles.hint}>
-            {t('firewall.editor.keepSourceHint')}
-          </p>
-          {errors.keepSourceAddress && (
-            <p className={fieldStyles.error}>{errors.keepSourceAddress}</p>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-interface PortInputProps {
-  label: string;
-  value: string;
-  hint?: string;
-  placeholder?: string;
-  disabled?: boolean;
-  error: string | undefined;
-  onChange: (value: string) => void;
-}
-
-function PortInput({ label, value, hint, placeholder, disabled, error, onChange }: PortInputProps) {
-  const { t } = useTranslation();
-  return (
-    <Field
-      label={label}
-      hint={hint}
-      className={styles.monoField}
-      value={value}
-      inputMode="numeric"
-      placeholder={placeholder ?? t('firewall.editor.portPlaceholder')}
-      disabled={disabled}
-      spellCheck={false}
-      error={error}
-      onChange={(event) => onChange(event.currentTarget.value)}
-    />
+        ))}
+      </div>
+      <p id={`${name}-hint`} className={fieldStyles.hint}>
+        {t(
+          draft.keepSourceAddress
+            ? 'firewall.editor.senderOriginalHint'
+            : 'firewall.editor.senderHostHint',
+        )}
+      </p>
+      {error && <p className={fieldStyles.error}>{error}</p>}
+    </fieldset>
   );
 }

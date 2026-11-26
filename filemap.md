@@ -43,7 +43,7 @@
 - `web/` — React 19 + TypeScript + Vite app; `npm run build` writes to `internal/web/dist`
 - `web/src/` — app sources (`main.tsx`, `App.tsx`) and tests; `web/src/test/setup.ts` wires jest-dom into Vitest
 - `web/src/styles/` — design tokens (light/dark) and base styles
-- `web/src/api/` — `request()` wrapper, `ApiError` (RFC 9457, with `fieldCodes`), field errors in the UI language (`fieldErrors.ts`), typed calls per resource (session, system, profiles/drivers/import, connection/logs, firewall incl. the IPsec template, remote access), shared query keys (`queryKeys.ts`)
+- `web/src/api/` — `request()` wrapper, `ApiError` (RFC 9457, with `fieldCodes`), field errors in the UI language (`fieldErrors.ts`), typed calls per resource (session, system, profiles/drivers/import, connection/logs, firewall incl. counters, LAN devices and the IPsec template, remote access), shared query keys (`queryKeys.ts`)
 - `web/src/session/` — query client (401 → signed out), session hooks, `SessionGate` routing
 - `web/src/i18n/` — i18next setup, `de.json`/`en.json`, flat driver label files `drivers.de.json`/`drivers.en.json` and run-time key helpers (`dynamic.ts`), language switch, key-parity test
 - `web/src/theme/` — theme storage and toggle
@@ -54,7 +54,7 @@
 - `web/src/live/` — `LiveEvents` (one EventSource on `/api/events` feeding the query cache, reconnect with backoff), log line append/filter helpers
 - `web/src/queries/` — TanStack Query hooks per resource and connection control mutations
 - `web/src/hooks/` — `useNow` ticking clock
-- `web/src/pages/` — setup and login; `dashboard/` (connection card, metrics, host protection, log); `profiles/` (list, import panel, `form/` profile editor with protocol chooser, schedule and import warnings, `schema/` generic `SchemaForm` renderer; `schemaValues.ts` evaluates `visibleWhen` for setting and secret conditions); `firewall/` (Firewall page: inbound/outbound tabs `DirectionTabs`, `RuleTable` with reordering, inline `RuleEditor`, `IpsecTemplateForm`, `ProtectionCard`, `HostContext` line; `ruleDraft.ts` converts, validates port text, reorders and maps API field errors; `ruleText.ts` formats protocol and route); `system/` (version, self-check, remote access)
+- `web/src/pages/` — setup and login; `dashboard/` (connection card, metrics, host protection, log); `profiles/` (list, import panel, `form/` profile editor with protocol chooser, schedule and import warnings, `schema/` generic `SchemaForm` renderer; `schemaValues.ts` evaluates `visibleWhen` for setting and secret conditions); `firewall/` (Firewall page, SPEC §16.4: `FirewallEditor` page state, `RuleList` unified list with filter chips, hits and reordering, `FlowStrip` chips, `IntentCards` "Add rule" cards, inline step `RuleEditor` with `DevicePicker` and `ServicePicker`, `IpsecTemplateForm`, `ProtectionCard`, `HostContext` line; `ruleDraft.ts` converts, validates port text, filters, reorders and maps API field errors; `intents.ts` intent presets and editor steps; `services.ts` service presets; `ruleText.ts` flow strip, row line and suggested name; `ruleSummary.ts` plain-language summary and "What this rule creates"); `system/` (version, self-check, remote access)
 - `web/src/test/` — Vitest setup, fetch mock, fake EventSource, fixtures (OpenVPN schema, profiles, status), `renderApp`/`renderWithProviders` helpers
 - `web/vite.config.ts` — build output, `/api` dev proxy to `127.0.0.1:8194`, Vitest config
 - `web/eslint.config.js` — ESLint flat config (typescript-eslint strict, react-hooks, prettier)

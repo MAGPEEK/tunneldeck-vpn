@@ -115,9 +115,24 @@ export function isToHost(draft: RuleDraft, hostAddresses: readonly string[]): bo
   return draft.direction === 'inbound' && targetsHost(draft.destination, hostAddresses);
 }
 
-/** Whether the rule forwards inbound traffic to another LAN device. */
+/**
+ * Whether the rule forwards inbound traffic to another LAN device. A rule
+ * without a destination yet is neither, so its action stays editable.
+ */
 export function isPortForward(draft: RuleDraft, hostAddresses: readonly string[]): boolean {
-  return draft.direction === 'inbound' && !isToHost(draft, hostAddresses);
+  return (
+    draft.direction === 'inbound' &&
+    draft.destination.trim() !== '' &&
+    !isToHost(draft, hostAddresses)
+  );
+}
+
+/** Outbound destination sent for an empty field: every address behind the VPN. */
+export const EVERYWHERE = '0.0.0.0/0';
+
+function destinationOf(draft: RuleDraft): string {
+  const destination = draft.destination.trim();
+  return draft.direction === 'outbound' && destination === '' ? EVERYWHERE : destination;
 }
 
 /** The port fields the editor shows for the draft's protocol, direction and destination. */
@@ -155,7 +170,7 @@ export function toRule(draft: RuleDraft, hostAddresses: readonly string[]): Fire
     action: forward ? 'accept' : draft.action,
     protocol: draft.protocol,
     source: draft.source.trim(),
-    destination: draft.destination.trim(),
+    destination: destinationOf(draft),
     keepSourceAddress: forward && draft.keepSourceAddress,
     enabled: draft.enabled,
     comment: draft.comment.trim(),
@@ -184,15 +199,30 @@ export function draftsDiffer(
   return rules(drafts) !== rules(saved.map((rule) => toDraft(rule)));
 }
 
-/** Moves the draft `key` one place up or down among the drafts of its direction. */
-export function moveDraft(drafts: readonly RuleDraft[], key: string, step: -1 | 1): RuleDraft[] {
+/** The list filter: every rule or one direction. */
+export type RuleFilter = 'all' | FirewallDirection;
+
+export function matchesFilter(draft: RuleDraft, filter: RuleFilter): boolean {
+  return filter === 'all' || draft.direction === filter;
+}
+
+/**
+ * Moves the draft `key` one place up or down, past drafts that are not
+ * `shown` (the list filter), so it swaps with its visible neighbour.
+ */
+export function moveDraft(
+  drafts: readonly RuleDraft[],
+  key: string,
+  step: -1 | 1,
+  shown: (draft: RuleDraft) => boolean = () => true,
+): RuleDraft[] {
   const index = drafts.findIndex((draft) => draft.key === key);
   const moving = drafts[index];
   if (moving === undefined) {
     return [...drafts];
   }
   let target = index + step;
-  while (target >= 0 && target < drafts.length && drafts[target]?.direction !== moving.direction) {
+  while (target >= 0 && target < drafts.length && !shown(drafts[target] as RuleDraft)) {
     target += step;
   }
   const other = drafts[target];

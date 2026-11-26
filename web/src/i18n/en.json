@@ -283,22 +283,6 @@
       "docsLink": "How to turn it on",
       "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.md#ip-forwarding"
     },
-    "tabs": {
-      "label": "Rule direction",
-      "inbound": "Inbound from VPN",
-      "outbound": "Outbound to VPN"
-    },
-    "outboundHint": "Devices must send this traffic to this host: set it as their gateway or add a route in your router.",
-    "column": {
-      "order": "Order",
-      "enabled": "Enabled",
-      "name": "Name",
-      "action": "Action",
-      "protocol": "Protocol",
-      "route": "Source → Destination",
-      "keepSource": "Keep source",
-      "actions": "Actions"
-    },
     "action": {
       "accept": "Allow",
       "drop": "Drop",
@@ -314,8 +298,6 @@
       "any": "Any"
     },
     "any": "any",
-    "publicPort": "(public {{port}})",
-    "keepSourceOn": "Source address kept",
     "unsaved": "Not saved",
     "needsAttention": "Needs attention",
     "unnamed": "Unnamed rule",
@@ -334,8 +316,6 @@
     "confirmDeleteButton": "Delete rule",
     "cancel": "Cancel",
     "addRule": "Add rule",
-    "emptyInbound": "No inbound rules: nothing from the VPN gets in.",
-    "emptyOutbound": "No outbound rules: no LAN device sends traffic through the VPN.",
     "editor": {
       "title": "Edit rule",
       "name": "Name",
@@ -344,30 +324,32 @@
       "protocol": "Protocol",
       "icmpType": "ICMP type (optional)",
       "icmpTypeHint": "For example echo-request. Leave empty for every type.",
-      "source": "Source (optional)",
+      "source": "Sender address (optional)",
       "sourcePlaceholder": "Any",
-      "sourceOutbound": "Source (LAN device or subnet)",
-      "sourceOutboundPlaceholder": "192.168.1.20 or 192.168.1.0/24",
-      "sourcePort": "Source port (optional)",
-      "destination": "Destination (address in the local LAN)",
-      "useHostAddress": "This device’s address: {{address}}",
-      "lanHint": "Must be inside the local LAN: {{subnets}}",
-      "destinationOutbound": "Destination (address or network behind the VPN)",
-      "destinationOutboundPlaceholder": "10.0.0.0/8 or 0.0.0.0/0",
+      "sourcePort": "Sender port (optional)",
+      "destinationOutbound": "Address or network behind the VPN (optional)",
+      "destinationOutboundPlaceholder": "10.0.0.0/8",
       "destinationPort": "Destination port",
-      "anyPortForwardHint": "Forwards every port of this protocol to the device, except the web UI ports.",
       "portPlaceholder": "any",
       "publicPort": "Port on the VPN address",
       "publicPortHint": "The port the remote side connects to. Empty: same as the destination port.",
-      "publicPortHostHint": "Rules to this device’s own address use the destination port.",
-      "keepSource": "Keep source address",
-      "keepSourceHint": "The device must route replies through this host.",
       "comment": "Comment (optional)",
       "done": "Done",
-      "portFormat": "Enter a port or a range such as 8000-8010."
+      "portFormat": "Enter a port or a range such as 8000-8010.",
+      "direction": "Direction",
+      "destinationOutboundHint": "Empty: everything behind the VPN.",
+      "publicPortAnyHint": "Every port is forwarded while the service has no port.",
+      "summary": "Summary",
+      "advanced": "Restrict and advanced",
+      "creates": "What this rule creates",
+      "cancel": "Cancel",
+      "senderSeen": "Sender seen by the device",
+      "senderHost": "This device",
+      "senderOriginal": "Original sender",
+      "senderHostHint": "The device sees this device as the sender and answers it; no route changes needed.",
+      "senderOriginalHint": "The device sees the real sender and must send its replies back through this device, for example with an outbound rule."
     },
     "ipsec": {
-      "open": "Add IPsec router",
       "title": "IPsec router",
       "intro": "Forwards IKE (UDP 500 and 4500) and ESP to a router in the local LAN, keeps the peer addresses and routes the router’s IPsec traffic through the VPN.",
       "name": "Name",
@@ -390,6 +372,136 @@
       "synFloodProtectionHint": "Limits new TCP connections from the tunnel to 25 per second per source.",
       "pingLimit": "Ping limit",
       "pingLimitHint": "Limits pings from the tunnel to 5 per second."
+    },
+    "rulesTitle": "Rules",
+    "listLabel": "Rules in evaluation order",
+    "filter": {
+      "label": "Show",
+      "all": "All",
+      "inbound": "Inbound",
+      "outbound": "Outbound"
+    },
+    "empty": {
+      "all": "No rules yet: nothing from the VPN gets in, and no LAN device sends traffic through the VPN.",
+      "inbound": "No inbound rules: nothing from the VPN gets in.",
+      "outbound": "No outbound rules: no LAN device sends traffic through the VPN."
+    },
+    "hits_one": "{{count}} hit",
+    "hits_other": "{{count}} hits",
+    "hitsNone": "No hits counted",
+    "direction": {
+      "inbound": "Inbound from VPN",
+      "outbound": "Outbound to VPN"
+    },
+    "flow": {
+      "vpn": "VPN",
+      "lan": "Local LAN",
+      "to": "to",
+      "thisDevice": "This device",
+      "unset": "not set"
+    },
+    "line": {
+      "allPorts": "all ports",
+      "vpnPort": "VPN port {{port}}",
+      "senderKept": "sender kept",
+      "off": "off"
+    },
+    "service": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "ssh": "SSH",
+      "rdp": "RDP",
+      "smb": "SMB",
+      "dns": "DNS",
+      "all": "All ports",
+      "custom": "Custom"
+    },
+    "intent": {
+      "title": "What do you want to do?",
+      "forward": {
+        "title": "Make a LAN device reachable from the VPN",
+        "text": "Forward a port on the VPN address to a device in the local LAN."
+      },
+      "hostService": {
+        "title": "Open a service on this device",
+        "text": "Allow connections from the VPN to a port of this device."
+      },
+      "outbound": {
+        "title": "Let a LAN device into the VPN",
+        "text": "Send a device’s traffic to networks behind the VPN, with the VPN address as sender."
+      },
+      "ipsec": {
+        "title": "IPsec router",
+        "text": "Forward IKE and ESP to a router in the local LAN and route its IPsec traffic through the VPN."
+      },
+      "block": {
+        "title": "Block something",
+        "text": "Drop or reject traffic from the VPN to this device, for example from one sender."
+      },
+      "custom": {
+        "title": "Custom rule",
+        "text": "Set every field yourself."
+      }
+    },
+    "step": {
+      "rule": "Action",
+      "device": "Device",
+      "destination": "Destination behind the VPN",
+      "service": "Service",
+      "name": "Name"
+    },
+    "device": {
+      "label": "Device address",
+      "listLabel": "Devices in the local LAN",
+      "unnamed": "Unnamed device",
+      "none": "No other devices seen in the local LAN yet. Enter an address.",
+      "failed": "The device list is not available. Enter an address.",
+      "useHost": "This device’s address: {{address}}",
+      "reserveHint": "Reserve this address in your router so it does not change.",
+      "lanHint": "Must be inside the local LAN: {{subnets}}.",
+      "sourceLabel": "Device or subnet address",
+      "sourcePlaceholder": "192.168.1.20 or 192.168.1.0/24",
+      "gatewayHint": "The device must send this traffic to this host: set it as its gateway or add a route in your router."
+    },
+    "summary": {
+      "anySender": "any sender",
+      "senderPort": "{{sender}} (port {{port}})",
+      "everyPort": " on every {{protocol}} port",
+      "onPort": " on {{protocol}} port {{port}}",
+      "onPorts": " on {{protocol}} ports {{port}}",
+      "via": " via {{protocol}}",
+      "noDevice": "the device",
+      "thisDevice": "this device ({{address}})",
+      "named": "{{name}} ({{address}})",
+      "anyAddress": "any address behind the VPN",
+      "host_accept": "Connections from {{sender}} to {{target}}{{service}} are allowed.",
+      "host_drop": "Connections from {{sender}} to {{target}}{{service}} are dropped silently.",
+      "host_reject": "Connections from {{sender}} to {{target}}{{service}} are refused.",
+      "forward": "Connections from {{sender}} to the VPN address{{publicService}} go to {{target}}{{service}}.",
+      "masquerade": "{{device}} sees this device as the sender.",
+      "keepSender": "{{device}} sees the original sender and must send its replies back through this device.",
+      "outbound_accept": "Traffic from {{device}} to {{destination}}{{service}} goes through the VPN with the VPN address as sender.",
+      "outbound_drop": "Traffic from {{device}} to {{destination}}{{service}} is dropped silently.",
+      "outbound_reject": "Traffic from {{device}} to {{destination}}{{service}} is refused.",
+      "killSwitch": "While the VPN is down, this traffic is blocked.",
+      "off": "The rule is off and does nothing."
+    },
+    "creates": {
+      "action": {
+        "accept": "allow",
+        "drop": "drop",
+        "reject": "reject"
+      },
+      "anyProtocol": "any protocol",
+      "anyPort": "{{protocol}} any port",
+      "filterInput": "Input filter: {{action}} {{service}} from {{sender}} to {{address}}",
+      "filterForward": "Forward filter: {{action}} {{service}} from {{sender}} to {{address}}",
+      "dnat": "Destination NAT: {{service}} on the VPN address goes to {{target}}",
+      "masqueradeLan": "Masquerade toward the local LAN: {{address}} sees this device as the sender",
+      "replyRoute": "Policy route: replies from {{address}} leave through the VPN",
+      "policyRoute": "Policy route: traffic from {{source}} to {{destination}} uses the VPN routing table",
+      "masqueradeVpn": "Masquerade on the VPN side: the VPN address becomes the sender",
+      "nothing": "Nothing while the rule is off."
     }
   },
   "system": {

@@ -283,22 +283,6 @@
       "docsLink": "So schalten Sie sie ein",
       "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.de.md#ip-weiterleitung"
     },
-    "tabs": {
-      "label": "Richtung der Regeln",
-      "inbound": "Eingehend vom VPN",
-      "outbound": "Ausgehend ins VPN"
-    },
-    "outboundHint": "Die Geräte müssen diesen Verkehr an diesen Host schicken: Tragen Sie ihn als Gateway ein oder legen Sie eine Route in Ihrem Router an.",
-    "column": {
-      "order": "Reihenfolge",
-      "enabled": "Aktiv",
-      "name": "Name",
-      "action": "Aktion",
-      "protocol": "Protokoll",
-      "route": "Quelle → Ziel",
-      "keepSource": "Quelle behalten",
-      "actions": "Aktionen"
-    },
     "action": {
       "accept": "Erlauben",
       "drop": "Verwerfen",
@@ -314,8 +298,6 @@
       "any": "Alle"
     },
     "any": "beliebig",
-    "publicPort": "(öffentlich {{port}})",
-    "keepSourceOn": "Quelladresse bleibt erhalten",
     "unsaved": "Nicht gespeichert",
     "needsAttention": "Korrektur nötig",
     "unnamed": "Regel ohne Namen",
@@ -334,8 +316,6 @@
     "confirmDeleteButton": "Regel löschen",
     "cancel": "Abbrechen",
     "addRule": "Regel hinzufügen",
-    "emptyInbound": "Keine eingehenden Regeln: Aus dem VPN kommt nichts herein.",
-    "emptyOutbound": "Keine ausgehenden Regeln: Kein LAN-Gerät schickt Verkehr durch das VPN.",
     "editor": {
       "title": "Regel bearbeiten",
       "name": "Name",
@@ -344,30 +324,32 @@
       "protocol": "Protokoll",
       "icmpType": "ICMP-Typ (optional)",
       "icmpTypeHint": "Zum Beispiel echo-request. Leer lassen für alle Typen.",
-      "source": "Quelle (optional)",
+      "source": "Absenderadresse (optional)",
       "sourcePlaceholder": "Beliebig",
-      "sourceOutbound": "Quelle (LAN-Gerät oder Subnetz)",
-      "sourceOutboundPlaceholder": "192.168.1.20 oder 192.168.1.0/24",
-      "sourcePort": "Quellport (optional)",
-      "destination": "Ziel (Adresse im lokalen LAN)",
-      "useHostAddress": "Adresse dieses Geräts: {{address}}",
-      "lanHint": "Muss im lokalen LAN liegen: {{subnets}}",
-      "destinationOutbound": "Ziel (Adresse oder Netz hinter dem VPN)",
-      "destinationOutboundPlaceholder": "10.0.0.0/8 oder 0.0.0.0/0",
+      "sourcePort": "Absenderport (optional)",
+      "destinationOutbound": "Adresse oder Netz hinter dem VPN (optional)",
+      "destinationOutboundPlaceholder": "10.0.0.0/8",
       "destinationPort": "Zielport",
-      "anyPortForwardHint": "Leitet jeden Port dieses Protokolls an das Gerät weiter, außer den Ports der Weboberfläche.",
       "portPlaceholder": "beliebig",
       "publicPort": "Port auf der VPN-Adresse",
       "publicPortHint": "Der Port, den die Gegenseite anspricht. Leer: wie der Zielport.",
-      "publicPortHostHint": "Regeln an die Adresse dieses Geräts nutzen den Zielport.",
-      "keepSource": "Quelladresse behalten",
-      "keepSourceHint": "Das Gerät muss Antworten über diesen Host leiten.",
       "comment": "Kommentar (optional)",
       "done": "Fertig",
-      "portFormat": "Geben Sie einen Port oder einen Bereich wie 8000-8010 ein."
+      "portFormat": "Geben Sie einen Port oder einen Bereich wie 8000-8010 ein.",
+      "direction": "Richtung",
+      "destinationOutboundHint": "Leer: alles hinter dem VPN.",
+      "publicPortAnyHint": "Solange der Dienst keinen Port hat, wird jeder Port weitergeleitet.",
+      "summary": "Zusammenfassung",
+      "advanced": "Einschränken und erweitert",
+      "creates": "Was diese Regel anlegt",
+      "cancel": "Abbrechen",
+      "senderSeen": "Absender, den das Gerät sieht",
+      "senderHost": "Dieses Gerät",
+      "senderOriginal": "Ursprünglicher Absender",
+      "senderHostHint": "Das Gerät sieht dieses Gerät als Absender und antwortet ihm; keine Routen nötig.",
+      "senderOriginalHint": "Das Gerät sieht den echten Absender und muss seine Antworten über dieses Gerät zurückschicken, zum Beispiel mit einer ausgehenden Regel."
     },
     "ipsec": {
-      "open": "IPsec-Router hinzufügen",
       "title": "IPsec-Router",
       "intro": "Leitet IKE (UDP 500 und 4500) und ESP an einen Router im lokalen LAN weiter, behält die Adressen der Gegenstellen bei und leitet den IPsec-Verkehr des Routers durch das VPN.",
       "name": "Name",
@@ -390,6 +372,136 @@
       "synFloodProtectionHint": "Begrenzt neue TCP-Verbindungen aus dem Tunnel auf 25 pro Sekunde und Quelle.",
       "pingLimit": "Ping-Begrenzung",
       "pingLimitHint": "Begrenzt Pings aus dem Tunnel auf 5 pro Sekunde."
+    },
+    "rulesTitle": "Regeln",
+    "listLabel": "Regeln in Auswertungsreihenfolge",
+    "filter": {
+      "label": "Anzeigen",
+      "all": "Alle",
+      "inbound": "Eingehend",
+      "outbound": "Ausgehend"
+    },
+    "empty": {
+      "all": "Noch keine Regeln: Aus dem VPN kommt nichts herein, und kein LAN-Gerät schickt Verkehr durch das VPN.",
+      "inbound": "Keine eingehenden Regeln: Aus dem VPN kommt nichts herein.",
+      "outbound": "Keine ausgehenden Regeln: Kein LAN-Gerät schickt Verkehr durch das VPN."
+    },
+    "hits_one": "{{count}} Treffer",
+    "hits_other": "{{count}} Treffer",
+    "hitsNone": "Keine Treffer gezählt",
+    "direction": {
+      "inbound": "Eingehend vom VPN",
+      "outbound": "Ausgehend ins VPN"
+    },
+    "flow": {
+      "vpn": "VPN",
+      "lan": "Lokales LAN",
+      "to": "nach",
+      "thisDevice": "Dieses Gerät",
+      "unset": "nicht gesetzt"
+    },
+    "line": {
+      "allPorts": "alle Ports",
+      "vpnPort": "VPN-Port {{port}}",
+      "senderKept": "Absender bleibt",
+      "off": "aus"
+    },
+    "service": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "ssh": "SSH",
+      "rdp": "RDP",
+      "smb": "SMB",
+      "dns": "DNS",
+      "all": "Alle Ports",
+      "custom": "Eigene Angabe"
+    },
+    "intent": {
+      "title": "Was möchten Sie tun?",
+      "forward": {
+        "title": "Ein LAN-Gerät aus dem VPN erreichbar machen",
+        "text": "Einen Port der VPN-Adresse an ein Gerät im lokalen LAN weiterleiten."
+      },
+      "hostService": {
+        "title": "Einen Dienst auf diesem Gerät öffnen",
+        "text": "Verbindungen aus dem VPN zu einem Port dieses Geräts erlauben."
+      },
+      "outbound": {
+        "title": "Ein LAN-Gerät ins VPN lassen",
+        "text": "Den Verkehr eines Geräts in Netze hinter dem VPN schicken, mit der VPN-Adresse als Absender."
+      },
+      "ipsec": {
+        "title": "IPsec-Router",
+        "text": "IKE und ESP an einen Router im lokalen LAN weiterleiten und seinen IPsec-Verkehr durch das VPN leiten."
+      },
+      "block": {
+        "title": "Etwas sperren",
+        "text": "Verkehr aus dem VPN zu diesem Gerät verwerfen oder ablehnen, zum Beispiel von einem Absender."
+      },
+      "custom": {
+        "title": "Eigene Regel",
+        "text": "Alle Felder selbst festlegen."
+      }
+    },
+    "step": {
+      "rule": "Aktion",
+      "device": "Gerät",
+      "destination": "Ziel hinter dem VPN",
+      "service": "Dienst",
+      "name": "Name"
+    },
+    "device": {
+      "label": "Adresse des Geräts",
+      "listLabel": "Geräte im lokalen LAN",
+      "unnamed": "Gerät ohne Namen",
+      "none": "Noch keine anderen Geräte im lokalen LAN gesehen. Geben Sie eine Adresse ein.",
+      "failed": "Die Geräteliste ist nicht verfügbar. Geben Sie eine Adresse ein.",
+      "useHost": "Adresse dieses Geräts: {{address}}",
+      "reserveHint": "Reservieren Sie diese Adresse in Ihrem Router, damit sie sich nicht ändert.",
+      "lanHint": "Muss im lokalen LAN liegen: {{subnets}}.",
+      "sourceLabel": "Adresse des Geräts oder Subnetzes",
+      "sourcePlaceholder": "192.168.1.20 oder 192.168.1.0/24",
+      "gatewayHint": "Das Gerät muss diesen Verkehr an diesen Host schicken: Tragen Sie ihn als Gateway ein oder legen Sie eine Route in Ihrem Router an."
+    },
+    "summary": {
+      "anySender": "jedem Absender",
+      "senderPort": "{{sender}} (Port {{port}})",
+      "everyPort": " auf jedem {{protocol}}-Port",
+      "onPort": " auf {{protocol}}-Port {{port}}",
+      "onPorts": " auf {{protocol}}-Ports {{port}}",
+      "via": " über {{protocol}}",
+      "noDevice": "das Gerät",
+      "thisDevice": "dieses Gerät ({{address}})",
+      "named": "{{name}} ({{address}})",
+      "anyAddress": "jede Adresse hinter dem VPN",
+      "host_accept": "Verbindungen von {{sender}} an {{target}}{{service}} werden erlaubt.",
+      "host_drop": "Verbindungen von {{sender}} an {{target}}{{service}} werden still verworfen.",
+      "host_reject": "Verbindungen von {{sender}} an {{target}}{{service}} werden abgelehnt.",
+      "forward": "Verbindungen von {{sender}} an die VPN-Adresse{{publicService}} gehen an {{target}}{{service}}.",
+      "masquerade": "{{device}} sieht dieses Gerät als Absender.",
+      "keepSender": "{{device}} sieht den ursprünglichen Absender und muss seine Antworten über dieses Gerät zurückschicken.",
+      "outbound_accept": "Verkehr von {{device}} an {{destination}}{{service}} geht durch das VPN, mit der VPN-Adresse als Absender.",
+      "outbound_drop": "Verkehr von {{device}} an {{destination}}{{service}} wird still verworfen.",
+      "outbound_reject": "Verkehr von {{device}} an {{destination}}{{service}} wird abgelehnt.",
+      "killSwitch": "Solange das VPN getrennt ist, wird dieser Verkehr gesperrt.",
+      "off": "Die Regel ist aus und bewirkt nichts."
+    },
+    "creates": {
+      "action": {
+        "accept": "erlauben",
+        "drop": "verwerfen",
+        "reject": "ablehnen"
+      },
+      "anyProtocol": "jedes Protokoll",
+      "anyPort": "{{protocol}} beliebiger Port",
+      "filterInput": "Eingangsfilter: {{service}} von {{sender}} an {{address}} {{action}}",
+      "filterForward": "Weiterleitungsfilter: {{service}} von {{sender}} an {{address}} {{action}}",
+      "dnat": "Ziel-NAT: {{service}} auf der VPN-Adresse geht an {{target}}",
+      "masqueradeLan": "Maskierung zum lokalen LAN: {{address}} sieht dieses Gerät als Absender",
+      "replyRoute": "Richtlinien-Route: Antworten von {{address}} gehen durch das VPN",
+      "policyRoute": "Richtlinien-Route: Verkehr von {{source}} an {{destination}} nutzt die VPN-Routingtabelle",
+      "masqueradeVpn": "Maskierung auf der VPN-Seite: Die VPN-Adresse wird Absender",
+      "nothing": "Nichts, solange die Regel aus ist."
     }
   },
   "system": {

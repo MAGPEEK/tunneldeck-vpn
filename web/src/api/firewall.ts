@@ -49,6 +49,24 @@ export interface FirewallState {
   hostAddresses: string[];
   lanSubnets: string[];
   ipForward: boolean;
+  /** Hits per rule ID; null when the counters cannot be read. */
+  counters: Record<string, RuleCounters> | null;
+  countersAvailable: boolean;
+}
+
+/** Hits of one rule: packets counts the new connections it matched. */
+export interface RuleCounters {
+  packets: number;
+  bytes: number;
+}
+
+/** One LAN neighbour of the host for the device picker. */
+export interface LanDevice {
+  address: string;
+  mac: string;
+  name?: string;
+  state: string;
+  onLan: boolean;
 }
 
 export interface FirewallUpdate {
@@ -68,6 +86,11 @@ export function getFirewall(): Promise<FirewallState> {
 
 export function putFirewall(update: FirewallUpdate): Promise<FirewallState> {
   return request<FirewallState>('/api/firewall', { method: 'PUT', body: update });
+}
+
+export async function getFirewallDevices(): Promise<LanDevice[]> {
+  const response = await request<{ devices: LanDevice[] }>('/api/firewall/devices');
+  return response.devices;
 }
 
 /** Rules of the "IPsec router" template; nothing is stored. */

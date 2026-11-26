@@ -90,7 +90,7 @@ SPEC §17 "Adopt": profile setting `remoteNetworks` (form field, validation, `ip
 
 SPEC §16.4 "Device picker" and "Hit counters": `GET /api/firewall/devices` (LAN neighbours from `ip -4 neigh` plus host-visible names, through `CommandRunner`; no new privileges); per-rule counters in `GET /api/firewall`, tagged rules (`-m comment --comment tdrule:<id>`), incremental apply so unchanged rules keep their counters while the DROP-safe refill guarantee holds. Tests with the fake runner; integration test for counter persistence across re-apply.
 
-## [ ] 22. Firewall UI redesign — medium — after: 21
+## [x] 22. Firewall UI redesign — medium — after: 21
 
 SPEC §16.4 exactly: unified rule list with flow strips, filter chips, hit counters; intent cards; step editor with device picker, service presets, live summary, collapsible advanced and "What this rule creates"; IPsec card uses the template endpoint. i18n de/en, tests. Orchestrator reviews visually.
 

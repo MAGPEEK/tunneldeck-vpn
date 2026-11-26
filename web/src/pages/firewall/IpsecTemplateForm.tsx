@@ -3,21 +3,26 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '../../api/client';
 import { localizedFieldErrors } from '../../api/fieldErrors';
-import { ipsecTemplate, type FirewallRule } from '../../api/firewall';
+import { ipsecTemplate, type FirewallRule, type LanDevice } from '../../api/firewall';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
 import { Notice } from '../../components/Notice';
 import { genericErrorMessage } from '../auth/formError';
 import { StringListField } from '../profiles/schema/StringListField';
+import { DevicePicker } from './DevicePicker';
 import styles from './FirewallPage.module.css';
 
 export interface IpsecTemplateFormProps {
   onInsert: (rules: FirewallRule[]) => void;
   onCancel: () => void;
+  devices: readonly LanDevice[] | undefined;
+  devicesFailed: boolean;
+  hostAddresses: readonly string[];
 }
 
 /** The "IPsec router" template (SPEC §16.2): asks the server for the rules and hands them over. */
-export function IpsecTemplateForm({ onInsert, onCancel }: IpsecTemplateFormProps) {
+export function IpsecTemplateForm(props: IpsecTemplateFormProps) {
+  const { onInsert, onCancel } = props;
   const { t } = useTranslation();
   const titleId = useId();
   const [name, setName] = useState('');
@@ -62,17 +67,18 @@ export function IpsecTemplateForm({ onInsert, onCancel }: IpsecTemplateFormProps
           error={fields.name}
           onChange={(event) => setName(event.currentTarget.value)}
         />
-        <Field
-          label={t('firewall.ipsec.device')}
-          placeholder={t('firewall.ipsec.devicePlaceholder')}
-          className={styles.monoField}
-          value={deviceAddress}
-          required
-          spellCheck={false}
-          error={fields.deviceAddress}
-          onChange={(event) => setDeviceAddress(event.currentTarget.value)}
-        />
       </div>
+      <DevicePicker
+        label={t('firewall.ipsec.device')}
+        value={deviceAddress}
+        onChange={setDeviceAddress}
+        devices={props.devices}
+        devicesFailed={props.devicesFailed}
+        hostAddress=""
+        hostAddresses={props.hostAddresses}
+        placeholder={t('firewall.ipsec.devicePlaceholder')}
+        error={fields.deviceAddress}
+      />
       <StringListField
         label={t('firewall.ipsec.peers')}
         lines={peers}

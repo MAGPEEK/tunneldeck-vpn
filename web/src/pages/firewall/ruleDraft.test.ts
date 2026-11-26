@@ -5,6 +5,7 @@ import {
   errorsByDraft,
   formatPort,
   invalidPortFields,
+  isPortForward,
   moveDraft,
   newDraft,
   parsePort,
@@ -97,6 +98,29 @@ describe('toRule', () => {
   });
 });
 
+describe('isPortForward', () => {
+  it('is false while the destination is empty, so the action stays editable', () => {
+    expect(isPortForward(newDraft('inbound'), HOST)).toBe(false);
+    expect(isPortForward({ ...newDraft('inbound'), destination: '192.168.1.2' }, HOST)).toBe(true);
+    expect(isPortForward({ ...newDraft('inbound'), destination: '192.168.1.10' }, HOST)).toBe(
+      false,
+    );
+    expect(isPortForward({ ...newDraft('outbound'), destination: '10.0.0.0/8' }, HOST)).toBe(false);
+  });
+
+  it('keeps the chosen action of a new rule without destination', () => {
+    expect(toRule({ ...newDraft('inbound'), action: 'reject' }, HOST).action).toBe('reject');
+  });
+});
+
+describe('outbound destination', () => {
+  it('sends an empty destination as everything behind the VPN', () => {
+    const draft = { ...newDraft('outbound'), source: '192.168.1.20' };
+    expect(toRule(draft, HOST).destination).toBe('0.0.0.0/0');
+    expect(toRule({ ...draft, destination: '10.0.0.0/8' }, HOST).destination).toBe('10.0.0.0/8');
+  });
+});
+
 describe('newDraft', () => {
   it('defaults inbound rules to TCP+UDP and outbound rules to any protocol, without a destination', () => {
     expect(newDraft('inbound')).toMatchObject({ protocol: 'tcp+udp', destination: '' });
@@ -129,14 +153,21 @@ describe('visiblePortFields', () => {
 });
 
 describe('moveDraft', () => {
-  it('swaps with the neighbour of the same direction and stops at the ends', () => {
-    const a = newDraft('inbound');
-    const out = newDraft('outbound');
-    const b = newDraft('inbound');
-    const list = [a, out, b];
-    expect(moveDraft(list, b.key, -1)).toEqual([b, out, a]);
+  const a = newDraft('inbound');
+  const out = newDraft('outbound');
+  const b = newDraft('inbound');
+  const list = [a, out, b];
+
+  it('moves by one place in the whole list and stops at the ends', () => {
+    expect(moveDraft(list, b.key, -1)).toEqual([a, b, out]);
     expect(moveDraft(list, a.key, -1)).toEqual(list);
-    expect(moveDraft(list, out.key, 1)).toEqual(list);
+    expect(moveDraft(list, b.key, 1)).toEqual(list);
+  });
+
+  it('swaps with the next shown draft when the list is filtered', () => {
+    const inbound = (draft: { direction: string }) => draft.direction === 'inbound';
+    expect(moveDraft(list, b.key, -1, inbound)).toEqual([b, out, a]);
+    expect(moveDraft(list, a.key, 1, inbound)).toEqual([b, out, a]);
   });
 });
 
