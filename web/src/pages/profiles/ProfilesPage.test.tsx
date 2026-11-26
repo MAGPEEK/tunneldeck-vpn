@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { problem, type MockRoutes } from '../../test/fetchMock';
-import { DRIVERS, makeProfile, makeStatus } from '../../test/fixtures';
+import { DRIVERS, WIREGUARD_SCHEMA, makeProfile, makeStatus } from '../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const office = makeProfile({ dailyReconnect: { enabled: true, time: '04:30' } });
@@ -32,6 +32,8 @@ function routes(overrides: MockRoutes = {}): MockRoutes {
   };
 }
 
+const WITH_WIREGUARD = [...DRIVERS, { protocol: 'wireguard', schema: WIREGUARD_SCHEMA }];
+
 function row(name: string): HTMLElement {
   const cell = screen.getByRole('cell', { name });
   const tr = cell.closest('tr');
@@ -50,6 +52,19 @@ describe('ProfilesPage', () => {
     expect(within(row('mdex')).getByText('Off')).toBeInTheDocument();
     expect(within(row('mdex')).getByText('Active')).toBeInTheDocument();
     expect(within(row('Office')).queryByText('Active')).not.toBeInTheDocument();
+  });
+
+  it('shows a WireGuard profile with its protocol and endpoint', async () => {
+    const tunnel = makeProfile({
+      id: 'wg1',
+      name: 'Tunnel',
+      protocol: 'wireguard',
+      settings: { endpoint: 'wg.example.com:51820', address: '10.66.0.2/32' },
+    });
+    renderApp(routes({ 'GET /api/profiles': { body: [office, tunnel] } }), '/profiles');
+    await screen.findByRole('cell', { name: 'Tunnel' });
+    expect(within(row('Tunnel')).getByText('WireGuard')).toBeInTheDocument();
+    expect(within(row('Tunnel')).getByText('wg.example.com:51820')).toBeInTheDocument();
   });
 
   it('keeps delete enabled for every profile, also the connected one', async () => {
@@ -215,7 +230,7 @@ describe('import', () => {
   it('makes loading a file the first, primary action', async () => {
     renderApp(routes(), '/profiles');
     await screen.findByRole('cell', { name: 'Office' });
-    const load = screen.getByRole('button', { name: 'Load .ovpn file' });
+    const load = screen.getByRole('button', { name: 'Load profile file (.ovpn, .conf)' });
     const paste = screen.getByRole('button', { name: 'Paste configuration' });
     const create = screen.getByRole('button', { name: 'New profile' });
     expect(load.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -393,13 +408,19 @@ describe('import', () => {
     const file = ovpnFile('office.conf');
 
     fireEvent.dragEnter(zone, dragEvent(file));
-    expect(screen.getByRole('status')).toHaveTextContent('Drop the .ovpn file to load it');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Drop the profile file (.ovpn, .conf) to load it',
+    );
     fireEvent.dragLeave(zone, dragEvent(file));
-    expect(screen.queryByText('Drop the .ovpn file to load it')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Drop the profile file (.ovpn, .conf) to load it'),
+    ).not.toBeInTheDocument();
 
     fireEvent.dragEnter(zone, dragEvent(file));
     fireEvent.drop(zone, dragEvent(file));
-    expect(screen.queryByText('Drop the .ovpn file to load it')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Drop the profile file (.ovpn, .conf) to load it'),
+    ).not.toBeInTheDocument();
     expect(await screen.findByLabelText('Name')).toHaveValue('office');
     expect(window.location.pathname).toBe('/profiles/new');
   });
@@ -432,5 +453,97 @@ describe('import', () => {
     expect(alert).toHaveTextContent('Could not load empty.ovpn');
     expect(alert).toHaveTextContent('The file is empty or contains only comments.');
     expect(window.location.pathname).toBe('/profiles');
+  });
+
+  describe('WireGuard', () => {
+    const wgText = [
+      '[Interface]',
+      'PrivateKey = cHJpdmF0ZQ==',
+      'Address = 10.66.0.2/32, fd00::2/128',
+      'DNS = 10.66.0.1',
+      '',
+      '[Peer]',
+      'PublicKey = c2VydmVy',
+      'Endpoint = wg.example.com:51820',
+      'AllowedIPs = 10.66.0.0/24',
+    ].join('\n');
+    const wgDraft = {
+      settings: {
+        address: '10.66.0.2/32',
+        mtu: 1420,
+        peerPublicKey: 'c2VydmVy',
+        endpoint: 'wg.example.com:51820',
+        allowedIps: ['10.66.0.0/24'],
+        persistentKeepalive: 25,
+      },
+      secrets: { privateKey: 'cHJpdmF0ZQ==' },
+      warnings: [
+        { code: 'dns_ignored', severity: 'info', directive: 'DNS', line: 4, message: 'dns' },
+        { code: 'ipv6_ignored', severity: 'warning', directive: 'Address', line: 3, message: 'v6' },
+        { code: 'runs_code', severity: 'rejected', directive: 'PostUp', line: 5, message: 'x' },
+      ],
+      missing: [],
+    };
+    const wgRoutes = (overrides: MockRoutes = {}) =>
+      routes({
+        'GET /api/drivers': { body: WITH_WIREGUARD },
+        'POST /api/profiles/import': { body: wgDraft },
+        ...overrides,
+      });
+
+    it('sends a .conf file with WireGuard sections to the WireGuard importer', async () => {
+      const { fetchMock } = renderApp(wgRoutes(), '/profiles');
+      await screen.findByRole('cell', { name: 'Office' });
+      chooseFile(ovpnFile('Home Tunnel.conf', wgText));
+
+      expect(await screen.findByLabelText('Name')).toHaveValue('Home Tunnel');
+      const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({ protocol: 'wireguard', text: wgText });
+
+      expect(screen.getByLabelText('Server address (host:port)')).toHaveValue(
+        'wg.example.com:51820',
+      );
+      expect(screen.getByLabelText('Private key')).toHaveValue('cHJpdmF0ZQ==');
+      expect(
+        screen.getByText("is not applied; the host's DNS settings stay unchanged."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('has IPv6 entries, which are left out; only IPv4 is used.'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('1 directive not imported').closest('[data-tone]')).toHaveTextContent(
+        'Line 5: PostUp Not imported: runs programs or scripts',
+      );
+    });
+
+    it('sends pasted WireGuard text to the WireGuard importer, named after the endpoint host', async () => {
+      const { fetchMock } = renderApp(wgRoutes(), '/profiles');
+      fireEvent.click(await screen.findByRole('button', { name: 'Paste configuration' }));
+      expect(
+        screen.getByRole('heading', { name: 'Paste an OpenVPN or WireGuard configuration' }),
+      ).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Configuration text'), { target: { value: wgText } });
+      fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+      expect(await screen.findByLabelText('Name')).toHaveValue('wg.example.com');
+      const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({ protocol: 'wireguard', text: wgText });
+    });
+
+    it('keeps an OpenVPN .conf file with the OpenVPN importer', async () => {
+      const { fetchMock } = renderApp(
+        routes({
+          'GET /api/drivers': { body: WITH_WIREGUARD },
+          'POST /api/profiles/import': { body: providerDraft },
+        }),
+        '/profiles',
+      );
+      await screen.findByRole('cell', { name: 'Office' });
+      chooseFile(ovpnFile('office.conf'));
+
+      expect(await screen.findByLabelText('Name')).toHaveValue('office');
+      const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ protocol: 'openvpn' });
+      expect(screen.getByLabelText('Server address')).toHaveValue('203.0.113.10');
+    });
   });
 });

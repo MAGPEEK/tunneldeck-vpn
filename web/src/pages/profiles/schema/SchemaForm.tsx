@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react';
 import type { FormSchema, SchemaField } from '../../../api/profiles';
 import { Card } from '../../../components/Card';
 import { useDriverText } from '../../../i18n/dynamic';
@@ -15,11 +16,13 @@ export interface SchemaFormProps {
   errors: Record<string, string>;
   onValuesChange: (values: FormValues) => void;
   onSecretsChange: (secrets: SecretStates) => void;
+  /** Extra content shown right below the field with that key, e.g. a key pair generator. */
+  fieldAddons?: Record<string, ReactNode>;
 }
 
 /** Renders a driver's FormSchema: one card per section, fields shown per `visibleWhen`. */
 export function SchemaForm(props: SchemaFormProps) {
-  const { schema, values, secrets } = props;
+  const { schema, values, secrets, fieldAddons } = props;
   const text = useDriverText();
   return (
     <>
@@ -32,7 +35,10 @@ export function SchemaForm(props: SchemaFormProps) {
           <Card key={section.key} title={text(section.labelKey)}>
             <div className={styles.fields}>
               {fields.map((field) => (
-                <SchemaInput key={field.key} field={field} {...props} />
+                <Fragment key={field.key}>
+                  <SchemaInput field={field} {...props} />
+                  {fieldAddons?.[field.key]}
+                </Fragment>
               ))}
             </div>
           </Card>

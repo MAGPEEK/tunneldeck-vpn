@@ -2,7 +2,7 @@ import type { Advisory } from '../../../api/profiles';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { problem, type MockRoutes } from '../../../test/fetchMock';
-import { DRIVERS, makeProfile, makeStatus } from '../../../test/fixtures';
+import { DRIVERS, WIREGUARD_SCHEMA, makeProfile, makeStatus } from '../../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../../test/renderApp';
 
 const SYSTEM = {
@@ -262,5 +262,129 @@ describe('edit profile', () => {
     await screen.findByText('Profile saved.');
     expect(bodyOf(fetchMock, 'PUT', '/api/profiles/p1').secrets).toEqual({ password: 'changed' });
     expect(screen.queryByText('Changes apply on the next connect.')).not.toBeInTheDocument();
+  });
+});
+
+describe('WireGuard profile', () => {
+  const drivers = [...DRIVERS, { protocol: 'wireguard', schema: WIREGUARD_SCHEMA }];
+  const pair = { privateKey: 'bmV3LXByaXZhdGU=', publicKey: 'bmV3LXB1YmxpYw==' };
+  const hint = "Enter this public key on the server as the peer's public key.";
+  const tunnel = makeProfile({
+    id: 'wg1',
+    name: 'Tunnel',
+    protocol: 'wireguard',
+    settings: {
+      address: '10.66.0.2/32',
+      mtu: 1420,
+      peerPublicKey: 'c2VydmVy',
+      endpoint: 'wg.example.com:51820',
+      allowedIps: ['0.0.0.0/0'],
+      persistentKeepalive: 25,
+    },
+    secrets: { privateKey: { hasValue: true } },
+    derived: { publicKey: 'c3RvcmVkLXB1YmxpYw==' },
+  });
+
+  function wgRoutes(overrides: MockRoutes = {}): MockRoutes {
+    return routes({
+      'GET /api/drivers': { body: drivers },
+      'POST /api/drivers/wireguard/keypair': { body: pair },
+      ...overrides,
+    });
+  }
+
+  async function chooseWireGuard() {
+    const group = await screen.findByRole('group', { name: 'Protocol' });
+    fireEvent.click(within(group).getByRole('radio', { name: 'WireGuard' }));
+  }
+
+  it('offers WireGuard next to OpenVPN and switches to its form', async () => {
+    renderApp(wgRoutes(), '/profiles/new');
+    const group = await screen.findByRole('group', { name: 'Protocol' });
+    expect(within(group).getByRole('radio', { name: 'WireGuard' })).toBeEnabled();
+    expect(within(group).getAllByText('Planned')).toHaveLength(1);
+
+    await chooseWireGuard();
+    expect(screen.getByLabelText('Server address (host:port)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate key pair' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Public key')).not.toBeInTheDocument();
+  });
+
+  it('generates a key pair, shows the public key and sends the private key on save', async () => {
+    const created = { ...tunnel, id: 'new1' };
+    const { fetchMock } = renderApp(
+      wgRoutes({
+        'POST /api/profiles': { status: 201, body: created },
+        'GET /api/profiles/new1': { body: created },
+      }),
+      '/profiles/new',
+    );
+    await chooseWireGuard();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate key pair' }));
+
+    expect(await screen.findByLabelText('Public key')).toHaveValue(pair.publicKey);
+    expect(screen.getByLabelText('Public key')).toHaveAccessibleDescription(hint);
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Private key')).toHaveValue(pair.privateKey);
+
+    change('Private key', 'dHlwZWQ=');
+    expect(screen.queryByLabelText('Public key')).not.toBeInTheDocument();
+    change('Private key', pair.privateKey);
+
+    change('Name', 'Tunnel');
+    change('Tunnel address (IPv4 with prefix length)', '10.66.0.2/32');
+    change('Server public key', 'c2VydmVy');
+    change('Server address (host:port)', 'wg.example.com:51820');
+    submitForm();
+    await screen.findByText('Profile saved.');
+    const body = bodyOf(fetchMock, 'POST', '/api/profiles');
+    expect(body.protocol).toBe('wireguard');
+    expect(body.secrets).toEqual({ privateKey: pair.privateKey });
+  });
+
+  it('shows the public key of the stored private key read-only with Copy', async () => {
+    renderApp(wgRoutes({ 'GET /api/profiles/wg1': { body: tunnel } }), '/profiles/wg1');
+    const publicKey = await screen.findByLabelText('Public key');
+    expect(publicKey).toHaveValue('c3RvcmVkLXB1YmxpYw==');
+    expect(publicKey).toHaveAttribute('readonly');
+    expect(publicKey).toHaveAccessibleDescription(hint);
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+  });
+
+  it('asks before replacing a stored private key', async () => {
+    const { fetchMock } = renderApp(
+      wgRoutes({
+        'GET /api/profiles/wg1': { body: tunnel },
+        'PUT /api/profiles/wg1': { body: tunnel },
+      }),
+      '/profiles/wg1',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate key pair' }));
+    const confirm = screen.getByRole('group', { name: 'Confirm replacing the private key' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/keypair'))).toBe(false);
+    expect(screen.getByLabelText('Public key')).toHaveValue('c3RvcmVkLXB1YmxpYw==');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate key pair' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    expect(await screen.findByLabelText('Public key')).toHaveValue(pair.publicKey);
+    expect(screen.getByLabelText('Private key')).toHaveValue(pair.privateKey);
+
+    submitForm();
+    await screen.findByText('Profile saved.');
+    expect(bodyOf(fetchMock, 'PUT', '/api/profiles/wg1').secrets).toEqual({
+      privateKey: pair.privateKey,
+    });
+  });
+
+  it('shows why generating failed', async () => {
+    renderApp(
+      wgRoutes({ 'POST /api/drivers/wireguard/keypair': 'network-error' }),
+      '/profiles/new',
+    );
+    await chooseWireGuard();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate key pair' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByLabelText('Private key')).toHaveValue('');
   });
 });

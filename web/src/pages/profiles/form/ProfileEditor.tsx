@@ -1,5 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { isApiError } from '../../../api/client';
@@ -28,8 +36,10 @@ import {
   schemaFields,
   toRequestPart,
   type FormValues,
+  type SecretState,
   type SecretStates,
 } from '../schema/schemaValues';
+import { KeyPairPanel } from './KeyPairPanel';
 import { splitProfileErrors } from './formErrors';
 import { ImportWarnings } from './ImportWarnings';
 import { stillMissing } from './importMissing';
@@ -38,6 +48,9 @@ import { ProtocolChooser } from './ProtocolChooser';
 import { ReconnectNotice } from './ReconnectNotice';
 import { AccessSection } from './AccessSection';
 import { ScheduleSection } from './ScheduleSection';
+
+/** The private-key secret of each protocol that can generate a key pair. */
+const KEY_PAIR_FIELDS: Readonly<Record<string, string>> = { wireguard: 'privateKey' };
 
 export interface ProfileDraft {
   name: string;
@@ -199,6 +212,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
           errors={schemaErrors}
           onValuesChange={(values) => setDraft({ ...draft, values })}
           onSecretsChange={(secrets) => setDraft({ ...draft, secrets })}
+          fieldAddons={keyPairAddon(draft, profile, setDraft)}
         />
       )}
       <ScheduleSection
@@ -220,6 +234,40 @@ export function ProfileEditor(props: ProfileEditorProps) {
       </div>
     </form>
   );
+}
+
+/** The key pair generator below the private key, for protocols that have one. */
+function keyPairAddon(
+  draft: ProfileDraft,
+  profile: Profile | undefined,
+  setDraft: Dispatch<SetStateAction<ProfileDraft>>,
+): Record<string, ReactNode> | undefined {
+  const key = KEY_PAIR_FIELDS[draft.protocol];
+  if (key === undefined) {
+    return undefined;
+  }
+  const takeGenerated = (privateKey: string) =>
+    setDraft((current) => ({
+      ...current,
+      secrets: { ...current.secrets, [key]: typedSecret(current.secrets[key], privateKey) },
+    }));
+  return {
+    [key]: (
+      <KeyPairPanel
+        protocol={draft.protocol}
+        state={draft.secrets[key]}
+        storedPublicKey={profile?.derived?.publicKey}
+        onGenerated={takeGenerated}
+      />
+    ),
+  };
+}
+
+/** A value for a secret as if typed in: it replaces a saved one, else it is new. */
+function typedSecret(current: SecretState | undefined, value: string): SecretState {
+  return current === undefined || current.mode === 'new'
+    ? { mode: 'new', value }
+    : { mode: 'replace', value };
 }
 
 /** After an update every secret the server now holds reads "Stored" again. */

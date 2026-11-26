@@ -9,12 +9,16 @@ import { importProfile, type ImportDraft } from '../../../api/profiles';
 import { queryKeys } from '../../../api/queryKeys';
 import { genericErrorMessage } from '../../auth/formError';
 import type { ProfileFormState } from '../profileFormState';
-import { isProfileFileName, MAX_PROFILE_FILE_BYTES, readProfileFile } from './profileFile';
+import {
+  isProfileFileName,
+  MAX_PROFILE_FILE_BYTES,
+  profileProtocol,
+  readProfileFile,
+} from './profileFile';
 
-const IMPORT_PROTOCOL = 'openvpn';
-
-/** The import draft in the query cache, with the name of the loaded file. */
+/** The import draft in the query cache, with its protocol and the name of the loaded file. */
 export interface CachedImportDraft extends ImportDraft {
+  protocol: string;
   fileName?: string;
 }
 
@@ -25,6 +29,7 @@ export interface ImportFailure {
 }
 
 interface ImportInput {
+  protocol: string;
   text: string;
   fileName?: string;
 }
@@ -40,7 +45,8 @@ function importErrorMessage(t: TFunction, error: unknown): string {
 
 /**
  * Sends a profile file or pasted text to the importer and opens the
- * pre-filled new-profile form. Files that are not .ovpn/.conf, too large
+ * pre-filled new-profile form; wg-quick files go to the WireGuard importer,
+ * everything else to OpenVPN's. Files that are not .ovpn/.conf, too large
  * or unreadable fail before anything is sent.
  */
 export function useProfileImport() {
@@ -49,9 +55,9 @@ export function useProfileImport() {
   const client = useQueryClient();
   const [localFailure, setLocalFailure] = useState<ImportFailure>();
   const parse = useMutation({
-    mutationFn: ({ text }: ImportInput) => importProfile(IMPORT_PROTOCOL, text),
-    onSuccess: (draft, { fileName }) => {
-      const cached: CachedImportDraft = { ...draft, fileName };
+    mutationFn: ({ protocol, text }: ImportInput) => importProfile(protocol, text),
+    onSuccess: (draft, { protocol, fileName }) => {
+      const cached: CachedImportDraft = { ...draft, protocol, fileName };
       client.setQueryData(queryKeys.importDraft, cached);
       const state: ProfileFormState = { fromImport: true };
       void navigate('/profiles/new', { state });
@@ -80,12 +86,12 @@ export function useProfileImport() {
       return;
     }
     setLocalFailure(undefined);
-    parse.mutate({ text, fileName: file.name });
+    parse.mutate({ protocol: profileProtocol(text), text, fileName: file.name });
   };
 
   const loadText = (text: string) => {
     setLocalFailure(undefined);
-    parse.mutate({ text });
+    parse.mutate({ protocol: profileProtocol(text), text });
   };
 
   const failure: ImportFailure | undefined =

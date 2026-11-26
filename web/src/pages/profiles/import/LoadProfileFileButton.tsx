@@ -9,7 +9,7 @@ export interface LoadProfileFileButtonProps {
   onFile: (file: File) => void;
 }
 
-/** "Load .ovpn file": a primary button that opens the file picker. */
+/** "Load profile file": a primary button that opens the file picker. */
 export function LoadProfileFileButton({ loading, onFile }: LoadProfileFileButtonProps) {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);

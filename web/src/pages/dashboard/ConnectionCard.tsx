@@ -9,7 +9,7 @@ import { AdvisoryList, AdvisoryNotice } from '../../advisories/AdvisoryList';
 import { liveAdvisories } from '../../advisories/liveAdvisories';
 import { Button } from '../../components/Button';
 import { translateDynamic } from '../../i18n/dynamic';
-import { protocolName } from '../profiles/profileText';
+import { profileServerHost, protocolName } from '../profiles/profileText';
 import styles from './ConnectionCard.module.css';
 import { ConnectionLine } from './ConnectionLine';
 
@@ -40,8 +40,8 @@ export interface ConnectionCardProps {
 
 /** The server's host name without port: from the profile, else from the live remote. */
 function serverHost(profile: Profile | undefined, remote: string | undefined): string {
-  const host = profile?.settings.remoteHost;
-  if (typeof host === 'string' && host !== '') {
+  const host = profile ? profileServerHost(profile.settings) : '';
+  if (host !== '') {
     return host;
   }
   return remote?.replace(/:d+$/, '') ?? '';
@@ -77,6 +77,9 @@ export function ConnectionCard(props: ConnectionCardProps) {
         </span>
         {status.state === 'error' && <ErrorLine status={status} />}
         {status.routingWarning !== undefined && status.state !== 'error' && <RoutingWarning />}
+        {status.state === 'connecting' && status.messageCode && (
+          <ConnectingNote code={status.messageCode} message={status.message} />
+        )}
         {actionError !== undefined && (
           <p role="alert" className={styles.error}>
             {actionError}
@@ -123,6 +126,20 @@ function RoutingWarning() {
       <TriangleAlert size={16} className={styles.warningIcon} aria-hidden="true" />
       <span>
         {t('connection.routingWarning')} <Link to="/log">{t('connection.openLog')}</Link>
+      </span>
+    </p>
+  );
+}
+
+/** A driver's hint while connecting, e.g. that the server does not answer; it keeps retrying. */
+function ConnectingNote({ code, message }: { code: string; message: string | undefined }) {
+  const { t } = useTranslation();
+  return (
+    <p role="status" className={styles.warning}>
+      <TriangleAlert size={16} className={styles.warningIcon} aria-hidden="true" />
+      <span>
+        {translateDynamic(t, `connection.messageCode.${code}`, message)}{' '}
+        <Link to="/log">{t('connection.openLog')}</Link>
       </span>
     </p>
   );

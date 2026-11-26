@@ -45,6 +45,56 @@ afterEach(() => {
 });
 
 describe('ConnectionCard', () => {
+  describe('WireGuard', () => {
+    const tunnel = makeProfile({
+      id: 'wg1',
+      name: 'Tunnel',
+      protocol: 'wireguard',
+      settings: { endpoint: 'wg.example.com:51820', address: '10.66.0.2/32' },
+    });
+    const connecting: Partial<ConnectionStatus> = {
+      state: 'connecting',
+      profileId: 'wg1',
+      profileName: 'Tunnel',
+      protocol: 'wireguard',
+    };
+
+    it('names the protocol and the endpoint host in the connection line', () => {
+      renderCard(connecting, { profiles: [tunnel] });
+      const line = screen.getByRole('group', { name: /Connecting/ });
+      expect(line).toHaveTextContent('WireGuard');
+      expect(line).toHaveTextContent('wg.example.com');
+      expect(line).not.toHaveTextContent('51820');
+    });
+
+    it('shows the translated message code while connecting', () => {
+      renderCard(
+        { ...connecting, messageCode: 'wireguard_no_handshake', message: 'No answer (English)' },
+        { profiles: [tunnel] },
+      );
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'No answer from the server – check the keys and the endpoint',
+      );
+      expect(screen.queryByText(/No answer (English)/)).not.toBeInTheDocument();
+    });
+
+    it('falls back to the message for an unknown code', () => {
+      renderCard(
+        { ...connecting, messageCode: 'future_code', message: 'Something new' },
+        { profiles: [tunnel] },
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Something new');
+    });
+
+    it('drops the note once the tunnel is up', () => {
+      renderCard(
+        { ...connecting, state: 'connected', messageCode: 'wireguard_no_handshake' },
+        { profiles: [tunnel] },
+      );
+      expect(screen.queryByText(/No answer from the server/)).not.toBeInTheDocument();
+    });
+  });
+
   it.each<[ConnectionState, string]>([
     ['disconnected', 'Disconnected'],
     ['connecting', 'Connecting'],

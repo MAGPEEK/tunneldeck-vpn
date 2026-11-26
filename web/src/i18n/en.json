@@ -252,13 +252,13 @@
     "confirmDeleteInUseButton": "Disconnect and delete",
     "cancel": "Cancel",
     "empty": "No profiles yet",
-    "importTitle": "Paste an OpenVPN configuration",
+    "importTitle": "Paste an OpenVPN or WireGuard configuration",
     "importPaste": "Configuration text",
     "importInvalid": "The configuration cannot be read.",
     "importSubmit": "Import",
-    "loadFile": "Load .ovpn file",
+    "loadFile": "Load profile file (.ovpn, .conf)",
     "pasteConfig": "Paste configuration",
-    "dropHint": "Drop the .ovpn file to load it",
+    "dropHint": "Drop the profile file (.ovpn, .conf) to load it",
     "loadFailed": "Could not load {{file}}",
     "importWrongType": "Only .ovpn or .conf files can be loaded.",
     "importUnreadable": "The file could not be read."
@@ -285,6 +285,15 @@
     "access": "Access",
     "publicAddress": "Public address of this connection (optional)",
     "publicAddressHint": "The address your provider assigns to this connection, e.g. for remote access and port forwards. TunnelDeck-VPN cannot detect it itself."
+  },
+  "keyPair": {
+    "generate": "Generate key pair",
+    "confirmLabel": "Confirm replacing the private key",
+    "confirmReplace": "Replace the private key with a new one? The server then needs the new public key.",
+    "confirmButton": "Replace key",
+    "cancel": "Cancel",
+    "publicKey": "Public key",
+    "publicKeyHint": "Enter this public key on the server as the peer's public key."
   },
   "schemaForm": {
     "line": "{{label}}, line {{number}}",

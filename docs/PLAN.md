@@ -106,7 +106,7 @@ Owner decision 2026-11-26: remove the destination kind "Host". Inbound destinati
 
 SPEC §18: package `internal/vpn/wireguard` (schema, validation, key generation endpoint, wg-quick importer, embedded wireguard-go device on `tdvpn0`, handshake-based state machine, traffic counters), registry wiring, API for key generation, tests.
 
-## [ ] 26. WireGuard UI — medium — after: 25
+## [x] 26. WireGuard UI — medium — after: 25
 
 SPEC §18: protocol chooser offers WireGuard; schema form renders it; "Generate key pair" with public key + Copy; `.conf` loading in the existing import flow; encryption row shows ChaCha20-Poly1305; i18n de/en; help texts.
 

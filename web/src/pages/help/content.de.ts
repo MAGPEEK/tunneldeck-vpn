@@ -31,8 +31,8 @@ export const HELP_CONTENT_DE: HelpContent = {
       type: 'terms',
       items: [
         {
-          term: '.ovpn-Datei laden',
-          text: 'Verwenden Sie „.ovpn-Datei laden“, ziehen Sie die Datei auf die Profil-Seite oder fügen Sie die Konfiguration ein. Das Formular öffnet sich ausgefüllt; gespeichert wird erst, wenn Sie speichern.',
+          term: 'Profildatei laden',
+          text: 'Verwenden Sie „Profildatei laden (.ovpn, .conf)“ für eine OpenVPN- oder WireGuard-Datei, ziehen Sie die Datei auf die Profil-Seite oder fügen Sie die Konfiguration ein. Das Formular öffnet sich ausgefüllt; gespeichert wird erst, wenn Sie speichern.',
         },
         {
           term: 'Fehlende Felder',
@@ -62,6 +62,17 @@ export const HELP_CONTENT_DE: HelpContent = {
           term: 'Öffentliche Adresse',
           text: 'Abschnitt „Zugriff“: die Adresse, die Ihr Anbieter dieser Verbindung zuweist, zum Beispiel eine feste öffentliche IP. Sie hat immer Vorrang vor der öffentlichen IP, die TunnelDeck-VPN nach jedem Verbindungsaufbau erkennt (System → Erkennung der öffentlichen IP). Sie wird für die Fernzugriffs-URL und für Portweiterleitungen verwendet. Lassen Sie das Feld leer, wenn die VPN-Adresse selbst aus dem Internet erreichbar ist.',
         },
+      ],
+    },
+    { type: 'subheading', text: 'WireGuard' },
+    {
+      type: 'list',
+      items: [
+        'Legen Sie ein WireGuard-Profil mit dem Formular an (Protokoll „WireGuard“) oder laden Sie die `.conf`-Datei, die Ihr Server oder Anbieter bereitstellt; Einfügen des Textes geht ebenfalls.',
+        '„Schlüsselpaar erzeugen“ erstellt einen neuen privaten Schlüssel für dieses Gerät und zeigt den passenden öffentlichen Schlüssel. Tragen Sie diesen öffentlichen Schlüssel auf dem Server als öffentlichen Schlüssel des Peers ein; der private Schlüssel verlässt TunnelDeck-VPN nicht und wird verschlüsselt gespeichert.',
+        '`DNS` aus der Datei wird nicht übernommen, der Host behält seine eigenen DNS-Einstellungen; Skripte (`PreUp`, `PostUp`, `PreDown`, `PostDown`) werden nicht importiert. Verwendet werden nur der erste Peer und IPv4-Einträge.',
+        '`AllowedIPs` außer `0.0.0.0/0` gelten als Netze hinter dem VPN und werden über den Tunnel geroutet. Welche LAN-Geräte den Tunnel nutzen dürfen, entscheiden wie bei OpenVPN die Firewall-Regeln und der Kill-Switch.',
+        'Antwortet der Server beim Verbinden nicht, zeigt die Übersicht das nach 30 Sekunden an und versucht es weiter: Prüfen Sie die Schlüssel und den Endpunkt.',
       ],
     },
     { type: 'link', target: 'migrate-from-rut240', text: 'Umstieg von einem Teltonika RUT240' },

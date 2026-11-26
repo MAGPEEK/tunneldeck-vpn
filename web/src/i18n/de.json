@@ -252,13 +252,13 @@
     "confirmDeleteInUseButton": "Trennen und löschen",
     "cancel": "Abbrechen",
     "empty": "Noch keine Profile",
-    "importTitle": "OpenVPN-Konfiguration einfügen",
+    "importTitle": "OpenVPN- oder WireGuard-Konfiguration einfügen",
     "importPaste": "Konfigurationstext",
     "importInvalid": "Die Konfiguration kann nicht gelesen werden.",
     "importSubmit": "Importieren",
-    "loadFile": ".ovpn-Datei laden",
+    "loadFile": "Profildatei laden (.ovpn, .conf)",
     "pasteConfig": "Konfiguration einfügen",
-    "dropHint": ".ovpn-Datei hier ablegen, um sie zu laden",
+    "dropHint": "Profildatei (.ovpn, .conf) hier ablegen, um sie zu laden",
     "loadFailed": "{{file}} konnte nicht geladen werden",
     "importWrongType": "Nur .ovpn- oder .conf-Dateien können geladen werden.",
     "importUnreadable": "Die Datei konnte nicht gelesen werden."
@@ -285,6 +285,15 @@
     "access": "Zugriff",
     "publicAddress": "Öffentliche Adresse dieser Verbindung (optional)",
     "publicAddressHint": "Die Adresse, die Ihr Anbieter dieser Verbindung zuweist, z. B. für Fernzugriff und Portweiterleitungen. TunnelDeck-VPN kann sie nicht selbst ermitteln."
+  },
+  "keyPair": {
+    "generate": "Schlüsselpaar erzeugen",
+    "confirmLabel": "Ersetzen des privaten Schlüssels bestätigen",
+    "confirmReplace": "Den privaten Schlüssel durch einen neuen ersetzen? Der Server braucht dann den neuen öffentlichen Schlüssel.",
+    "confirmButton": "Schlüssel ersetzen",
+    "cancel": "Abbrechen",
+    "publicKey": "Öffentlicher Schlüssel",
+    "publicKeyHint": "Tragen Sie diesen öffentlichen Schlüssel auf dem Server als öffentlichen Schlüssel des Peers ein."
   },
   "schemaForm": {
     "line": "{{label}}, Zeile {{number}}",

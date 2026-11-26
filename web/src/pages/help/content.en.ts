@@ -31,8 +31,8 @@ export const HELP_CONTENT_EN: HelpContent = {
       type: 'terms',
       items: [
         {
-          term: 'Load an .ovpn file',
-          text: 'Use "Load .ovpn file", drop the file onto the Profiles page, or paste the configuration. The form opens filled in; nothing is stored until you save.',
+          term: 'Load a profile file',
+          text: 'Use "Load profile file (.ovpn, .conf)" for an OpenVPN or a WireGuard file, drop the file onto the Profiles page, or paste the configuration. The form opens filled in; nothing is stored until you save.',
         },
         {
           term: 'Missing fields',
@@ -62,6 +62,17 @@ export const HELP_CONTENT_EN: HelpContent = {
           term: 'Public address',
           text: 'Section "Access": the address your provider assigns to this connection, for example a fixed public IP. It always takes precedence over the public IP that TunnelDeck-VPN detects after every connect (System → Public IP detection). It is used for the remote-access URL and for port forwards. Leave it empty if the VPN address itself is reachable from the internet.',
         },
+      ],
+    },
+    { type: 'subheading', text: 'WireGuard' },
+    {
+      type: 'list',
+      items: [
+        'Create a WireGuard profile with the form (protocol "WireGuard") or load the `.conf` file your server or provider gives you; pasting its text works too.',
+        '"Generate key pair" creates a new private key for this device and shows the matching public key. Enter this public key on the server as the public key of this peer; the private key never leaves TunnelDeck-VPN and is stored encrypted.',
+        '`DNS` from the file is not applied, the host keeps its own DNS settings; scripts (`PreUp`, `PostUp`, `PreDown`, `PostDown`) are not imported. Only the first peer and IPv4 entries are used.',
+        '`AllowedIPs` other than `0.0.0.0/0` count as networks behind the VPN and are routed through the tunnel. Which LAN devices may use the tunnel is decided by the firewall rules and the kill switch, as for OpenVPN.',
+        'While connecting without an answer from the server, the Dashboard says so after 30 seconds and keeps trying: check the keys and the endpoint.',
       ],
     },
     { type: 'link', target: 'migrate-from-rut240', text: 'Moving from a Teltonika RUT240' },

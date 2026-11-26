@@ -108,7 +108,9 @@ describe('DashboardPage', () => {
       }),
     );
     await screen.findByRole('heading', { name: 'Add your first VPN profile' });
-    expect(screen.getByRole('button', { name: 'Load .ovpn file' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Load profile file (.ovpn, .conf)' }),
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByTestId('profile-file-input'), {
       target: { files: [new File(['client\nremote vpn.example.com'], 'Office.ovpn')] },
     });

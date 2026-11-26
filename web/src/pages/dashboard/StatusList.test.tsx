@@ -110,6 +110,13 @@ describe('StatusList', () => {
     );
   });
 
+  it('shows the fixed WireGuard data cipher without a control channel', () => {
+    renderList({ ...connected, protocol: 'wireguard', dataCipher: 'ChaCha20-Poly1305' });
+    expect(row('encryption')).toHaveAttribute('data-tone', 'success');
+    expect(row('encryption')).toHaveTextContent('Data channel ChaCha20-Poly1305');
+    expect(row('encryption')).not.toHaveTextContent('Control channel');
+  });
+
   it('marks an unencrypted data channel as a problem', () => {
     renderList({ ...connected, dataCipher: 'none' });
     expect(row('encryption')).toHaveAttribute('data-tone', 'danger');

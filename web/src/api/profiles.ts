@@ -111,6 +111,18 @@ export function getDrivers(): Promise<Driver[]> {
   return request<Driver[]>('/api/drivers');
 }
 
+/** A fresh key pair; the server stores nothing, the private key is sent back with the profile. */
+export interface KeyPair {
+  privateKey: string;
+  publicKey: string;
+}
+
+export function generateKeyPair(protocol: Protocol): Promise<KeyPair> {
+  return request<KeyPair>(`/api/drivers/${encodeURIComponent(protocol)}/keypair`, {
+    method: 'POST',
+  });
+}
+
 export function getProfiles(): Promise<Profile[]> {
   return request<Profile[]>('/api/profiles');
 }

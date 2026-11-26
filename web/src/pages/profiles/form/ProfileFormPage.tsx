@@ -12,6 +12,7 @@ import { genericErrorMessage } from '../../auth/formError';
 import { profileNameFromFile } from '../import/profileFile';
 import type { CachedImportDraft } from '../import/useProfileImport';
 import { readProfileFormState } from '../profileFormState';
+import { profileServerHost } from '../profileText';
 import { initialSecrets, initialValues } from '../schema/schemaValues';
 import { ProfileEditor, type ProfileDraft } from './ProfileEditor';
 
@@ -46,15 +47,11 @@ function draftFromProfile(drivers: Driver[], profile: Profile, keepSecrets: bool
 /** The name of an imported profile: the file name, else the server address. */
 function importedName(imported: CachedImportDraft): string {
   const fromFile = imported.fileName ? profileNameFromFile(imported.fileName) : '';
-  const host = imported.settings.remoteHost;
-  return fromFile || (typeof host === 'string' ? host.slice(0, 64) : '');
+  return fromFile || profileServerHost(imported.settings).slice(0, 64);
 }
 
-function draftFromImport(
-  drivers: Driver[],
-  protocol: string,
-  imported: CachedImportDraft,
-): ProfileDraft {
+function draftFromImport(drivers: Driver[], imported: CachedImportDraft): ProfileDraft {
+  const { protocol } = imported;
   const schema = drivers.find((driver) => driver.protocol === protocol)?.schema ?? { sections: [] };
   return {
     ...emptyDraft(drivers, protocol),
@@ -125,7 +122,7 @@ function ProfileFormView() {
     };
     notice = t('profileForm.duplicateNotice');
   } else if (imported) {
-    initial = draftFromImport(driverList, firstProtocol, imported);
+    initial = draftFromImport(driverList, imported);
   } else {
     initial = draftFor(firstProtocol);
   }
