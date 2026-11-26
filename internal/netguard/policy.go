@@ -10,12 +10,17 @@ import (
 	"tunneldeck/internal/domain"
 )
 
-// Policy rule priorities. TunnelDeck owns 7100–7194; lower numbers are
+// Policy rule priorities. TunnelDeck owns 7099–7194; lower numbers are
 // evaluated first. All rules at one priority lead to the same table, so
 // their order among each other does not matter. Every rule uses only
 // selectors that Linux 4.4 knows (from, to, fwmark): ipproto, sport and
 // dport exist since Linux 4.17.
 const (
+	// localRemoteNetworkPriority routes the host's traffic to the remote
+	// networks of a tunnel that carries LAN subnets with their own
+	// addresses (IPsec net-to-net): ahead of the LAN exclusions, because the
+	// host sends that traffic from its own LAN address.
+	localRemoteNetworkPriority = 7099
 	// lanExclusionPriority keeps traffic of policy-routed sources to the
 	// LAN, and traffic from the host's own addresses, in the main table.
 	lanExclusionPriority = 7100
@@ -40,7 +45,7 @@ const (
 const mainTable = "main"
 
 // ownedPriorities are the priorities whose rules syncPolicyRules manages.
-var ownedPriorities = []int{lanExclusionPriority, remoteNetworkPriority, outboundPriority, replyPriority}
+var ownedPriorities = []int{localRemoteNetworkPriority, lanExclusionPriority, remoteNetworkPriority, outboundPriority, replyPriority}
 
 var anyAddress = netip.MustParsePrefix("0.0.0.0/0")
 
@@ -279,10 +284,10 @@ func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress, reply replyRo
 var markedReplyRule = policyRule{priority: replyPriority, from: anyAddress, to: anyAddress, fwmark: replyMark, table: routingTable}
 
 // policyRulesFor lists every policy rule of a routed tunnel: those of
-// firewall followed by one rule per remote network. A remote network that
-// overlaps the LAN is refused, as routing it into the tunnel would cut the
-// host off from that part of its LAN.
-func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress, reply replyRouting) ([]policyRule, error) {
+// firewall followed by one rule per remote network at remotePriority. A
+// remote network that overlaps the LAN is refused, as routing it into the
+// tunnel would cut the host off from that part of its LAN.
+func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress, reply replyRouting, remotePriority int) ([]policyRule, error) {
 	for i, network := range remoteNetworks {
 		for _, addr := range lan {
 			if network.Overlaps(addr.subnet()) {
@@ -293,7 +298,7 @@ func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan
 	}
 	rules := wantedPolicyRules(firewall, lan, reply)
 	for _, network := range remoteNetworks {
-		rules = appendPolicyRule(rules, newPolicyRule(remoteNetworkPriority, anyAddress, network, routingTable))
+		rules = appendPolicyRule(rules, newPolicyRule(remotePriority, anyAddress, network, routingTable))
 	}
 	return rules, nil
 }

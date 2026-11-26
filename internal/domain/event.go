@@ -49,6 +49,18 @@ const (
 	// would loop into it. Retried, because the name may resolve elsewhere
 	// later (DynDNS).
 	ErrorCodeEndpointInTunnel ErrorCode = "endpoint_in_tunnel"
+	// ErrorCodeProposalMismatch: the server accepted none of the proposed
+	// algorithms (IKEv2 NO_PROPOSAL_CHOSEN, RFC 7296 §3.10.1). A
+	// configuration mismatch, so it waits for the user like an
+	// authentication failure.
+	ErrorCodeProposalMismatch ErrorCode = "proposal_mismatch"
+	// ErrorCodeTSUnacceptable: the server refused the networks the tunnel
+	// would carry (IKEv2 TS_UNACCEPTABLE); waits for the user too.
+	ErrorCodeTSUnacceptable ErrorCode = "ts_unacceptable"
+	// ErrorCodeNoVirtualIP: the server assigned no address to the tunnel
+	// (IKEv2 INTERNAL_ADDRESS_FAILURE). Retried, as an exhausted address
+	// pool may free up.
+	ErrorCodeNoVirtualIP ErrorCode = "no_virtual_ip"
 )
 
 // StateEvent reports a connection state change. VPNIP, Remote and Since are

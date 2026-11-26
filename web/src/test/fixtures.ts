@@ -222,6 +222,307 @@ export const WIREGUARD_SCHEMA: FormSchema = {
   ],
 };
 
+/** Mirrors internal/vpn/ipsec/schema.go Describe(). */
+export const IPSEC_SCHEMA: FormSchema = {
+  sections: [
+    {
+      key: 'gateway',
+      labelKey: 'ipsec.section.gateway',
+      fields: [
+        {
+          key: 'template',
+          type: 'select',
+          labelKey: 'ipsec.template',
+          options: [
+            {
+              value: 'generic',
+              labelKey: 'ipsec.template.generic',
+              presets: {
+                espProposals: [
+                  'aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048',
+                  'aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048',
+                ],
+                ikeProposals: [
+                  'aes256gcm16-aes128gcm16-prfsha384-prfsha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+                  'aes256-aes128-sha384-sha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+                ],
+                ikeVersion: 'ikev2',
+              },
+            },
+            {
+              value: 'lancom',
+              labelKey: 'ipsec.template.lancom',
+              presets: {
+                espProposals: ['aes256gcm16-ecp256-modp2048', 'aes256-sha256-modp2048'],
+                ikeProposals: ['aes256gcm16-prfsha256-ecp256-modp2048', 'aes256-sha256-modp2048'],
+                ikeVersion: 'ikev2',
+              },
+            },
+            {
+              value: 'fritzbox',
+              labelKey: 'ipsec.template.fritzbox',
+              presets: {
+                espProposals: ['aes256-sha512-sha256-modp2048'],
+                ikeProposals: ['aes256-sha512-sha256-modp2048'],
+                ikeVersion: 'ikev2',
+              },
+            },
+            {
+              value: 'fritzboxUser',
+              labelKey: 'ipsec.template.fritzboxUser',
+              presets: {
+                authMethod: 'psk',
+                espProposals: ['aes256-sha512', 'aes256-sha1'],
+                ikeProposals: [
+                  'aes256-sha512-modp2048',
+                  'aes256-sha512-modp1024',
+                  'aes256-sha1-modp1024',
+                ],
+                ikeVersion: 'ikev1',
+                mode: 'virtualIp',
+              },
+            },
+            {
+              value: 'opnsense',
+              labelKey: 'ipsec.template.opnsense',
+              presets: {
+                espProposals: [
+                  'aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048',
+                  'aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048',
+                ],
+                ikeProposals: [
+                  'aes256gcm16-aes128gcm16-prfsha384-prfsha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+                  'aes256-aes128-sha384-sha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+                ],
+                ikeVersion: 'ikev2',
+              },
+            },
+          ],
+          default: 'generic',
+        },
+        {
+          key: 'gateway',
+          type: 'text',
+          labelKey: 'ipsec.gateway',
+          required: true,
+          placeholder: 'vpn.example.com',
+        },
+        {
+          key: 'ikeVersion',
+          type: 'select',
+          labelKey: 'ipsec.ikeVersion',
+          options: [
+            {
+              value: 'ikev2',
+              labelKey: 'ipsec.ikeVersion.ikev2',
+            },
+            {
+              value: 'ikev1',
+              labelKey: 'ipsec.ikeVersion.ikev1',
+            },
+          ],
+          default: 'ikev2',
+        },
+        {
+          key: 'mode',
+          type: 'select',
+          labelKey: 'ipsec.mode',
+          options: [
+            {
+              value: 'virtualIp',
+              labelKey: 'ipsec.mode.virtualIp',
+            },
+            {
+              value: 'netToNet',
+              labelKey: 'ipsec.mode.netToNet',
+            },
+          ],
+          default: 'virtualIp',
+        },
+        {
+          key: 'localSubnets',
+          type: 'stringList',
+          labelKey: 'ipsec.localSubnets',
+          required: true,
+          visibleWhen: {
+            key: 'mode',
+            equals: ['netToNet'],
+          },
+          placeholder: '192.168.1.0/24',
+        },
+        {
+          key: 'remoteSubnets',
+          type: 'stringList',
+          labelKey: 'ipsec.remoteSubnets',
+          required: true,
+          default: ['0.0.0.0/0'],
+          placeholder: '10.20.0.0/16',
+        },
+      ],
+    },
+    {
+      key: 'authentication',
+      labelKey: 'ipsec.section.authentication',
+      fields: [
+        {
+          key: 'authMethod',
+          type: 'select',
+          labelKey: 'ipsec.authMethod',
+          options: [
+            {
+              value: 'psk',
+              labelKey: 'ipsec.authMethod.psk',
+            },
+            {
+              value: 'certificate',
+              labelKey: 'ipsec.authMethod.certificate',
+            },
+            {
+              value: 'eapMschapv2',
+              labelKey: 'ipsec.authMethod.eapMschapv2',
+            },
+          ],
+          default: 'psk',
+        },
+        {
+          key: 'psk',
+          type: 'secret',
+          labelKey: 'ipsec.psk',
+          required: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['psk'],
+          },
+        },
+        {
+          key: 'username',
+          type: 'text',
+          labelKey: 'ipsec.username',
+          required: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['eapMschapv2'],
+          },
+        },
+        {
+          key: 'eapPassword',
+          type: 'secret',
+          labelKey: 'ipsec.eapPassword',
+          required: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['eapMschapv2'],
+          },
+        },
+        {
+          key: 'xauthUsername',
+          type: 'text',
+          labelKey: 'ipsec.xauthUsername',
+          required: true,
+          visibleWhen: {
+            key: 'ikeVersion',
+            equals: ['ikev1'],
+          },
+        },
+        {
+          key: 'xauthPassword',
+          type: 'secret',
+          labelKey: 'ipsec.xauthPassword',
+          required: true,
+          visibleWhen: {
+            key: 'ikeVersion',
+            equals: ['ikev1'],
+          },
+        },
+        {
+          key: 'caCert',
+          type: 'textarea',
+          labelKey: 'ipsec.caCert',
+          required: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['certificate', 'eapMschapv2'],
+          },
+        },
+        {
+          key: 'clientCert',
+          type: 'textarea',
+          labelKey: 'ipsec.clientCert',
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['certificate'],
+          },
+        },
+        {
+          key: 'clientKey',
+          type: 'secret',
+          labelKey: 'ipsec.clientKey',
+          multiline: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['certificate'],
+          },
+        },
+        {
+          key: 'pkcs12',
+          type: 'secret',
+          labelKey: 'ipsec.pkcs12',
+          multiline: true,
+          visibleWhen: {
+            key: 'authMethod',
+            equals: ['certificate'],
+          },
+          encoding: 'base64',
+        },
+        {
+          key: 'pkcs12Password',
+          type: 'secret',
+          labelKey: 'ipsec.pkcs12Password',
+          visibleWhen: {
+            secret: 'pkcs12',
+          },
+        },
+        {
+          key: 'localId',
+          type: 'text',
+          labelKey: 'ipsec.localId',
+          placeholder: 'client.example.com',
+        },
+        {
+          key: 'remoteId',
+          type: 'text',
+          labelKey: 'ipsec.remoteId',
+          placeholder: 'vpn.example.com',
+        },
+      ],
+    },
+    {
+      key: 'encryption',
+      labelKey: 'ipsec.section.encryption',
+      fields: [
+        {
+          key: 'ikeProposals',
+          type: 'stringList',
+          labelKey: 'ipsec.ikeProposals',
+          default: [
+            'aes256gcm16-aes128gcm16-prfsha384-prfsha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+            'aes256-aes128-sha384-sha256-curve25519-ecp384-ecp256-modp3072-modp2048',
+          ],
+        },
+        {
+          key: 'espProposals',
+          type: 'stringList',
+          labelKey: 'ipsec.espProposals',
+          default: [
+            'aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048',
+            'aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048',
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 export const DRIVERS: Driver[] = [{ protocol: 'openvpn', schema: OPENVPN_SCHEMA }];
 
 export function makeProfile(overrides: Partial<Profile> = {}): Profile {

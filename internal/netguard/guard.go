@@ -44,6 +44,10 @@ type Guard struct {
 	// remoteNetworks are the networks behind the VPN routed through the
 	// tunnel while routed is true.
 	remoteNetworks []netip.Prefix
+	// localNetworks are the LAN subnets the routed tunnel carries with
+	// their own addresses; TUNNELDECK-POSTROUTING does not masquerade
+	// their traffic into the tunnel.
+	localNetworks []netip.Prefix
 }
 
 type installation struct {

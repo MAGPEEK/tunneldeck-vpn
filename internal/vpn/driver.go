@@ -54,3 +54,23 @@ func remoteNetworksOf(driver Driver, p domain.Profile) []netip.Prefix {
 	}
 	return nil
 }
+
+// LocalNetworker is implemented by drivers whose tunnels can carry LAN
+// subnets with their own addresses instead of a VPN address of their own
+// (SPEC §19: IPsec net-to-net). While such a tunnel is connected, traffic
+// from these networks into the tunnel is not masqueraded, and the host
+// sends its own traffic into the tunnel from its LAN address in them. A
+// tunnel with local networks reports no VPN IP.
+type LocalNetworker interface {
+	// LocalNetworks returns the LAN subnets the validated profile p
+	// carries through the tunnel, or none when it has a VPN address.
+	LocalNetworks(p domain.Profile) []netip.Prefix
+}
+
+// localNetworksOf returns the local networks of p if driver names any.
+func localNetworksOf(driver Driver, p domain.Profile) []netip.Prefix {
+	if l, ok := driver.(LocalNetworker); ok {
+		return l.LocalNetworks(p)
+	}
+	return nil
+}

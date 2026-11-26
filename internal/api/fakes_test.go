@@ -665,3 +665,22 @@ func (fakeKeyDriver) Derive(p domain.Profile) map[string]string {
 	}
 	return map[string]string{"publicKey": "derived-public"}
 }
+
+const secretAdviceProtocol domain.Protocol = "fakeadvice"
+
+// fakeSecretAdviser reports "short_secret" while the secret "psk" is
+// shorter than 20 characters.
+type fakeSecretAdviser struct{ fakeDriver }
+
+func (fakeSecretAdviser) Protocol() domain.Protocol { return secretAdviceProtocol }
+
+func (fakeSecretAdviser) Validate(domain.Profile) error { return nil }
+
+func (fakeSecretAdviser) Advise(domain.PublicProfile) []vpn.Advisory { return nil }
+
+func (fakeSecretAdviser) AdviseSecrets(p domain.Profile) []vpn.Advisory {
+	if len(p.Secrets["psk"]) >= 20 {
+		return nil
+	}
+	return []vpn.Advisory{{Code: "short_secret", Severity: vpn.AdvisoryWarning, Field: "psk"}}
+}

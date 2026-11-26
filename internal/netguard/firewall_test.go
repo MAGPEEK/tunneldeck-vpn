@@ -444,7 +444,7 @@ func TestInboundRulesFollowTheHostAddress(t *testing.T) {
 	ssh := hostRule(domain.ProtocolTCP, domain.SinglePort(22))
 	firewall := rulesOnly(ssh, hostAccess("", domain.ProtocolUDP, 161, "", true))
 	at := func(listing string) ruleset {
-		return buildRuleset(firewall, hostPorts{}, parseLANAddresses(listing), capsWithout())
+		return buildRuleset(firewall, hostPorts{}, parseLANAddresses(listing), capsWithout(), nil)
 	}
 	rs := at(lanListing)
 	if !slices.ContainsFunc(rs.input, hasTag("r1")) || !slices.ContainsFunc(rs.input, hasTag("r2")) || len(rs.prerouting) != 0 {

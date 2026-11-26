@@ -60,10 +60,14 @@ type Field struct {
 	Encoding FieldEncoding `json:"encoding,omitempty"`
 }
 
-// Option is one choice of a select field.
+// Option is one choice of a select field. Presets, when set, are the
+// values that choosing the option pre-fills into other setting fields of
+// the form, keyed by field key (a template, such as IPsec's gateway
+// templates); the user may change them afterwards.
 type Option struct {
-	Value    string `json:"value"`
-	LabelKey string `json:"labelKey"`
+	Value    string         `json:"value"`
+	LabelKey string         `json:"labelKey"`
+	Presets  map[string]any `json:"presets,omitempty"`
 }
 
 // Condition makes a field visible only while the field named Key holds one
@@ -89,9 +93,10 @@ func (c Condition) Validate() error {
 	return nil
 }
 
-// Validate checks every field's encoding and every condition of the
-// schema: its form, and that it refers to a non-secret field (key) or a
-// secret field (secret) of the schema.
+// Validate checks every field's encoding, every condition of the schema
+// (its form, and that it refers to a non-secret field (key) or a secret
+// field (secret) of the schema) and that option presets fill only other
+// non-secret fields of the schema.
 func (s FormSchema) Validate() error {
 	types := map[string]FieldType{}
 	for _, section := range s.Sections {
@@ -106,6 +111,20 @@ func (s FormSchema) Validate() error {
 			}
 			if err := validateVisibility(f, types); err != nil {
 				return fmt.Errorf("field %q: %w", f.Key, err)
+			}
+			if err := validatePresets(f, types); err != nil {
+				return fmt.Errorf("field %q: %w", f.Key, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validatePresets(f Field, types map[string]FieldType) error {
+	for _, option := range f.Options {
+		for key := range option.Presets {
+			if fieldType, ok := types[key]; !ok || fieldType == FieldSecret || key == f.Key {
+				return fmt.Errorf("option %q presets %q, which is not another setting field", option.Value, key)
 			}
 		}
 	}

@@ -13,6 +13,8 @@ export type Settings = Record<string, SettingValue>;
 export interface SchemaOption {
   value: string;
   labelKey: string;
+  /** Values that choosing this option pre-fills into other setting fields, by field key (a template). */
+  presets?: Settings;
 }
 
 /** A setting holds one of `equals`, or the secret field `secret` has a value. */

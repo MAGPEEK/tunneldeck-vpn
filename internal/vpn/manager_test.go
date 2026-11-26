@@ -98,6 +98,47 @@ func TestManagerRoutesRemoteNetworks(t *testing.T) {
 	}
 }
 
+// TestManagerRoutesLocalNetworks: a tunnel that carries LAN subnets with
+// their own addresses reports no VPN IP, is routed without one and skips
+// the public IP detection; any other tunnel without a VPN IP gets a
+// routing warning.
+func TestManagerRoutesLocalNetworks(t *testing.T) {
+	tests := []struct {
+		name        string
+		local       []netip.Prefix
+		wantCalls   []string
+		wantWarning bool
+	}{
+		{
+			name:      "net-to-net",
+			local:     []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")},
+			wantCalls: []string{"install", "route invalid IP to [10.20.0.0/16] from [192.168.1.0/24]"},
+		},
+		{
+			name:        "no local networks",
+			wantCalls:   []string{"install"},
+			wantWarning: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newManagerHarness(t)
+			remote := []netip.Prefix{netip.MustParsePrefix("10.20.0.0/16")}
+			h.wrap = func(d *scriptedDriver) Driver {
+				return netToNetDriver{scriptedDriver: d, local: tt.local, remote: remote}
+			}
+			h.connectUp("a", "")
+			if calls := h.guard.recorded(); !slices.Equal(calls, tt.wantCalls) {
+				t.Errorf("netguard calls = %v, want %v", calls, tt.wantCalls)
+			}
+			s := h.m.Status()
+			if (s.RoutingWarning != nil) != tt.wantWarning || s.VPNIP != "" || s.PublicIP != "" {
+				t.Errorf("Status = %+v, want routing warning %v and no VPN or public IP", s, tt.wantWarning)
+			}
+		})
+	}
+}
+
 func TestManagerFirewallFailureRefusesConnect(t *testing.T) {
 	h := newManagerHarness(t)
 	h.guard.set(func(g *fakeGuard) { g.installErr = errors.New("iptables: permission denied") })
@@ -376,6 +417,8 @@ func TestManagerStopsRetryingOnRejection(t *testing.T) {
 	}{
 		{name: "credentials", event: errorEvent(domain.ErrorCodeAuthFailed, "the server rejected the username or password")},
 		{name: "server", event: errorEvent(domain.ErrorCodeServerRejected, "the server refused the connection: no shared cipher")},
+		{name: "proposals", event: errorEvent(domain.ErrorCodeProposalMismatch, "the gateway accepted none of the proposals")},
+		{name: "traffic selectors", event: errorEvent(domain.ErrorCodeTSUnacceptable, "the gateway refused the subnets")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

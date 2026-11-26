@@ -1,0 +1,22 @@
+# Rendered by TunnelDeck-VPN for one IPsec tunnel (SPEC §19); removed when it stops.
+charon {
+	port = 0
+	port_nat_t = 0
+	install_routes = no
+	install_virtual_ip = no
+	routing_table = 0
+	load = kernel-libipsec! kernel-netlink socket-default vici openssl pem x509 pkcs1 pkcs8 pubkey constraints revocation curl nonce random kdf eap-identity eap-mschapv2 xauth-generic
+	plugins {
+		vici {
+			socket = "unix:///run/tunneldeck/ipsec/charon.vici"
+		}
+		openssl {
+			load_legacy = yes
+		}
+	}
+	filelog {
+		stderr {
+			default = 1
+		}
+	}
+}

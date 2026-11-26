@@ -1,0 +1,36 @@
+tunneldeck {
+  version = 1
+  aggressive = yes
+  remote_addrs = [office.example.net]
+  proposals = [aes256-sha512-modp2048, aes256-sha512-modp1024]
+  vips = [0.0.0.0]
+  encap = yes
+  fragmentation = yes
+  dpd_delay = 30s
+  rekey_time = 0
+  reauth_time = 4h
+  keyingtries = 0
+  local {
+    auth = psk
+    id = alice
+  }
+  local-xauth {
+    auth = xauth
+    xauth_id = alice
+  }
+  remote {
+    auth = psk
+    id = %any
+  }
+  children {
+    tunneldeck {
+      local_ts = [dynamic]
+      remote_ts = [192.168.178.0/24]
+      esp_proposals = [aes256-sha512, aes256-sha1]
+      rekey_time = 1h
+      dpd_action = restart
+      close_action = start
+      start_action = none
+    }
+  }
+}

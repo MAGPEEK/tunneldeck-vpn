@@ -182,7 +182,10 @@
       "routing_failed": "Routing through the tunnel failed",
       "profile_invalid": "The profile is incomplete or invalid",
       "start_failed": "The VPN process could not be started",
-      "endpoint_in_tunnel": "The server address lies in a network routed through the tunnel"
+      "endpoint_in_tunnel": "The server address lies in a network routed through the tunnel",
+      "proposal_mismatch": "The gateway accepted none of the proposals",
+      "ts_unacceptable": "The gateway refused the subnets of the tunnel",
+      "no_virtual_ip": "The gateway assigned no virtual IP"
     },
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
     "profileMissing": "This profile no longer exists.",
@@ -214,7 +217,8 @@
     "dangerTitle": "Security risk",
     "noticeTitle": "Recommendations",
     "title": {
-      "unencrypted_data_channel": "Traffic is not encrypted"
+      "unencrypted_data_channel": "Traffic is not encrypted",
+      "ikev1_aggressive": "IKEv1 Aggressive Mode is insecure"
     },
     "unencrypted_data_channel": "The data channel uses no cipher: everything sent through the tunnel can be read and changed on the way. Use this only if the provider gives no other option.",
     "unencrypted_data_channel_allowed": "The profile allows an unencrypted data channel (\"none\" in Cipher). This connection negotiated a cipher and is encrypted; remove \"none\" from the Cipher field so that it stays that way.",
@@ -225,7 +229,17 @@
     "tls_auth_instead_of_crypt": "tls-auth is used; tls-crypt also hides the handshake.",
     "server_usage_check_disabled": "The check that the server certificate is issued for a server is off.",
     "fragment_in_use": "fragment is set: a legacy workaround for MTU problems that slows the tunnel.",
-    "no_dco": "This host's kernel has no data channel offload; expect lower throughput."
+    "no_dco": "This host's kernel has no data channel offload; expect lower throughput.",
+    "ipsec_des": "DES is broken (RFC 8247: must not be used). Use AES-GCM or AES-CBC.",
+    "ipsec_md5": "MD5 is broken (RFC 8247: must not be used). Use SHA-256 or stronger.",
+    "ipsec_modp768": "The key exchange MODP-768 is broken (RFC 8247: must not be used). Use Curve25519, ECP-256 or MODP-2048 and stronger.",
+    "ipsec_3des": "3DES is outdated. Use AES-GCM or AES-CBC if the gateway supports them.",
+    "ipsec_sha1": "SHA-1 is outdated. Use SHA-256 or stronger if the gateway supports it.",
+    "ipsec_weak_dh_group": "The key exchange group is weak (MODP-1024/1536 or groups 22 to 24). Use Curve25519, ECP-256 or MODP-2048 and stronger if the gateway supports them.",
+    "ipsec_no_pfs": "An ESP proposal has no key exchange group, so rekeyed keys have no perfect forward secrecy.",
+    "ipsec_short_psk": "The pre-shared key is shorter than 20 characters. Use a long random key (RFC 7296 §2.15).",
+    "ipsec_eap_mschapv2": "EAP-MSCHAPv2 is weak and no IETF standard. Prefer a certificate if the gateway supports it.",
+    "ikev1_aggressive": "IKEv1 is deprecated (RFC 9395). Aggressive Mode sends the identity unencrypted and lets an eavesdropper try to guess the pre-shared key offline. Use IKEv2 if the gateway offers it; on a FRITZ!Box with FRITZ!OS 7.50 or later use WireGuard instead."
   },
   "profiles": {
     "new": "New profile",
@@ -838,7 +852,27 @@
     "wireguard_unknown_setting": "Not a WireGuard setting.",
     "wireguard_unknown_secret": "Not a WireGuard secret.",
     "wireguard_file_empty": "The file is empty or contains only comments.",
-    "wireguard_not_a_config": "This is not a WireGuard configuration: it has no [Interface] or [Peer] section."
+    "wireguard_not_a_config": "This is not a WireGuard configuration: it has no [Interface] or [Peer] section.",
+    "ipsec_unknown_setting": "Not an IPsec setting.",
+    "ipsec_unknown_secret": "Not an IPsec secret.",
+    "ipsec_local_subnet_outside_lan": "Entry {{entry}} must lie inside a LAN subnet of the host ({{subnets}}).",
+    "ipsec_identity_invalid": "Enter a host name, an IP address, an email address or a distinguished name such as CN=vpn.example.com, without spaces around it.",
+    "ipsec_ikev1_psk_only": "IKEv1 works only with the pre-shared key (and XAuth).",
+    "ipsec_proposal_invalid": "Entry {{entry}}: enter strongSwan algorithm keywords joined by -, such as aes256gcm16-prfsha384-ecp384.",
+    "ipsec_proposal_forbidden": "Entry {{entry}} names NULL or DES encryption, which are never allowed.",
+    "ipsec_proposal_incomplete": "Entry {{entry}} lacks a cipher, an integrity algorithm, a PRF or a key exchange group.",
+    "ipsec_proposal_mixed_aead": "Entry {{entry}} mixes AEAD and classic ciphers; put them into separate entries.",
+    "ipsec_proposal_ikev1_aead": "Entry {{entry}} names an AEAD cipher, which IKEv1 does not offer for its own SA.",
+    "ipsec_certificate_invalid": "Must contain one or more PEM certificates (RFC 7468).",
+    "ipsec_private_key_invalid": "Must contain exactly one unencrypted PEM private key (RFC 7468).",
+    "ipsec_private_key_encrypted": "The key is encrypted. Upload it without a passphrase, or a PKCS#12 file with its password.",
+    "ipsec_key_mismatch": "Does not belong to the client certificate.",
+    "ipsec_pkcs12_invalid": "Must be a PKCS#12 file (.p12, .pfx) of at most 64 KiB with a certificate and its key.",
+    "ipsec_pkcs12_password": "The PKCS#12 password is wrong.",
+    "ipsec_pkcs12_with_client_cert": "Cannot be combined with a client certificate and key; use one of the two.",
+    "ipsec_client_credentials_required": "Required unless a PKCS#12 file is given.",
+    "local_network_invalid": "Entry {{entry}} of the local subnets must be an IPv4 network that does not cover every address.",
+    "vpn_address_with_local_networks": "A tunnel that carries local subnets has no VPN address of its own."
   },
   "uptime": {
     "months_one": "{{count}} month",

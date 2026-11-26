@@ -28,6 +28,7 @@ const (
 	fixedHostPort     = "host-port"
 	fixedReplyMark    = "reply-mark"
 	fixedReplyRestore = "reply-restore"
+	fixedLocalNetwork = "local-network"
 )
 
 // commentMatch finds the comment of a line as iptables -S prints it

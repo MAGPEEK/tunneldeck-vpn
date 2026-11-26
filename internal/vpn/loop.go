@@ -33,10 +33,12 @@ type failure struct {
 
 // retryable reports whether auto-retry may try again. A rejection by the
 // server or an unusable profile waits for the user, so the account is not
-// locked by the provider (SPEC §4.2).
+// locked by the provider (SPEC §4.2); so do the configuration mismatches
+// an IKEv2 server reports (SPEC §19.1).
 func (f failure) retryable() bool {
 	switch f.code {
-	case domain.ErrorCodeAuthFailed, domain.ErrorCodeServerRejected, domain.ErrorCodeProfileInvalid:
+	case domain.ErrorCodeAuthFailed, domain.ErrorCodeServerRejected, domain.ErrorCodeProfileInvalid,
+		domain.ErrorCodeProposalMismatch, domain.ErrorCodeTSUnacceptable:
 		return false
 	}
 	return true
@@ -49,6 +51,9 @@ type tunnel struct {
 	// remoteNetworks are routed through the tunnel while it is connected;
 	// they are read once per attempt, like every other profile setting.
 	remoteNetworks []netip.Prefix
+	// localNetworks are the LAN subnets the tunnel carries with their own
+	// addresses (LocalNetworker); read once per attempt as well.
+	localNetworks []netip.Prefix
 	// vpnIP is the address of the last connected event.
 	vpnIP    string
 	quit     chan struct{} // closed when the tunnel is discarded
@@ -349,7 +354,10 @@ func (l *loop) beginAttempt(p domain.Profile) {
 }
 
 func (l *loop) launch(p domain.Profile, driver Driver) {
-	t := &tunnel{profileID: p.ID, driver: driver, remoteNetworks: remoteNetworksOf(driver, p), quit: make(chan struct{})}
+	t := &tunnel{
+		profileID: p.ID, driver: driver, quit: make(chan struct{}),
+		remoteNetworks: remoteNetworksOf(driver, p), localNetworks: localNetworksOf(driver, p),
+	}
 	l.tunnel = t
 	go forwardEvents(l.post, t)
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)

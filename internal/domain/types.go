@@ -7,6 +7,7 @@ type Protocol string
 const (
 	ProtocolOpenVPN   Protocol = "openvpn"
 	ProtocolWireGuard Protocol = "wireguard"
+	ProtocolIPsec     Protocol = "ipsec"
 )
 
 // ConnectionState is a state of the tunnel (SPEC §4.2).

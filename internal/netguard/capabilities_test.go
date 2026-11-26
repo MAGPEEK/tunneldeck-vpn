@@ -324,7 +324,7 @@ func TestProbeWithoutCONNMARK(t *testing.T) {
 			}
 
 			f.on(ruleShow, ok(defaultRules))
-			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil, nil); err != nil {
 				t.Fatalf("RouteThroughTunnel: %v", err)
 			}
 			assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, "ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow,
@@ -360,7 +360,7 @@ func TestRepliesByConnectionMark(t *testing.T) {
 	}
 
 	f.on(ruleShow, ok(defaultRules))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil, nil); err != nil {
 		t.Fatalf("RouteThroughTunnel: %v", err)
 	}
 	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, "ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow,

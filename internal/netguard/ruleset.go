@@ -185,7 +185,9 @@ type hostPorts struct {
 // forward. caps are the optional extensions of the kernel: a protection
 // it cannot provide falls back or is left out, reject rules drop without
 // the REJECT target, and without CONNMARK there is no mangle chain.
-func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress, caps capabilities) ruleset {
+// localNetworks are the LAN subnets a routed tunnel carries with their own
+// addresses; their traffic into the tunnel is never masqueraded.
+func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress, caps capabilities, localNetworks []netip.Prefix) ruleset {
 	var enabled []parsedRule
 	host := hostAddresses(lan)
 	for _, rule := range firewall.Rules {
@@ -198,7 +200,7 @@ func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress
 		input:        inputContent(opts, enabled, reserved),
 		forward:      forwardContent(opts, enabled, subnets(lan)),
 		prerouting:   preroutingContent(enabled, reserved),
-		postrouting:  postroutingContent(enabled),
+		postrouting:  postroutingContent(enabled, localNetworks),
 		limit:        limitContent(opts),
 		killSwitch:   killSwitchJumps(enabled),
 		marksReplies: caps.replyRouting() == replyByMark,
@@ -481,9 +483,13 @@ func dnatTarget(rule parsedRule) string {
 }
 
 // postroutingContent masquerades port forwards on the LAN side unless they
-// keep the source address, and outbound traffic on the tunnel.
-func postroutingContent(rules []parsedRule) [][]string {
+// keep the source address, and outbound traffic on the tunnel except the
+// traffic of localNetworks, which keeps its addresses in the tunnel.
+func postroutingContent(rules []parsedRule, localNetworks []netip.Prefix) [][]string {
 	var out [][]string
+	for _, network := range localNetworks {
+		out = append(out, fixedRule(fixedLocalNetwork, []string{"-o", DeviceName, "-s", network.String(), "-j", "RETURN"}))
+	}
 	for _, rule := range rules {
 		switch {
 		case rule.isPortForward() && !rule.KeepSourceAddress:

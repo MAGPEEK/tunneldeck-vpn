@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -379,5 +380,36 @@ func TestProfileViewCarriesDerivedValues(t *testing.T) {
 	assertStatus(t, rec, http.StatusCreated)
 	if got := decode[derivedJSON](t, rec); got.Derived["publicKey"] != "derived-public" {
 		t.Errorf("create = %+v", got)
+	}
+}
+
+func TestProfileViewCarriesSecretAdvisories(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.drivers.Register(secretAdviceProtocol, func() vpn.Driver { return fakeSecretAdviser{} }); err != nil {
+		t.Fatal(err)
+	}
+	short := env.profiles.add(domain.Profile{Name: "Short", Protocol: secretAdviceProtocol, Secrets: map[string]string{"psk": "short"}})
+	long := env.profiles.add(domain.Profile{
+		Name: "Long", Protocol: secretAdviceProtocol, Secrets: map[string]string{"psk": "a-long-enough-pre-shared-key"},
+	})
+	type adviceJSON struct {
+		Advisories []vpn.Advisory `json:"advisories"`
+	}
+	tests := []struct {
+		id   string
+		want []vpn.Advisory
+	}{
+		{id: short.ID, want: []vpn.Advisory{{Code: "short_secret", Severity: vpn.AdvisoryWarning, Field: "psk"}}},
+		{id: long.ID, want: []vpn.Advisory{}},
+	}
+	for _, tt := range tests {
+		rec := env.do(t, http.MethodGet, "/api/profiles/"+tt.id, "")
+		assertStatus(t, rec, http.StatusOK)
+		if got := decode[adviceJSON](t, rec).Advisories; !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("advisories of %s = %+v, want %+v", tt.id, got, tt.want)
+		}
+		if strings.Contains(rec.Body.String(), "short\"") {
+			t.Errorf("the secret leaked: %s", rec.Body.String())
+		}
 	}
 }

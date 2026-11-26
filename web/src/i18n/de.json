@@ -182,7 +182,10 @@
       "routing_failed": "Das Routing durch den Tunnel ist fehlgeschlagen",
       "profile_invalid": "Das Profil ist unvollständig oder ungültig",
       "start_failed": "Der VPN-Prozess konnte nicht gestartet werden",
-      "endpoint_in_tunnel": "Die Serveradresse liegt in einem Netz, das durch den Tunnel geroutet wird"
+      "endpoint_in_tunnel": "Die Serveradresse liegt in einem Netz, das durch den Tunnel geroutet wird",
+      "proposal_mismatch": "Das Gateway hat keinen der Vorschläge angenommen",
+      "ts_unacceptable": "Das Gateway hat die Subnetze des Tunnels abgelehnt",
+      "no_virtual_ip": "Das Gateway hat keine virtuelle IP vergeben"
     },
     "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
     "profileMissing": "Dieses Profil existiert nicht mehr.",
@@ -214,7 +217,8 @@
     "dangerTitle": "Sicherheitsrisiko",
     "noticeTitle": "Empfehlungen",
     "title": {
-      "unencrypted_data_channel": "Der Datenverkehr ist nicht verschlüsselt"
+      "unencrypted_data_channel": "Der Datenverkehr ist nicht verschlüsselt",
+      "ikev1_aggressive": "IKEv1 Aggressive Mode ist unsicher"
     },
     "unencrypted_data_channel": "Der Datenkanal verwendet keine Verschlüsselung: Alles, was durch den Tunnel geht, kann unterwegs gelesen und verändert werden. Nutzen Sie das nur, wenn der Anbieter keine andere Wahl lässt.",
     "unencrypted_data_channel_allowed": "Das Profil erlaubt einen unverschlüsselten Datenkanal (\"none\" im Feld Cipher). Diese Verbindung hat eine Verschlüsselung ausgehandelt und ist verschlüsselt; entfernen Sie \"none\" aus dem Feld Cipher, damit das so bleibt.",
@@ -225,7 +229,17 @@
     "tls_auth_instead_of_crypt": "tls-auth wird verwendet; tls-crypt verbirgt zusätzlich den Verbindungsaufbau.",
     "server_usage_check_disabled": "Die Prüfung, ob das Serverzertifikat für einen Server ausgestellt ist, ist aus.",
     "fragment_in_use": "fragment ist gesetzt: eine veraltete Notlösung für MTU-Probleme, die den Tunnel bremst.",
-    "no_dco": "Der Kernel dieses Hosts hat kein Data Channel Offload; rechnen Sie mit geringerem Durchsatz."
+    "no_dco": "Der Kernel dieses Hosts hat kein Data Channel Offload; rechnen Sie mit geringerem Durchsatz.",
+    "ipsec_des": "DES ist gebrochen (RFC 8247: darf nicht verwendet werden). Verwenden Sie AES-GCM oder AES-CBC.",
+    "ipsec_md5": "MD5 ist gebrochen (RFC 8247: darf nicht verwendet werden). Verwenden Sie SHA-256 oder stärker.",
+    "ipsec_modp768": "Der Schlüsselaustausch MODP-768 ist gebrochen (RFC 8247: darf nicht verwendet werden). Verwenden Sie Curve25519, ECP-256 oder MODP-2048 und stärker.",
+    "ipsec_3des": "3DES ist veraltet. Verwenden Sie AES-GCM oder AES-CBC, wenn das Gateway sie unterstützt.",
+    "ipsec_sha1": "SHA-1 ist veraltet. Verwenden Sie SHA-256 oder stärker, wenn das Gateway es unterstützt.",
+    "ipsec_weak_dh_group": "Die Gruppe des Schlüsselaustauschs ist schwach (MODP-1024/1536 oder Gruppen 22 bis 24). Verwenden Sie Curve25519, ECP-256 oder MODP-2048 und stärker, wenn das Gateway sie unterstützt.",
+    "ipsec_no_pfs": "Ein ESP-Proposal hat keine Gruppe für den Schlüsselaustausch, erneuerte Schlüssel haben daher keine Perfect Forward Secrecy.",
+    "ipsec_short_psk": "Der Pre-shared Key ist kürzer als 20 Zeichen. Verwenden Sie einen langen zufälligen Schlüssel (RFC 7296 §2.15).",
+    "ipsec_eap_mschapv2": "EAP-MSCHAPv2 ist schwach und kein IETF-Standard. Verwenden Sie besser ein Zertifikat, wenn das Gateway es unterstützt.",
+    "ikev1_aggressive": "IKEv1 ist veraltet (RFC 9395). Der Aggressive Mode überträgt die Identität unverschlüsselt und erlaubt einem Mithörer, den Pre-shared Key offline zu erraten. Verwenden Sie IKEv2, wenn das Gateway es anbietet; auf einer FRITZ!Box ab FRITZ!OS 7.50 besser WireGuard."
   },
   "profiles": {
     "new": "Neues Profil",
@@ -838,7 +852,27 @@
     "wireguard_unknown_setting": "Keine WireGuard-Einstellung.",
     "wireguard_unknown_secret": "Kein WireGuard-Geheimnis.",
     "wireguard_file_empty": "Die Datei ist leer oder enthält nur Kommentare.",
-    "wireguard_not_a_config": "Das ist keine WireGuard-Konfiguration: Die Datei hat keinen Abschnitt [Interface] oder [Peer]."
+    "wireguard_not_a_config": "Das ist keine WireGuard-Konfiguration: Die Datei hat keinen Abschnitt [Interface] oder [Peer].",
+    "ipsec_unknown_setting": "Keine IPsec-Einstellung.",
+    "ipsec_unknown_secret": "Kein IPsec-Geheimnis.",
+    "ipsec_local_subnet_outside_lan": "Eintrag {{entry}} muss in einem LAN-Subnetz des Hosts liegen ({{subnets}}).",
+    "ipsec_identity_invalid": "Geben Sie einen Hostnamen, eine IP-Adresse, eine E-Mail-Adresse oder einen Distinguished Name wie CN=vpn.example.com ein, ohne Leerzeichen davor oder danach.",
+    "ipsec_ikev1_psk_only": "IKEv1 funktioniert nur mit dem Pre-shared Key (und XAuth).",
+    "ipsec_proposal_invalid": "Eintrag {{entry}}: Geben Sie strongSwan-Algorithmen mit - verbunden ein, z. B. aes256gcm16-prfsha384-ecp384.",
+    "ipsec_proposal_forbidden": "Eintrag {{entry}} nennt NULL- oder DES-Verschlüsselung; beide sind nie erlaubt.",
+    "ipsec_proposal_incomplete": "Eintrag {{entry}} fehlt eine Verschlüsselung, ein Integritätsalgorithmus, eine PRF oder eine Gruppe für den Schlüsselaustausch.",
+    "ipsec_proposal_mixed_aead": "Eintrag {{entry}} mischt AEAD- und klassische Verschlüsselung; trennen Sie sie in eigene Einträge.",
+    "ipsec_proposal_ikev1_aead": "Eintrag {{entry}} nennt eine AEAD-Verschlüsselung, die IKEv1 für die eigene SA nicht anbietet.",
+    "ipsec_certificate_invalid": "Muss ein oder mehrere PEM-Zertifikate enthalten (RFC 7468).",
+    "ipsec_private_key_invalid": "Muss genau einen unverschlüsselten privaten PEM-Schlüssel enthalten (RFC 7468).",
+    "ipsec_private_key_encrypted": "Der Schlüssel ist verschlüsselt. Laden Sie ihn ohne Passphrase hoch oder eine PKCS#12-Datei mit Passwort.",
+    "ipsec_key_mismatch": "Gehört nicht zum Client-Zertifikat.",
+    "ipsec_pkcs12_invalid": "Muss eine PKCS#12-Datei (.p12, .pfx) von höchstens 64 KiB mit Zertifikat und Schlüssel sein.",
+    "ipsec_pkcs12_password": "Das PKCS#12-Passwort ist falsch.",
+    "ipsec_pkcs12_with_client_cert": "Kann nicht mit Client-Zertifikat und Schlüssel kombiniert werden; verwenden Sie eines von beiden.",
+    "ipsec_client_credentials_required": "Erforderlich, wenn keine PKCS#12-Datei angegeben ist.",
+    "local_network_invalid": "Eintrag {{entry}} der lokalen Subnetze muss ein IPv4-Netz sein, das nicht alle Adressen umfasst.",
+    "vpn_address_with_local_networks": "Ein Tunnel, der lokale Subnetze überträgt, hat keine eigene VPN-Adresse."
   },
   "uptime": {
     "months_one": "{{count}} Monat",

@@ -82,6 +82,13 @@ type keyPairGenerator interface {
 	GenerateKeyPair() (privateKey, publicKey string, err error)
 }
 
+// secretAdviser is implemented by drivers whose advisories also depend on
+// secret values, such as the strength of an IPsec pre-shared key. Only the
+// findings leave it, never the values.
+type secretAdviser interface {
+	AdviseSecrets(p domain.Profile) []vpn.Advisory
+}
+
 // deriver is implemented by drivers that compute values for display from a
 // profile's secrets, such as WireGuard's public key. The values are never
 // secret.

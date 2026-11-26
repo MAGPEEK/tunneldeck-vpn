@@ -114,7 +114,7 @@ SPEC §18: protocol chooser offers WireGuard; schema form renders it; "Generate 
 
 SPEC §18: WireGuard server container in `test/e2e`, matrix case D-wireguard on both backends; README, docs/linux, docs/synology, filemap, CHANGELOG.
 
-## [ ] 28. IPsec driver backend — heavy — after: 27
+## [x] 28. IPsec driver backend — heavy — after: 27
 
 SPEC §19: strongSwan charon with kernel-libipsec in the image, VICI client in Go, `internal/vpn/ipsec` (schema with templates, validation, advisories, swanctl/strongswan.conf rendering into tmpfs, supervisor, state machine, counters), certificate/PKCS#12 upload handling, registry wiring, tests.
 

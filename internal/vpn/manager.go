@@ -33,11 +33,13 @@ type FirewallSource interface {
 // NetGuard installs the firewall and routes through the tunnel;
 // netguard.Guard implements it. RouteThroughTunnel also installs the
 // policy routing of the firewall's outbound rules and port forwards and
-// routes the host's traffic to remoteNetworks into the tunnel;
-// ClearTunnelRouting removes all of it.
+// routes the host's traffic to remoteNetworks into the tunnel; with
+// localNetworks (LocalNetworker) vpnIP is the zero Addr, and traffic from
+// those networks keeps its addresses in the tunnel. ClearTunnelRouting
+// removes all of it.
 type NetGuard interface {
 	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
-	RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr, remoteNetworks []netip.Prefix) error
+	RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr, remoteNetworks, localNetworks []netip.Prefix) error
 	ClearTunnelRouting(ctx context.Context) error
 }
 

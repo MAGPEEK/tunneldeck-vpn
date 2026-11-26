@@ -57,6 +57,34 @@ func TestFormSchemaValidate(t *testing.T) {
 	}
 }
 
+func TestFormSchemaValidatePresets(t *testing.T) {
+	schema := func(presets map[string]any) FormSchema {
+		return FormSchema{Sections: []Section{{Key: "s", Fields: []Field{
+			{Key: "template", Type: FieldSelect, Options: []Option{{Value: "a", Presets: presets}}},
+			{Key: "proposals", Type: FieldStringList},
+			{Key: "psk", Type: FieldSecret},
+		}}}}
+	}
+	tests := []struct {
+		name    string
+		presets map[string]any
+		wantErr bool
+	}{
+		{name: "none"},
+		{name: "setting", presets: map[string]any{"proposals": []string{"aes256gcm16-ecp256"}}},
+		{name: "secret", presets: map[string]any{"psk": "x"}, wantErr: true},
+		{name: "unknown field", presets: map[string]any{"missing": "x"}, wantErr: true},
+		{name: "own field", presets: map[string]any{"template": "b"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := schema(tt.presets).Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestFormSchemaValidateEncoding(t *testing.T) {
 	tests := []struct {
 		name    string

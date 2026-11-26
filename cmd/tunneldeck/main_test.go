@@ -223,13 +223,13 @@ func TestProfileImporterWireGuard(t *testing.T) {
 	}
 }
 
-func TestDriversServeOpenVPNAndWireGuard(t *testing.T) {
+func TestDriversServeOpenVPNWireGuardAndIPsec(t *testing.T) {
 	a := &app{host: host{runner: failingRunner{}}, guard: netguard.New(failingRunner{})}
 	registry, err := a.drivers()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []domain.Protocol{domain.ProtocolOpenVPN, domain.ProtocolWireGuard}
+	want := []domain.Protocol{domain.ProtocolIPsec, domain.ProtocolOpenVPN, domain.ProtocolWireGuard}
 	if got := registry.Protocols(); !slices.Equal(got, want) {
 		t.Fatalf("protocols = %v, want %v", got, want)
 	}

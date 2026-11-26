@@ -79,7 +79,7 @@ func TestRouteThroughTunnelInstallsPolicyRules(t *testing.T) {
 			f := newFakeRunner()
 			g := routerGuard(t, f)
 			f.on(ruleShow, ok(tt.listing))
-			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil, nil); err != nil {
 				t.Fatalf("RouteThroughTunnel: %v", err)
 			}
 			assertCalls(t, f.calls, tt.want)
@@ -91,7 +91,7 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 	f := newFakeRunner()
 	g := routerGuard(t, f)
 	f.on(ruleShow, ok(defaultRules))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	f.takeCalls()
@@ -293,7 +293,7 @@ func TestPolicyRulesUseOnlyLinux44Selectors(t *testing.T) {
 	)
 	allowed := map[string]bool{"rule": true, "add": true, "from": true, "to": true, "fwmark": true, "lookup": true, "priority": true}
 	for _, reply := range []replyRouting{replyByMark, replyBySource} {
-		rules, err := policyRulesFor(firewall, remoteNetworks, lan, reply)
+		rules, err := policyRulesFor(firewall, remoteNetworks, lan, reply, remoteNetworkPriority)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -370,7 +370,7 @@ func TestRouteThroughTunnelRoutesRemoteNetworks(t *testing.T) {
 	f := newFakeRunner()
 	g := newLegacyGuard(f)
 	f.on(ruleShow, ok(defaultRules))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks, nil); err != nil {
 		t.Fatalf("RouteThroughTunnel: %v", err)
 	}
 	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow,
@@ -380,7 +380,7 @@ func TestRouteThroughTunnelRoutesRemoteNetworks(t *testing.T) {
 	f.on(ruleShow, ok("7180:\tfrom all to 10.99.0.0/24 lookup 7194\n"+
 		"7180:\tfrom all to 10.98.0.0/24 lookup 7194\n"+
 		"7194:\tfrom 10.8.0.2 lookup 7194\n"))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks, nil); err != nil {
 		t.Fatalf("RouteThroughTunnel again: %v", err)
 	}
 	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, addrShow,
@@ -399,7 +399,7 @@ func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
 	f := newFakeRunner()
 	g := routerGuard(t, f)
 	f.on(ruleShow, ok(defaultRules))
-	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks[:1]); err != nil {
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, remoteNetworks[:1], nil); err != nil {
 		t.Fatal(err)
 	}
 	if calls := f.takeCalls(); !slices.Equal(calls[len(calls)-2:], []string{addOutbound, addRemote99}) {
@@ -441,7 +441,7 @@ func TestRouteThroughTunnelRefusesRemoteNetworks(t *testing.T) {
 			f := newFakeRunner()
 			g := newLegacyGuard(f)
 			f.on(ruleShow, ok(defaultRules))
-			err := g.RouteThroughTunnel(context.Background(), vpnIP, []netip.Prefix{netip.MustParsePrefix(tt.network)})
+			err := g.RouteThroughTunnel(context.Background(), vpnIP, []netip.Prefix{netip.MustParsePrefix(tt.network)}, nil)
 			var v *domain.ValidationError
 			if !errors.As(err, &v) || v.Fields["remoteNetworks"] == "" {
 				t.Fatalf("err = %v, want a validation error on remoteNetworks", err)

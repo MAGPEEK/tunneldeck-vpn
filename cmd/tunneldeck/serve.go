@@ -24,6 +24,7 @@ import (
 	"tunneldeck/internal/secret"
 	"tunneldeck/internal/store"
 	"tunneldeck/internal/vpn"
+	"tunneldeck/internal/vpn/ipsec"
 	"tunneldeck/internal/vpn/openvpn"
 	"tunneldeck/internal/vpn/wireguard"
 	"tunneldeck/internal/web"
@@ -216,13 +217,16 @@ func (a *app) startManager(ctx context.Context) error {
 	return nil
 }
 
-// drivers registers the VPN drivers; both create the tunnel device
+// drivers registers the VPN drivers; each creates the tunnel device
 // netguard guards.
 func (a *app) drivers() (*vpn.Registry, error) {
 	registry := vpn.NewRegistry()
 	factories := map[domain.Protocol]vpn.Factory{
 		domain.ProtocolOpenVPN: openvpn.Factory(openvpn.Options{DeviceName: netguard.DeviceName, LANSubnets: a.guard.LANSubnets}),
 		domain.ProtocolWireGuard: wireguard.Factory(wireguard.Options{
+			DeviceName: netguard.DeviceName, Runner: a.host.runner, LANSubnets: a.guard.LANSubnets,
+		}),
+		domain.ProtocolIPsec: ipsec.Factory(ipsec.Options{
 			DeviceName: netguard.DeviceName, Runner: a.host.runner, LANSubnets: a.guard.LANSubnets,
 		}),
 	}

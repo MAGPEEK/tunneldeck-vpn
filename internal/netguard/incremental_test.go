@@ -196,7 +196,7 @@ func TestEveryContentLineIsTagged(t *testing.T) {
 		changed(outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"), func(r *domain.FirewallRule) { r.ID = "out" }),
 	}}
 	for _, caps := range []capabilities{capsWithout(), capsWithout(extHashlimit, extTCPMSS)} {
-		rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, parseLANAddresses(lanListing), caps)
+		rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, parseLANAddresses(lanListing), caps, nil)
 		for _, chain := range rs.chainContent() {
 			assertTagged(t, chain.spec, chain.content)
 		}

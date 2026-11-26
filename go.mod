@@ -7,6 +7,7 @@ ignore ./web/node_modules
 require (
 	golang.org/x/crypto v0.58.0
 	golang.zx2c4.com/wireguard v0.0.0-20261024220952-b3bc704ef0ee
+	software.sslmate.com/src/go-pkcs12 v0.7.4
 )
 
 require (

@@ -118,7 +118,7 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	if err := domain.CheckInboundDestinations(firewall.Rules, hostNetwork(lan)); err != nil {
 		return err
 	}
-	if err := g.installRuleset(ctx, buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, lan, caps), caps); err != nil {
+	if err := g.installRuleset(ctx, buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, lan, caps, g.localNetworks), caps); err != nil {
 		return err
 	}
 	g.installed = &installation{firewall: cloneFirewall(firewall), uiPort: uiPort}
@@ -156,7 +156,7 @@ func (g *Guard) installRuleset(ctx context.Context, rs ruleset, caps capabilitie
 // syncInstalledPolicy brings the policy rules of a routed tunnel in line
 // with the newly installed firewall; the remote networks stay.
 func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error {
-	want, err := policyRulesFor(g.installed.firewall, g.remoteNetworks, lan, g.replyRouting())
+	want, err := policyRulesFor(g.installed.firewall, g.remoteNetworks, lan, g.replyRouting(), remoteNetworkPriorityFor(g.localNetworks))
 	if err != nil {
 		return err
 	}

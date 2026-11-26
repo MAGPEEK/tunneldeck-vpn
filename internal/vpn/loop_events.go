@@ -111,7 +111,7 @@ func (l *loop) connectedSince(e domain.StateEvent) time.Time {
 // failing command and its output, the log line too, and the routing is
 // retried with the backoff of SPEC §4.2 for as long as t stays connected.
 func (l *loop) applyRouting(t *tunnel) {
-	err := l.routeThroughTunnel(t.vpnIP, t.remoteNetworks)
+	err := l.routeThroughTunnel(t)
 	if err == nil {
 		if l.status.RoutingWarning != nil {
 			l.status.RoutingWarning = nil
@@ -160,14 +160,20 @@ func (l *loop) installFirewall() error {
 	return l.cfg.Guard.InstallFirewall(ctx, l.cfg.Firewall.Firewall(), l.cfg.UIPort)
 }
 
-func (l *loop) routeThroughTunnel(vpnIP string, remoteNetworks []netip.Prefix) error {
-	ip, err := netip.ParseAddr(vpnIP)
-	if err != nil {
-		return fmt.Errorf("the driver reported no valid VPN IP (%q)", vpnIP)
+// routeThroughTunnel routes through t. A tunnel that carries local networks
+// has no VPN IP of its own; every other tunnel must report one.
+func (l *loop) routeThroughTunnel(t *tunnel) error {
+	var ip netip.Addr
+	if t.vpnIP != "" || len(t.localNetworks) == 0 {
+		parsed, err := netip.ParseAddr(t.vpnIP)
+		if err != nil {
+			return fmt.Errorf("the driver reported no valid VPN IP (%q)", t.vpnIP)
+		}
+		ip = parsed
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
-	return l.cfg.Guard.RouteThroughTunnel(ctx, ip, remoteNetworks)
+	return l.cfg.Guard.RouteThroughTunnel(ctx, ip, t.remoteNetworks, t.localNetworks)
 }
 
 func (l *loop) clearRouting() {

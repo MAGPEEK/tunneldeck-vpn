@@ -106,7 +106,7 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	// A remote network behind the VPN (TEST-NET-2, outside every LAN).
 	remoteNetworks := []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}
 	for _, ip := range []string{"10.99.0.2", "10.99.0.2", "10.99.0.3"} {
-		if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr(ip), remoteNetworks); err != nil {
+		if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr(ip), remoteNetworks, nil); err != nil {
 			t.Fatalf("RouteThroughTunnel(%s): %v", ip, err)
 		}
 	}
@@ -251,7 +251,7 @@ func TestIntegrationRepliesBySourceWithoutCONNMARK(t *testing.T) {
 	if _, err := g.listRules(ctx, mangleTable, mangleChain); !isAbsent(err) {
 		t.Errorf("%s exists without CONNMARK: %v", mangleChain, err)
 	}
-	if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr("10.99.0.2"), nil); err != nil {
+	if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr("10.99.0.2"), nil, nil); err != nil {
 		t.Fatalf("RouteThroughTunnel: %v", err)
 	}
 	rules := mustRun(t, runner, "ip", "-4", "rule", "show")

@@ -115,12 +115,15 @@ func (g *fakeGuard) InstallFirewall(_ context.Context, firewall domain.Firewall,
 	return g.installErr
 }
 
-func (g *fakeGuard) RouteThroughTunnel(_ context.Context, vpnIP netip.Addr, remoteNetworks []netip.Prefix) error {
+func (g *fakeGuard) RouteThroughTunnel(_ context.Context, vpnIP netip.Addr, remoteNetworks, localNetworks []netip.Prefix) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	call := "route " + vpnIP.String()
 	if len(remoteNetworks) > 0 {
 		call += fmt.Sprintf(" to %v", remoteNetworks)
+	}
+	if len(localNetworks) > 0 {
+		call += fmt.Sprintf(" from %v", localNetworks)
 	}
 	g.calls = append(g.calls, call)
 	return g.routeErr
@@ -332,6 +335,17 @@ func (d networkedDriver) RemoteNetworks(p domain.Profile) []netip.Prefix {
 	d.asked <- p.ID
 	return d.networks
 }
+
+// netToNetDriver is a scripted driver whose tunnels carry LAN subnets with
+// their own addresses (LocalNetworker) to remote networks.
+type netToNetDriver struct {
+	*scriptedDriver
+	local, remote []netip.Prefix
+}
+
+func (d netToNetDriver) RemoteNetworks(domain.Profile) []netip.Prefix { return d.remote }
+
+func (d netToNetDriver) LocalNetworks(domain.Profile) []netip.Prefix { return d.local }
 
 var defaultStart = time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
 

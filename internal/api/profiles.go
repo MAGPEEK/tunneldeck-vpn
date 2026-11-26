@@ -82,12 +82,21 @@ func (s *Server) driver(protocol domain.Protocol) (vpn.Driver, error) {
 	return factory(), nil
 }
 
+// advise returns the advisories of the stored profile p: those of its
+// settings and, for drivers that judge secrets, those of its stored
+// secrets.
 func (s *Server) advise(p domain.PublicProfile) []vpn.Advisory {
 	d, err := s.driver(p.Protocol)
 	if err != nil {
 		return []vpn.Advisory{}
 	}
-	return nonNilSlice(d.Advise(p))
+	advisories := d.Advise(p)
+	if adviser, ok := d.(secretAdviser); ok {
+		if stored, err := s.deps.Profiles.ProfileWithSecrets(p.ID); err == nil {
+			advisories = append(advisories, adviser.AdviseSecrets(stored)...)
+		}
+	}
+	return nonNilSlice(advisories)
 }
 
 func (s *Server) view(p domain.PublicProfile) profileView {
