@@ -61,17 +61,15 @@ function rowIds(): (string | undefined)[] {
 }
 
 describe('StatusList', () => {
-  it('lists tunnel, address, LAN, firewall and traffic with status dots and text', () => {
+  it('lists traffic first, then address, LAN and firewall, with status dots and text, but no tunnel row', () => {
     renderList(connected);
 
     expect(screen.getByRole('heading', { name: 'Connection details' })).toBeInTheDocument();
-    expect(rowIds()).toEqual(['tunnel', 'address', 'lan', 'firewall', 'traffic']);
-    expect(row('tunnel')).toHaveAttribute('data-tone', 'success');
-    expect(within(row('tunnel')).getByText('VPN tunnel')).toHaveTextContent(
-      'VPN tunnel (status OK)',
+    expect(rowIds()).toEqual(['traffic', 'address', 'lan', 'firewall']);
+    expect(row('address')).toHaveAttribute('data-tone', 'success');
+    expect(within(row('address')).getByText('VPN address (IPv4)')).toHaveTextContent(
+      'VPN address (IPv4) (status OK)',
     );
-    expect(row('tunnel')).toHaveTextContent('↓ 1.0 Mbit/s');
-    expect(row('tunnel')).toHaveTextContent('↑ 0 bit/s');
     expect(within(row('address')).getByText(/^Connected since /)).toBeInTheDocument();
     expect(within(row('address')).getByText('10.8.0.6')).toBeInTheDocument();
     expect(within(row('address')).getByText('203.0.113.7:1194')).toBeInTheDocument();
@@ -87,8 +85,7 @@ describe('StatusList', () => {
 
   it('shows dashes and the configured server while disconnected', () => {
     renderList(makeStatus());
-    expect(row('tunnel')).toHaveAttribute('data-tone', 'neutral');
-    expect(row('tunnel')).toHaveTextContent('Disconnected');
+    expect(row('address')).toHaveAttribute('data-tone', 'neutral');
     expect(row('address')).toHaveTextContent('Not connected');
     expect(within(row('address')).getByText('vpn.example.com:1194')).toBeInTheDocument();
     expect(row('traffic')).toHaveTextContent('Received –');
@@ -187,7 +184,7 @@ describe('StatusList', () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const checklist = screen.getByRole('group', { name: 'Show on the dashboard' });
-    expect(within(checklist).getAllByRole('checkbox')).toHaveLength(8);
+    expect(within(checklist).getAllByRole('checkbox')).toHaveLength(7);
     expect(
       within(checklist)
         .getAllByRole('checkbox')
@@ -200,7 +197,7 @@ describe('StatusList', () => {
 
     unmount();
     renderList(connected);
-    expect(rowIds()).toEqual(['tunnel', 'address', 'lan', 'traffic']);
+    expect(rowIds()).toEqual(['traffic', 'address', 'lan']);
   });
 
   it('hides a row directly with its hide button', () => {
@@ -216,16 +213,16 @@ describe('StatusList', () => {
   it('restores all rows with Reset', () => {
     localStorage.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(['tunnel', 'lan', 'unknown']));
     renderList(connected);
-    expect(rowIds()).toEqual(['address', 'firewall', 'traffic']);
+    expect(rowIds()).toEqual(['traffic', 'address', 'firewall']);
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
-    expect(rowIds()).toEqual(['tunnel', 'address', 'lan', 'firewall', 'traffic']);
+    expect(rowIds()).toEqual(['traffic', 'address', 'lan', 'firewall']);
     expect(localStorage.getItem(DASHBOARD_STORAGE_KEY)).toBeNull();
   });
 
   it('ignores a broken stored choice', () => {
     localStorage.setItem(DASHBOARD_STORAGE_KEY, '{nope');
     renderList(connected);
-    expect(rowIds()).toHaveLength(5);
+    expect(rowIds()).toHaveLength(4);
   });
 });

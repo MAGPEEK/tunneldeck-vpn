@@ -118,9 +118,6 @@
         "danger": "Status Problem",
         "neutral": "inaktiv"
       },
-      "tunnel": "VPN-Tunnel",
-      "rateIn": "↓ {{rate}}",
-      "rateOut": "↑ {{rate}}",
       "address": "VPN-Adresse (IPv4)",
       "connectedSince": "Verbunden seit {{time}}",
       "notConnected": "Nicht verbunden",
@@ -149,7 +146,6 @@
       "hide": "{{item}} ausblenden",
       "item": {
         "line": "Verbindungslinie",
-        "tunnel": "VPN-Tunnel",
         "address": "VPN-Adresse",
         "encryption": "Verschlüsselung",
         "lan": "Lokales LAN",

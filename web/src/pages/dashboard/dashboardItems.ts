@@ -3,13 +3,12 @@ import { useCallback, useState } from 'react';
 /** Parts of the dashboard the user can hide, in display order of the checklist. */
 export const DASHBOARD_ITEMS = [
   'line',
-  'tunnel',
+  'traffic',
   'address',
   'encryption',
   'lan',
   'firewall',
   'remote',
-  'traffic',
 ] as const;
 
 export type DashboardItem = (typeof DASHBOARD_ITEMS)[number];

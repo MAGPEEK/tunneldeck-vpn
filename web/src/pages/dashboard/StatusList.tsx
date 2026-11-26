@@ -7,13 +7,12 @@ import type { FirewallState } from '../../api/firewall';
 import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import type { StateTone } from '../../components/StatePill';
-import { formatBitRate, formatBytes, formatDateTime, parseTime } from '../../format/format';
+import { formatBytes, formatDateTime, parseTime } from '../../format/format';
 import { RemoteAccessAddress } from '../../remoteAccess/RemoteAccessAddress';
 import { remoteAccessTarget } from '../../remoteAccess/remoteAccessUrl';
 import { CustomizePanel, CustomizeToggle } from './CustomizePanel';
 import type { DashboardItem, DashboardItems } from './dashboardItems';
 import {
-  STATE_TONES,
   activeForwards,
   activeRules,
   firewallLine,
@@ -57,13 +56,12 @@ export function StatusList(props: StatusListProps) {
   const { items } = props;
   const context: RowContext = { ...props, t, locale: i18n.resolvedLanguage ?? 'en' };
   const rows = [
-    tunnelRow(context),
+    trafficRow(context),
     addressRow(context),
     encryptionRow(context),
     lanRow(context),
     firewallRow(context),
     remoteAccessRow(context),
-    trafficRow(context),
   ].filter((row): row is Row => row !== undefined && items.isVisible(row.id));
 
   return (
@@ -98,21 +96,6 @@ export function StatusList(props: StatusListProps) {
       </dl>
     </Card>
   );
-}
-
-function tunnelRow({ status, t, locale }: RowContext): Row {
-  const live = tunnelUp(status.state);
-  const rate = (value: number) => (live ? formatBitRate(value, locale) : '–');
-  return {
-    id: 'tunnel',
-    label: t('dashboard.details.tunnel'),
-    tone: STATE_TONES[status.state],
-    values: [
-      t(`connection.state.${status.state}`),
-      t('dashboard.details.rateIn', { rate: rate(status.rateIn) }),
-      t('dashboard.details.rateOut', { rate: rate(status.rateOut) }),
-    ],
-  };
 }
 
 function addressRow({ status, server, t, locale }: RowContext): Row {

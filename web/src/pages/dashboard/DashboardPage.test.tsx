@@ -329,7 +329,6 @@ describe('DashboardPage', () => {
     });
     const details = screen.getByRole('region', { name: 'Connection details' });
     expect(await within(details).findByText('Received 2.5 MB')).toBeInTheDocument();
-    expect(within(details).getByText('↓ 1.0 Mbit/s')).toBeInTheDocument();
     expect(screen.getByText('→ Received: 1.0 Mbit/s')).toBeInTheDocument();
   });
 
