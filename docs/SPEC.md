@@ -356,6 +356,21 @@ Implementation decisions (task 25):
 - **Import:** a file without `PersistentKeepalive` gets 25 s with an info note.
 - **Log:** wireguard-go's keepalive and worker-start lines are dropped (every 25 s / every start), its handshake and UAPI lines are `debug`, other lines `info`, errors `error`; hex keys in a line are replaced by `(hidden)`.
 
+### 18.1 Standards compliance (review, 2026-11-26)
+
+WireGuard has no RFC; the protocol is defined by the WireGuard whitepaper (Donenfeld, NDSS 2017) on the Noise framework (Noise_IKpsk2). Its primitives are fixed and standardised: X25519 (RFC 7748), ChaCha20-Poly1305 AEAD (RFC 8439), BLAKE2s (RFC 7693), HKDF (RFC 5869). There is no cipher negotiation, so no weak configuration exists and no algorithm advisories are needed. TunnelDeck uses the reference implementation wireguard-go and implements no protocol logic itself.
+
+| Area | Basis | Requirement for TunnelDeck |
+|---|---|---|
+| Keys | RFC 7748 | Private keys are 32 random bytes from `crypto/rand`, clamped per RFC 7748 §5; public key derived with X25519; base64 (RFC 4648 §4) with exactly 32 decoded bytes, otherwise a field error. |
+| Pre-shared key | Whitepaper §5.2 (Noise psk2) | Optional, 32 bytes base64; recommended as post-quantum hardening, no advisory when missing. |
+| Configuration format | wg(8) / wg-quick(8), de facto | Import accepts the wg-quick INI format (case-insensitive keys, comma lists, `#` comments); scripts are rejected (§18). |
+| Endpoint | RFC 3986 host, RFC 5952 / 4291 for IPv6 literals | `host:port`, IPv6 literals in brackets; IPv6 endpoints are rejected while TunnelDeck is IPv4-only. |
+| Addresses / allowed IPs | RFC 4632 (CIDR) | Canonical CIDR; host bits in allowed IPs are rejected or normalised with a note. |
+| MTU | RFC 791 / RFC 8200 minimum | 1280–1420 (1420 = 1500 minus the 80-byte IPv6 + UDP + WireGuard overhead). |
+| Keepalive and handshake | Whitepaper §6 (REKEY_AFTER_TIME 120 s, REJECT_AFTER_TIME 180 s) | 180 s without a handshake = tunnel lost (§18); keepalive 25 s default behind NAT. |
+| Verify | — | Key clamping, base64 length check and CIDR normalisation are covered by unit tests in `internal/vpn/wireguard`. |
+
 ## 19. IPsec/IKEv2 driver (owner-approved 2026-11-26)
 
 Decisions from the owner interview. Counterparts: company and router gateways (LANCOM, FRITZ!Box, OPNsense/pfSense, Sophos, strongSwan). One active profile as before: an IPsec profile replaces the active one on connect.
