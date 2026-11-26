@@ -94,7 +94,7 @@ SPEC §16.4 "Device picker" and "Hit counters": `GET /api/firewall/devices` (LAN
 
 SPEC §16.4 exactly: unified rule list with flow strips, filter chips, hit counters; intent cards; step editor with device picker, service presets, live summary, collapsible advanced and "What this rule creates"; IPsec card uses the template endpoint. i18n de/en, tests. Orchestrator reviews visually.
 
-## [ ] 23. Reliable .ovpn loading — medium — after: 22
+## [x] 23. Reliable .ovpn loading — medium — after: 22
 
 Owner wants one thing: loading an OpenVPN profile must simply work. Make "Load .ovpn file" the prominent first action on the Profiles page and the empty dashboard (file picker, plus drag and drop onto the page). Verify the import end to end with realistic files: Access Server / CloudConnexa style (inline <ca>/<cert>/<key>/<tls-crypt>, auth-user-pass, setenv, pull-filter lines), provider files with separate cert file references (clear message which block is missing), CRLF/BOM/UTF-8 names. After loading, the form opens prefilled and asks only for what is missing. No URL import, no "save and connect" extras. Tests with these fixtures (no real keys).
 

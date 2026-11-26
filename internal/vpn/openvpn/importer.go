@@ -3,7 +3,9 @@ package openvpn
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,11 +27,13 @@ var blockOpener = regexp.MustCompile(`^<([A-Za-z0-9_-]+)>$`)
 
 // ImportResult is a draft profile parsed from an .ovpn file. Secrets is
 // excluded from JSON so imported key material and passwords cannot leak
-// through an API response by accident.
+// through an API response by accident. Missing lists, in form order, the
+// setting and secret keys the user still has to fill in.
 type ImportResult struct {
 	Settings domain.Settings `json:"settings"`
 	Secrets  vpn.Secrets     `json:"-"`
 	Warnings []Warning       `json:"warnings"`
+	Missing  []string        `json:"missing"`
 }
 
 // ImportOVPN parses the text of an .ovpn file into settings, secrets and
@@ -37,11 +41,15 @@ type ImportResult struct {
 // become fields, inline blocks become certificate and secret fields, inline
 // credentials become username and password, everything else goes through
 // the extra-option rules: kept, dropped with a warning, or reported with
-// severity "rejected". Only unparseable input fails, such as an inline
+// severity "rejected". Only unusable input fails: a file that is too
+// large, empty, binary or without any OpenVPN directive, or an inline
 // block without its closing tag; the error is a *domain.ValidationError.
 func ImportOVPN(text string) (ImportResult, error) {
 	if len(text) > maxImportBytes {
 		return ImportResult{}, domain.NewFieldError(importField, domain.Issue("file_too_large", "max", "1 MiB"), "must be at most 1 MiB")
+	}
+	if strings.ContainsRune(text, 0) {
+		return ImportResult{}, notAProfileError()
 	}
 	text = strings.TrimPrefix(text, utf8BOM)
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
@@ -62,7 +70,22 @@ func ImportOVPN(text string) (ImportResult, error) {
 		im.block(match[1], lines[i+1:end], number)
 		i = end
 	}
+	switch {
+	case !im.content:
+		return ImportResult{}, emptyFileError()
+	case !im.recognized:
+		return ImportResult{}, notAProfileError()
+	}
 	return im.result(), nil
+}
+
+func emptyFileError() error {
+	return domain.NewFieldError(importField, domain.Issue("openvpn_file_empty"), "is empty or contains only comments")
+}
+
+func notAProfileError() error {
+	return domain.NewFieldError(importField, domain.Issue("openvpn_not_a_profile"),
+		"is not an OpenVPN profile: it contains no OpenVPN directive")
 }
 
 // blockEnd returns the index of the closing tag of the block opened at
@@ -96,10 +119,16 @@ type importer struct {
 	tlsAuth       bool
 	verifySeen    bool
 	staticKeySeen bool
+	// content: the file has a line or block that is not blank or a comment.
+	content bool
+	// recognized: the file has at least one OpenVPN directive or key block.
+	recognized bool
+	// referenced holds the fields whose content the file names as a file.
+	referenced map[string]bool
 }
 
 func newImporter() *importer {
-	return &importer{settings: domain.Settings{}, secrets: vpn.Secrets{}}
+	return &importer{settings: domain.Settings{}, secrets: vpn.Secrets{}, referenced: map[string]bool{}}
 }
 
 type directiveHandler func(im *importer, d directive, line int)
@@ -118,6 +147,7 @@ var directiveHandlers = map[string]directiveHandler{
 	"pkcs12":           (*importer).fileOrInline,
 	"tls-auth":         (*importer).fileOrInline,
 	"tls-crypt":        (*importer).fileOrInline,
+	"tls-crypt-v2":     (*importer).fileOrInline,
 	"key-direction":    (*importer).keyDirectionDirective,
 	"cipher":           (*importer).cipherDirective,
 	"data-ciphers":     (*importer).dataCiphersDirective,
@@ -136,6 +166,8 @@ var directiveHandlers = map[string]directiveHandler{
 func (im *importer) line(raw string, number int) {
 	d, status, v := readLine(raw)
 	handler, known := directiveHandlers[d.name]
+	im.content = im.content || status != lineBlank
+	im.recognized = im.recognized || (status == lineKept && (known || isOpenVPNDirective(d)))
 	switch {
 	case status == lineBlank:
 	case status == lineRemoved:
@@ -161,6 +193,8 @@ func (im *importer) keepExtra(d directive, number int) bool {
 
 func (im *importer) block(tag string, content []string, number int) {
 	body := strings.TrimSpace(strings.Join(content, "\n")) + "\n"
+	im.content = true
+	im.recognized = im.recognized || fileFields[tag] != "" || tag == "auth-user-pass" || tag == directiveStaticKey
 	switch tag {
 	case "ca":
 		im.settings.SetString(KeyCACert, body)
@@ -180,6 +214,8 @@ func (im *importer) block(tag string, content []string, number int) {
 		im.tlsAuth = true
 	case "tls-crypt":
 		im.secrets[SecretTLSCryptKey] = body
+	case "tls-crypt-v2":
+		im.secrets[SecretTLSCryptV2Key] = body
 	case "auth-user-pass":
 		im.credentials(content)
 	default:
@@ -275,18 +311,42 @@ func (im *importer) device(d directive, number int) {
 	})
 }
 
+// fileFields maps the directives whose content may be inline to the
+// setting or secret that holds it.
+var fileFields = map[string]string{
+	"ca":           KeyCACert,
+	"cert":         KeyClientCert,
+	"key":          SecretClientKey,
+	"pkcs12":       SecretPKCS12,
+	"tls-auth":     SecretTLSAuthKey,
+	"tls-crypt":    SecretTLSCryptKey,
+	"tls-crypt-v2": SecretTLSCryptV2Key,
+}
+
+// certificateFields hold the client identity; naming one selects a
+// certificate sign-in.
+var certificateFields = set(KeyClientCert, SecretClientKey, SecretPKCS12)
+
 // fileOrInline accepts "[inline]", whose content follows as a block, and
-// reports file references, which cannot be imported.
+// reports file references, which cannot be imported: the warning names
+// the file, and the field it belongs to is marked as missing.
 func (im *importer) fileOrInline(d directive, number int) {
 	if d.name == "tls-auth" && len(d.args) > 1 {
 		im.keyDirection = d.args[1]
 	}
-	if d.arg(0) == "[inline]" {
+	file, ok := im.requireArg(d, number)
+	if !ok || file == "[inline]" {
 		return
 	}
+	field := fileFields[d.name]
+	im.referenced[field] = true
+	if certificateFields[field] {
+		im.certificate = true
+	}
 	im.warn(Warning{
-		Code: CodeFileReference, Severity: SeverityRejected, Directive: d.name, Line: number,
-		Message: "references a file, which cannot be imported; paste its content into the profile",
+		Code: CodeFileReference, Severity: SeverityRejected, Directive: d.name, Line: number, File: file,
+		Message: fmt.Sprintf("references the file %q, which is not part of the profile; "+
+			"embed it as an inline <%s> block or paste its content into the profile", file, d.name),
 	})
 }
 
@@ -355,7 +415,7 @@ func (im *importer) authUserPassDirective(d directive, number int) {
 		return
 	}
 	im.warn(Warning{
-		Code: CodeFileReference, Severity: SeverityWarning, Directive: d.name, Line: number,
+		Code: CodeFileReference, Severity: SeverityWarning, Directive: d.name, Line: number, File: d.args[0],
 		Message: "the credentials file was not imported; enter username and password in the profile",
 	})
 }
@@ -423,13 +483,14 @@ func (im *importer) result() ImportResult {
 	s.SetBool(KeyVerifyServerCertUsage, true)
 	s.SetStringList(KeyExtraOptions, im.extras)
 	im.applyCipher()
+	missing := im.missing(s)
 	if !im.verifySeen {
 		im.warn(Warning{
 			Code: CodeServerCertUsageAdded, Severity: SeverityInfo,
 			Message: "remote-cert-tls server is added; switch off verifyServerCertUsage if the server certificate lacks the TLS server usage",
 		})
 	}
-	return ImportResult{Settings: s, Secrets: im.secrets, Warnings: im.warnings}
+	return ImportResult{Settings: s, Secrets: im.secrets, Warnings: im.warnings, Missing: missing}
 }
 
 func (im *importer) authMode() string {
@@ -474,4 +535,36 @@ func (im *importer) applyCipher() {
 			Message: "rendered as data-ciphers, because OpenVPN 2.7 ignores cipher for negotiation",
 		})
 	}
+}
+
+// missingOrder lists the fields an import can leave empty, in form order.
+var missingOrder = []string{
+	KeyUsername, SecretPassword, KeyCACert, KeyClientCert, SecretClientKey, SecretPKCS12,
+	SecretKeyPassphrase, SecretTLSAuthKey, SecretTLSCryptKey, SecretTLSCryptV2Key,
+}
+
+// missing returns the fields the user still has to fill in: credentials
+// for a password sign-in, the CA, the client identity of a certificate
+// sign-in, the passphrase of an encrypted key, and every field whose
+// content the file only names as a file.
+func (im *importer) missing(s domain.Settings) []string {
+	need := maps.Clone(im.referenced)
+	need[KeyCACert] = true
+	mode, _ := s.String(KeyAuthMode)
+	if slices.Contains(passwordModes, mode) {
+		need[KeyUsername], need[SecretPassword] = true, true
+	}
+	if slices.Contains(certificateModes, mode) && im.secrets[SecretPKCS12] == "" && !im.referenced[SecretPKCS12] {
+		need[KeyClientCert], need[SecretClientKey] = true, true
+	}
+	if isEncryptedPrivateKey(im.secrets[SecretClientKey]) {
+		need[SecretKeyPassphrase] = true
+	}
+	missing := []string{}
+	for _, key := range missingOrder {
+		if need[key] && !s.Has(key) && im.secrets[key] == "" {
+			missing = append(missing, key)
+		}
+	}
+	return missing
 }

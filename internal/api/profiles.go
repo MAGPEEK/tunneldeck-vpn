@@ -55,6 +55,7 @@ type importResponse struct {
 	Settings domain.Settings   `json:"settings"`
 	Secrets  map[string]string `json:"secrets"`
 	Warnings []ImportWarning   `json:"warnings"`
+	Missing  []string          `json:"missing"`
 }
 
 // driver returns a fresh, stopped driver for protocol. It is used only to
@@ -256,6 +257,7 @@ func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
 		Settings: nonNilMap(draft.Settings),
 		Secrets:  nonNilMap(draft.Secrets),
 		Warnings: nonNilSlice(draft.Warnings),
+		Missing:  nonNilSlice(draft.Missing),
 	})
 }
 

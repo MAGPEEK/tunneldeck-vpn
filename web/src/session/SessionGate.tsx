@@ -1,18 +1,33 @@
+import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes } from 'react-router';
 import { Button } from '../components/Button';
 import { AppShell } from '../layout/AppShell';
 import { AuthLayout } from '../layout/AuthLayout';
+import { Page } from '../layout/Page';
 import styles from '../layout/AuthLayout.module.css';
 import { LiveEvents } from '../live/LiveEvents';
 import { DashboardPage } from '../pages/dashboard/DashboardPage';
-import { FirewallPage } from '../pages/firewall/FirewallPage';
 import { LoginPage } from '../pages/login/LoginPage';
 import { ProfileFormPage } from '../pages/profiles/form/ProfileFormPage';
 import { ProfilesPage } from '../pages/profiles/ProfilesPage';
 import { SetupPage } from '../pages/setup/SetupPage';
 import { SystemPage } from '../pages/system/SystemPage';
 import { useSession } from './useSession';
+
+// The firewall editor is the largest page; it loads on first visit.
+const FirewallPage = lazy(() =>
+  import('../pages/firewall/FirewallPage').then((module) => ({ default: module.FirewallPage })),
+);
+
+function FirewallLoading() {
+  const { t } = useTranslation();
+  return (
+    <Page title={t('pages.firewall.title')}>
+      <p aria-busy="true">{t('session.loading')}</p>
+    </Page>
+  );
+}
 
 function AppRoutes() {
   return (
@@ -23,7 +38,14 @@ function AppRoutes() {
           <Route path="profiles" element={<ProfilesPage />} />
           <Route path="profiles/new" element={<ProfileFormPage />} />
           <Route path="profiles/:id" element={<ProfileFormPage />} />
-          <Route path="firewall" element={<FirewallPage />} />
+          <Route
+            path="firewall"
+            element={
+              <Suspense fallback={<FirewallLoading />}>
+                <FirewallPage />
+              </Suspense>
+            }
+          />
           <Route path="host-access" element={<Navigate to="/firewall" replace />} />
           <Route path="system" element={<SystemPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

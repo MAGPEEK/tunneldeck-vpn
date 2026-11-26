@@ -88,6 +88,8 @@ export interface ImportWarning {
   severity: ImportSeverity;
   directive?: string;
   line?: number;
+  /** The file a directive refers to, for file_reference. */
+  file?: string;
   message: string;
 }
 
@@ -96,6 +98,8 @@ export interface ImportDraft {
   settings: Settings;
   secrets: Record<string, string>;
   warnings: ImportWarning[];
+  /** Setting and secret keys the file left empty, in form order. */
+  missing: string[];
 }
 
 export function getDrivers(): Promise<Driver[]> {

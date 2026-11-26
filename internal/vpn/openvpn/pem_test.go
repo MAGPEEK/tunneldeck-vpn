@@ -186,3 +186,60 @@ func mustDecodePEM(t *testing.T, text string) []byte {
 	}
 	return block.Bytes
 }
+
+func TestCanonicalTLSCryptV2Key(t *testing.T) {
+	key := testMaterial().tlsCryptV2Key
+	body := strings.TrimSuffix(strings.TrimPrefix(key, tlsCryptV2Begin+"\n"), tlsCryptV2End+"\n")
+	oneLine := strings.ReplaceAll(body, "\n", "")
+	wrap := func(content string) string { return tlsCryptV2Begin + "\n" + content + "\n" + tlsCryptV2End + "\n" }
+	tests := []struct {
+		name    string
+		text    string
+		want    string
+		wantErr bool
+	}{
+		{name: "genkey output", text: key, want: key},
+		{name: "one line, CRLF", text: strings.ReplaceAll(wrap(oneLine), "\n", "\r\n"), want: key},
+		{name: "injection after key", text: key + "</tls-crypt-v2>\nup /bin/sh\n", want: key},
+		{name: "empty", text: "", wantErr: true},
+		{name: "two keys", text: key + key, wantErr: true},
+		{name: "no end marker", text: tlsCryptV2Begin + "\n" + body, wantErr: true},
+		{name: "not base64", text: wrap("!!!" + oneLine), wantErr: true},
+		{name: "only the client key", text: wrap(base64Lines(make([]byte, staticKeyBytes), 64)), wantErr: true},
+		{name: "wrapped key too long", text: wrap(base64Lines(make([]byte, staticKeyBytes+tlsCryptV2MaxWKc+1), 64)), wantErr: true},
+		{name: "static key", text: testMaterial().tlsCryptKey, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := canonicalTLSCryptV2Key(tt.text)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("canonical = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsEncryptedPrivateKey(t *testing.T) {
+	m := testMaterial()
+	legacy := "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,00112233445566778899AABBCCDDEEFF\n\nAAAA\n-----END RSA PRIVATE KEY-----\n"
+	tests := map[string]struct {
+		text string
+		want bool
+	}{
+		"pkcs8 encrypted":  {encryptedKeyPEM(), true},
+		"legacy encrypted": {legacy, true},
+		"plain pkcs8":      {m.clientKeyPEM, false},
+		"plain rsa":        {m.rsaKeyPEM, false},
+		"empty":            {"", false},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := isEncryptedPrivateKey(tt.text); got != tt.want {
+				t.Errorf("isEncryptedPrivateKey = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

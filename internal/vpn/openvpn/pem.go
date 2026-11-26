@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +30,17 @@ const (
 	staticKeyHexLine = 32
 )
 
+// A tls-crypt-v2 client key is the 2048-bit client key followed by the
+// server-wrapped key (WKc) of at most 1024 bytes, written as base64 in
+// lines of 64 characters between these markers ("openvpn --genkey
+// tls-crypt-v2-client").
+const (
+	tlsCryptV2Begin      = "-----BEGIN OpenVPN tls-crypt-v2 client key-----"
+	tlsCryptV2End        = "-----END OpenVPN tls-crypt-v2 client key-----"
+	tlsCryptV2MaxWKc     = 1024
+	tlsCryptV2Base64Line = 64
+)
+
 // A PKCS#12 bundle (RFC 7292) is stored and rendered as base64. Its size is
 // bounded; real bundles of a certificate chain and a key are a few KiB.
 const (
@@ -48,6 +60,7 @@ var (
 	errNotPrivateKey  = errors.New("must contain exactly one PEM private key (RFC 7468)")
 	errNotStaticKey   = errors.New("must be an OpenVPN static key (2048 bit, V1)")
 	errNotPKCS12      = errors.New("must be a base64-encoded PKCS#12 file (.p12, .pfx) of at most 64 KiB")
+	errNotTLSCryptV2  = errors.New("must be an OpenVPN tls-crypt-v2 client key")
 )
 
 // canonicalCertificates checks that text holds only PEM certificates that
@@ -177,12 +190,37 @@ func canonicalPKCS12(text string) (string, error) {
 	if err != nil || len(der) > maxPKCS12Bytes || !looksLikePKCS12(der) {
 		return "", errNotPKCS12
 	}
-	encoded := base64.StdEncoding.EncodeToString(der)
-	var out strings.Builder
-	for start := 0; start < len(encoded); start += pkcs12Base64Line {
-		out.WriteString(encoded[start:min(start+pkcs12Base64Line, len(encoded))] + "\n")
+	return base64Lines(der, pkcs12Base64Line), nil
+}
+
+// canonicalTLSCryptV2Key checks that text holds exactly one tls-crypt-v2
+// client key and returns it re-encoded in lines of 64 characters between
+// the markers. Text around the key is dropped.
+func canonicalTLSCryptV2Key(text string) (string, error) {
+	if strings.Count(text, tlsCryptV2Begin) != 1 {
+		return "", errNotTLSCryptV2
 	}
-	return out.String(), nil
+	_, afterBegin, _ := strings.Cut(text, tlsCryptV2Begin)
+	body, _, found := strings.Cut(afterBegin, tlsCryptV2End)
+	if !found {
+		return "", errNotTLSCryptV2
+	}
+	key, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(body), ""))
+	if err != nil || len(key) <= staticKeyBytes || len(key) > staticKeyBytes+tlsCryptV2MaxWKc {
+		return "", errNotTLSCryptV2
+	}
+	return tlsCryptV2Begin + "\n" + base64Lines(key, tlsCryptV2Base64Line) + tlsCryptV2End + "\n", nil
+}
+
+// base64Lines returns data as base64 in lines of width characters, each
+// ending in a newline.
+func base64Lines(data []byte, width int) string {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	var out strings.Builder
+	for start := 0; start < len(encoded); start += width {
+		out.WriteString(encoded[start:min(start+width, len(encoded))] + "\n")
+	}
+	return out.String()
 }
 
 // looksLikePKCS12 checks the start of a PFX structure (RFC 7292 §4): a
@@ -208,4 +246,17 @@ func looksLikePKCS12(der []byte) bool {
 		header += count
 	}
 	return header+length == len(der) && bytes.HasPrefix(der[header:], pkcs12Version)
+}
+
+// isEncryptedPrivateKey reports whether text holds a PEM private key that
+// needs a passphrase: PKCS#8 "ENCRYPTED PRIVATE KEY" or a legacy key with
+// "Proc-Type: 4,ENCRYPTED".
+func isEncryptedPrivateKey(text string) bool {
+	blocks, err := decodePEM(text)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(blocks, func(block *pem.Block) bool {
+		return block.Type == pemEncryptedPrivateKey || strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED")
+	})
 }

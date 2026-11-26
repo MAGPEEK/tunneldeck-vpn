@@ -20,6 +20,7 @@ import { Card } from '../../../components/Card';
 import { Field } from '../../../components/Field';
 import { Notice } from '../../../components/Notice';
 import { genericErrorMessage } from '../../auth/formError';
+import { useDriverText } from '../../../i18n/dynamic';
 import type { ProfileFormState } from '../profileFormState';
 import { SchemaForm } from '../schema/SchemaForm';
 import {
@@ -31,6 +32,7 @@ import {
 } from '../schema/schemaValues';
 import { splitProfileErrors } from './formErrors';
 import { ImportWarnings } from './ImportWarnings';
+import { stillMissing } from './importMissing';
 import styles from './ProfileForm.module.css';
 import { ProtocolChooser } from './ProtocolChooser';
 import { ReconnectNotice } from './ReconnectNotice';
@@ -51,6 +53,8 @@ export interface ProfileEditorProps {
   drivers: Driver[];
   timeZone: string | undefined;
   importWarnings?: ImportWarning[];
+  /** Keys the import left empty; highlighted until filled in. */
+  importMissing?: string[];
   notice?: string;
   justSaved?: boolean;
   /** Fresh form state for another protocol (create only). */
@@ -58,9 +62,19 @@ export interface ProfileEditorProps {
 }
 
 export function ProfileEditor(props: ProfileEditorProps) {
-  const { profile, initial, drivers, timeZone, importWarnings, notice, justSaved, draftFor } =
-    props;
+  const {
+    profile,
+    initial,
+    drivers,
+    timeZone,
+    importWarnings,
+    importMissing,
+    notice,
+    justSaved,
+    draftFor,
+  } = props;
   const { t } = useTranslation();
+  const text = useDriverText();
   const navigate = useNavigate();
   const client = useQueryClient();
   const [draft, setDraft] = useState(initial);
@@ -114,6 +128,15 @@ export function ProfileEditor(props: ProfileEditorProps) {
     isApiError(save.error) && save.error.code === 'validation_failed'
       ? splitProfileErrors(localizedFieldErrors(t, save.error), visibleKeys)
       : undefined;
+  const missingFields = schema
+    ? stillMissing(schema, importMissing ?? [], draft.values, draft.secrets)
+    : [];
+  const schemaErrors = {
+    ...Object.fromEntries(
+      missingFields.map((field) => [field.key, t('profileForm.missingFromFile')]),
+    ),
+    ...fieldErrors?.schema,
+  };
 
   return (
     <form ref={formRef} className={styles.form} onSubmit={submit}>
@@ -125,6 +148,15 @@ export function ProfileEditor(props: ProfileEditorProps) {
       {profile && <AdvisoryNotice advisories={profile.advisories} />}
       {notice && <Notice tone="info">{notice}</Notice>}
       {importWarnings && importWarnings.length > 0 && <ImportWarnings warnings={importWarnings} />}
+      {missingFields.length > 0 && (
+        <Notice tone="warning" title={t('profileForm.missingTitle')}>
+          <ul className={styles.warningList}>
+            {missingFields.map((field) => (
+              <li key={field.key}>{text(field.labelKey)}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
       {save.isError && (
         <Notice
           tone="danger"
@@ -161,7 +193,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
           schema={schema}
           values={draft.values}
           secrets={draft.secrets}
-          errors={fieldErrors?.schema ?? {}}
+          errors={schemaErrors}
           onValuesChange={(values) => setDraft({ ...draft, values })}
           onSecretsChange={(secrets) => setDraft({ ...draft, secrets })}
         />

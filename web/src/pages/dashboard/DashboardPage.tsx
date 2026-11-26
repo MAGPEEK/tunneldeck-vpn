@@ -15,6 +15,9 @@ import {
   useRemoteAccess,
 } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
+import { ImportFailureNotice } from '../profiles/import/ImportFailureNotice';
+import { LoadProfileFileButton } from '../profiles/import/LoadProfileFileButton';
+import { useProfileImport } from '../profiles/import/useProfileImport';
 import { ConnectionCard, type ConnectionAction } from './ConnectionCard';
 import styles from './DashboardPage.module.css';
 import { HostProtectionCard } from './HostProtectionCard';
@@ -49,19 +52,29 @@ export function DashboardPage() {
   const remoteAccess = useRemoteAccess();
   const logs = useLogs();
   const { control, pending, failed, reset } = useControls();
+  const profileImport = useProfileImport();
 
   if (profiles.isSuccess && profiles.data.length === 0) {
     return (
       <Page title={t('pages.dashboard.title')}>
-        <EmptyState
-          title={t('dashboard.emptyTitle')}
-          body={t('dashboard.emptyBody')}
-          action={
-            <Button variant="primary" onClick={() => void navigate('/profiles/new')}>
-              {t('dashboard.createProfile')}
-            </Button>
-          }
-        />
+        <div className={styles.stack}>
+          {profileImport.failure && <ImportFailureNotice failure={profileImport.failure} />}
+          <EmptyState
+            title={t('dashboard.emptyTitle')}
+            body={t('dashboard.emptyBody')}
+            action={
+              <div className={styles.emptyActions}>
+                <LoadProfileFileButton
+                  loading={profileImport.pending}
+                  onFile={(file) => void profileImport.loadFile(file)}
+                />
+                <Button onClick={() => void navigate('/profiles/new')}>
+                  {t('dashboard.createProfile')}
+                </Button>
+              </div>
+            }
+          />
+        </div>
       </Page>
     );
   }

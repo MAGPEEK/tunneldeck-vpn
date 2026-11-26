@@ -36,6 +36,7 @@ type material struct {
 	caPEM, clientCertPEM, clientKeyPEM string
 	rsaKeyPEM, ecKeyPEM                string
 	tlsAuthKey, tlsCryptKey            string
+	tlsCryptV2Key                      string
 	// pkcs12 is base64 on one line, as an upload field sends it.
 	pkcs12 string
 }
@@ -103,6 +104,7 @@ var testMaterial = sync.OnceValue(func() material {
 		rsaKeyPEM:     encodePEM(pemRSAPrivateKey, x509.MarshalPKCS1PrivateKey(rsaKey)),
 		tlsAuthKey:    staticKey(),
 		tlsCryptKey:   staticKey(),
+		tlsCryptV2Key: tlsCryptV2ClientKey(),
 		pkcs12:        base64.StdEncoding.EncodeToString(fakePKCS12(300)),
 	}
 })
@@ -156,6 +158,7 @@ func redact(t *testing.T, text string) string {
 		{mustCanonicalStaticKey(t, m.tlsAuthKey), "<TLS AUTH KEY>\n"},
 		{mustCanonicalStaticKey(t, m.tlsCryptKey), "<TLS CRYPT KEY>\n"},
 		{mustCanonicalPKCS12(t, m.pkcs12), "<PKCS12>\n"},
+		{mustCanonicalTLSCryptV2Key(t, m.tlsCryptV2Key), "<TLS CRYPT V2 KEY>\n"},
 	}
 	for _, r := range replacements {
 		text = strings.ReplaceAll(text, r.value, r.placeholder)
@@ -173,7 +176,28 @@ func unredact(text string) string {
 		"<TLS AUTH KEY>\n", m.tlsAuthKey,
 		"<TLS CRYPT KEY>\n", m.tlsCryptKey,
 		"<PKCS12>\n", m.pkcs12+"\n",
+		"<TLS CRYPT V2 KEY>\n", m.tlsCryptV2Key,
 	).Replace(text)
+}
+
+// tlsCryptV2ClientKey returns a random key in the layout of "openvpn
+// --genkey tls-crypt-v2-client": the client key and a wrapped key of
+// typical size, base64 in lines of 64 characters.
+func tlsCryptV2ClientKey() string {
+	key := make([]byte, staticKeyBytes+330)
+	if _, err := rand.Read(key); err != nil {
+		panic(err)
+	}
+	return tlsCryptV2Begin + "\n" + base64Lines(key, tlsCryptV2Base64Line) + tlsCryptV2End + "\n"
+}
+
+func mustCanonicalTLSCryptV2Key(t *testing.T, text string) string {
+	t.Helper()
+	canonical, err := canonicalTLSCryptV2Key(text)
+	if err != nil {
+		t.Fatalf("canonicalTLSCryptV2Key: %v", err)
+	}
+	return canonical
 }
 
 func mustCanonicalStaticKey(t *testing.T, text string) string {

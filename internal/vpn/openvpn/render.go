@@ -36,9 +36,10 @@ const (
 // Render turns profile p with secrets s into the text of an OpenVPN config
 // file as fixed by docs/openvpn-notes.md. Username, password and key
 // passphrase never appear in it; they go over the management interface.
-// Client key or PKCS#12 bundle and tls-auth/tls-crypt key are written
-// inline (SPEC §5). Remote networks are not rendered: routing is
-// TunnelDeck's (route-noexec), netguard routes them while connected.
+// Client key or PKCS#12 bundle and tls-auth, tls-crypt or tls-crypt-v2
+// key are written inline (SPEC §5). Remote networks are not rendered:
+// routing is TunnelDeck's (route-noexec), netguard routes them while
+// connected.
 //
 // Warnings report extra options that were dropped. An invalid profile
 // yields a *domain.ValidationError. The output is deterministic.
@@ -145,6 +146,9 @@ func (r *renderer) verification() {
 	}
 	if c.tlsCryptKey != "" {
 		r.inline("tls-crypt", c.tlsCryptKey)
+	}
+	if c.tlsCryptV2Key != "" {
+		r.inline("tls-crypt-v2", c.tlsCryptV2Key)
 	}
 }
 

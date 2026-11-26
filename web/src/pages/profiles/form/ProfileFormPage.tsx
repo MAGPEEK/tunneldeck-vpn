@@ -3,12 +3,14 @@ import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
-import type { Driver, ImportDraft, Profile } from '../../../api/profiles';
+import type { Driver, Profile } from '../../../api/profiles';
 import { queryKeys } from '../../../api/queryKeys';
 import { Notice } from '../../../components/Notice';
 import { Page } from '../../../layout/Page';
 import { useDrivers, useProfile, useSystem } from '../../../queries/queries';
 import { genericErrorMessage } from '../../auth/formError';
+import { profileNameFromFile } from '../import/profileFile';
+import type { CachedImportDraft } from '../import/useProfileImport';
 import { readProfileFormState } from '../profileFormState';
 import { initialSecrets, initialValues } from '../schema/schemaValues';
 import { ProfileEditor, type ProfileDraft } from './ProfileEditor';
@@ -39,10 +41,22 @@ function draftFromProfile(drivers: Driver[], profile: Profile, keepSecrets: bool
   };
 }
 
-function draftFromImport(drivers: Driver[], protocol: string, imported: ImportDraft): ProfileDraft {
+/** The name of an imported profile: the file name, else the server address. */
+function importedName(imported: CachedImportDraft): string {
+  const fromFile = imported.fileName ? profileNameFromFile(imported.fileName) : '';
+  const host = imported.settings.remoteHost;
+  return fromFile || (typeof host === 'string' ? host.slice(0, 64) : '');
+}
+
+function draftFromImport(
+  drivers: Driver[],
+  protocol: string,
+  imported: CachedImportDraft,
+): ProfileDraft {
   const schema = drivers.find((driver) => driver.protocol === protocol)?.schema ?? { sections: [] };
   return {
     ...emptyDraft(drivers, protocol),
+    name: importedName(imported),
     values: initialValues(schema, imported.settings),
     secrets: initialSecrets(schema, {}, imported.secrets),
   };
@@ -65,7 +79,7 @@ function ProfileFormView() {
   const client = useQueryClient();
   const [state] = useState(() => readProfileFormState(location.state));
   const [imported] = useState(() =>
-    state.fromImport ? client.getQueryData<ImportDraft>(queryKeys.importDraft) : undefined,
+    state.fromImport ? client.getQueryData<CachedImportDraft>(queryKeys.importDraft) : undefined,
   );
   const drivers = useDrivers();
   const system = useSystem();
@@ -123,6 +137,7 @@ function ProfileFormView() {
         drivers={driverList}
         timeZone={system.data?.timeZone}
         importWarnings={id === undefined ? imported?.warnings : undefined}
+        importMissing={id === undefined ? imported?.missing : undefined}
         notice={notice}
         justSaved={state.saved}
         draftFor={draftFor}

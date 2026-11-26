@@ -73,21 +73,24 @@ type Drivers interface {
 }
 
 // ImportWarning reports a line of an imported file that was dropped,
-// rejected or mapped.
+// rejected or mapped. File names a file the line refers to.
 type ImportWarning struct {
 	Code      string `json:"code"`
 	Severity  string `json:"severity"`
 	Directive string `json:"directive,omitempty"`
 	Line      int    `json:"line,omitempty"`
+	File      string `json:"file,omitempty"`
 	Message   string `json:"message"`
 }
 
 // ImportDraft is a profile parsed from a configuration file. It is not
-// saved; Secrets go back to the same client only.
+// saved; Secrets go back to the same client only. Missing lists the
+// setting and secret keys the user still has to fill in.
 type ImportDraft struct {
 	Settings domain.Settings
 	Secrets  map[string]string
 	Warnings []ImportWarning
+	Missing  []string
 }
 
 // Importer parses configuration files of a protocol. An unknown protocol

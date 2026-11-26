@@ -163,15 +163,56 @@ describe('import', () => {
       },
       { code: 'cipher_mapped', severity: 'info', directive: 'cipher', message: 'mapped' },
     ],
+    missing: [],
   };
+
+  /** A file-based provider profile: credentials and CA are not in the file. */
+  const providerDraft = {
+    settings: { remoteHost: '203.0.113.10', port: 1194, authMode: 'password' },
+    secrets: {},
+    warnings: [
+      {
+        code: 'file_reference',
+        severity: 'rejected',
+        directive: 'ca',
+        line: 9,
+        file: 'ca.crt',
+        message: 'references the file',
+      },
+    ],
+    missing: ['username', 'password', 'caCert'],
+  };
+
+  function ovpnFile(name = 'Provider VPN.ovpn', text = 'client\nremote 203.0.113.10\nca ca.crt') {
+    return new File([text], name);
+  }
+
+  function chooseFile(file: File) {
+    fireEvent.change(screen.getByTestId('profile-file-input'), { target: { files: [file] } });
+  }
+
+  function dragEvent(file: File) {
+    return { dataTransfer: { types: ['Files'], files: [file], dropEffect: 'none' } };
+  }
+
+  it('makes loading a file the first, primary action', async () => {
+    renderApp(routes(), '/profiles');
+    await screen.findByRole('cell', { name: 'Office' });
+    const load = screen.getByRole('button', { name: 'Load .ovpn file' });
+    const paste = screen.getByRole('button', { name: 'Paste configuration' });
+    const create = screen.getByRole('button', { name: 'New profile' });
+    expect(load.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(paste.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('profile-file-input')).toHaveAttribute('accept', '.ovpn,.conf');
+  });
 
   it('sends the pasted text and opens the pre-filled form with grouped warnings', async () => {
     const { fetchMock } = renderApp(
       routes({ 'POST /api/profiles/import': { body: draft } }),
       '/profiles',
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Import .ovpn' }));
-    fireEvent.change(screen.getByLabelText('Or paste the configuration'), {
+    fireEvent.click(await screen.findByRole('button', { name: 'Paste configuration' }));
+    fireEvent.change(screen.getByLabelText('Configuration text'), {
       target: { value: 'client\nremote publicip20.mdex.de 1194' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
@@ -185,7 +226,8 @@ describe('import', () => {
       text: 'client\nremote publicip20.mdex.de 1194',
     });
 
-    expect(await screen.findByLabelText('Server address')).toHaveValue('publicip20.mdex.de');
+    expect(await screen.findByLabelText('Name')).toHaveValue('publicip20.mdex.de');
+    expect(screen.getByLabelText('Server address')).toHaveValue('publicip20.mdex.de');
     expect(screen.getByLabelText('Data channel cipher')).toHaveValue('none');
     expect(screen.getByLabelText('TLS auth key')).toHaveValue(
       '-----BEGIN OpenVPN Static key V1-----',
@@ -201,22 +243,121 @@ describe('import', () => {
       screen.getByText('1 directive dropped or changed').closest('[data-tone]'),
     ).toHaveAttribute('data-tone', 'warning');
     expect(screen.getByText('1 note')).toBeInTheDocument();
+    expect(screen.queryByText('Still missing from the file')).not.toBeInTheDocument();
   });
 
-  it('shows a file problem under the text field', async () => {
+  it('shows a translated problem of the pasted text under the text field', async () => {
     renderApp(
       routes({
         'POST /api/profiles/import': problem(422, 'validation_failed', 'invalid', {
-          fields: { file: 'must be at most 1 MiB' },
+          fields: { file: 'is not an OpenVPN profile' },
+          fieldCodes: { file: { code: 'openvpn_not_a_profile' } },
         }),
       }),
       '/profiles',
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Import .ovpn' }));
-    fireEvent.change(screen.getByLabelText('Or paste the configuration'), {
-      target: { value: 'x' },
+    fireEvent.click(await screen.findByRole('button', { name: 'Paste configuration' }));
+    fireEvent.change(screen.getByLabelText('Configuration text'), {
+      target: { value: 'hello' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    expect(await screen.findByText('must be at most 1 MiB')).toBeInTheDocument();
+    expect(
+      await screen.findByText('This is not an OpenVPN profile: it contains no OpenVPN directive.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Configuration text')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('loads a chosen file, names the profile after it and highlights only what is missing', async () => {
+    const { fetchMock } = renderApp(
+      routes({ 'POST /api/profiles/import': { body: providerDraft } }),
+      '/profiles',
+    );
+    await screen.findByRole('cell', { name: 'Office' });
+    chooseFile(ovpnFile());
+
+    expect(await screen.findByLabelText('Name')).toHaveValue('Provider VPN');
+    const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      protocol: 'openvpn',
+      text: 'client\nremote 203.0.113.10\nca ca.crt',
+    });
+
+    const summary = screen.getByText('Still missing from the file').closest('[data-tone]');
+    expect(summary).toHaveTextContent('Username');
+    expect(summary).toHaveTextContent('Password');
+    expect(summary).toHaveTextContent('CA certificate');
+    const hint = 'Not in the file – please enter.';
+    expect(screen.getByLabelText('Username')).toHaveAccessibleDescription(hint);
+    expect(screen.getByLabelText('CA certificate')).toHaveAccessibleDescription(hint);
+    expect(screen.getByLabelText('Server address')).not.toHaveAttribute('aria-invalid');
+
+    expect(
+      screen.getByText(/refers to the file ca\.crt, which is not part of the profile/),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'alice' } });
+    expect(screen.getByLabelText('Username')).not.toHaveAttribute('aria-invalid');
+    expect(summary).not.toHaveTextContent('Username');
+  });
+
+  it('decodes a Latin-1 file instead of garbling it', async () => {
+    const { fetchMock } = renderApp(
+      routes({ 'POST /api/profiles/import': { body: providerDraft } }),
+      '/profiles',
+    );
+    await screen.findByRole('cell', { name: 'Office' });
+    chooseFile(new File([new Uint8Array([0x23, 0x20, 0x42, 0xfc, 0x72, 0x6f])], 'b.ovpn'));
+
+    await screen.findByLabelText('Name');
+    const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ protocol: 'openvpn', text: '# Büro' });
+  });
+
+  it('loads a file dropped onto the page and shows an overlay while dragging', async () => {
+    renderApp(routes({ 'POST /api/profiles/import': { body: providerDraft } }), '/profiles');
+    await screen.findByRole('cell', { name: 'Office' });
+    const zone = screen.getByTestId('profile-drop-zone');
+    const file = ovpnFile('office.conf');
+
+    fireEvent.dragEnter(zone, dragEvent(file));
+    expect(screen.getByRole('status')).toHaveTextContent('Drop the .ovpn file to load it');
+    fireEvent.dragLeave(zone, dragEvent(file));
+    expect(screen.queryByText('Drop the .ovpn file to load it')).not.toBeInTheDocument();
+
+    fireEvent.dragEnter(zone, dragEvent(file));
+    fireEvent.drop(zone, dragEvent(file));
+    expect(screen.queryByText('Drop the .ovpn file to load it')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Name')).toHaveValue('office');
+    expect(window.location.pathname).toBe('/profiles/new');
+  });
+
+  it('refuses a dropped file that is not a profile without sending it', async () => {
+    const { fetchMock } = renderApp(routes(), '/profiles');
+    await screen.findByRole('cell', { name: 'Office' });
+    fireEvent.drop(screen.getByTestId('profile-drop-zone'), dragEvent(new File(['x'], 'cv.pdf')));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load cv.pdf');
+    expect(alert).toHaveTextContent('Only .ovpn or .conf files can be loaded.');
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/profiles/import')).toBe(false);
+  });
+
+  it('names the file and the translated reason when the server refuses it', async () => {
+    renderApp(
+      routes({
+        'POST /api/profiles/import': problem(422, 'validation_failed', 'invalid', {
+          fields: { file: 'is empty' },
+          fieldCodes: { file: { code: 'openvpn_file_empty' } },
+        }),
+      }),
+      '/profiles',
+    );
+    await screen.findByRole('cell', { name: 'Office' });
+    chooseFile(ovpnFile('empty.ovpn', ''));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load empty.ovpn');
+    expect(alert).toHaveTextContent('The file is empty or contains only comments.');
+    expect(window.location.pathname).toBe('/profiles');
   });
 });

@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -176,11 +177,13 @@ func TestSessionCookies(t *testing.T) {
 }
 
 func TestProfileImporter(t *testing.T) {
-	draft, err := profileImporter{}.Import(domain.ProtocolOpenVPN, "client\nremote vpn.example.com 1194\nup /bin/sh\n")
+	draft, err := profileImporter{}.Import(domain.ProtocolOpenVPN, "client\nremote vpn.example.com 1194\nup /bin/sh\nca ca.crt\n")
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
-	if host, _ := draft.Settings.String("remoteHost"); host != "vpn.example.com" || len(draft.Warnings) == 0 {
+	if host, _ := draft.Settings.String("remoteHost"); host != "vpn.example.com" || len(draft.Warnings) == 0 ||
+		!slices.ContainsFunc(draft.Warnings, func(w api.ImportWarning) bool { return w.File == "ca.crt" }) ||
+		!slices.Contains(draft.Missing, "caCert") {
 		t.Errorf("draft = %+v", draft)
 	}
 	if _, err := (profileImporter{}).Import("wireguard", ""); !errors.Is(err, domain.ErrNotFound) {

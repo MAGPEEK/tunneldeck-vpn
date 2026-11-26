@@ -18,13 +18,14 @@ const (
 )
 
 // readLine parses one raw config line outside inline blocks. Surrounding
-// whitespace, including the CR of CRLF input, is removed. Control
-// characters, lines of maxLineLength or more, syntax errors and inline
-// block tags are rejected.
+// whitespace, including the CR of CRLF input, is removed. Comment lines
+// are blank whatever their length or bytes: they are never rendered.
+// Control characters, lines of maxLineLength or more, syntax errors and
+// inline block tags are rejected.
 func readLine(raw string) (directive, lineStatus, verdict) {
 	line := strings.TrimSpace(raw)
 	switch {
-	case line == "":
+	case line == "" || isComment(line[0]):
 		return directive{}, lineBlank, verdict{}
 	case hasControlCharacter(line):
 		return directive{}, lineRemoved, rejection(CodeInvalidLine, "contains control characters such as NUL, CR or LF")

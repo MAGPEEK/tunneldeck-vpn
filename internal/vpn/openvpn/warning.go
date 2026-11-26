@@ -40,16 +40,19 @@ const (
 	CodeNsCertTypeMapped       = "ns_cert_type_mapped"
 	CodeServerCertUsageAdded   = "server_cert_usage_added"
 	CodeStaticKeyUnsupported   = "static_key_unsupported"
+	CodeSetenvIgnored          = "setenv_ignored"
 )
 
 // Warning reports a directive that was dropped, rejected or mapped while
 // rendering a config or importing an .ovpn file. Line is 1-based: the index
 // in extraOptions when rendering, the line of the file when importing; 0
-// when no line applies. Message is English; the UI translates by Code.
+// when no line applies. File names the file a directive refers to.
+// Message is English; the UI translates by Code.
 type Warning struct {
 	Code      string   `json:"code"`
 	Severity  Severity `json:"severity"`
 	Directive string   `json:"directive,omitempty"`
 	Line      int      `json:"line,omitempty"`
+	File      string   `json:"file,omitempty"`
 	Message   string   `json:"message"`
 }

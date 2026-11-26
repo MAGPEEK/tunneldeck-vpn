@@ -129,6 +129,11 @@ func TestValidateRejects(t *testing.T) {
 			sec[SecretTLSCryptKey] = m.tlsCryptKey
 		}, SecretTLSCryptKey},
 		{"bad tls-auth key", func(_ map[string]any, sec vpn.Secrets) { sec[SecretTLSAuthKey] = "abc" }, SecretTLSAuthKey},
+		{"tls-crypt-v2 and tls-crypt", func(_ map[string]any, sec vpn.Secrets) {
+			sec[SecretTLSCryptKey] = m.tlsCryptKey
+			sec[SecretTLSCryptV2Key] = m.tlsCryptV2Key
+		}, SecretTLSCryptV2Key},
+		{"static key as tls-crypt-v2 key", func(_ map[string]any, sec vpn.Secrets) { sec[SecretTLSCryptV2Key] = m.tlsCryptKey }, SecretTLSCryptV2Key},
 		{"cipher with space", func(s map[string]any, _ vpn.Secrets) { s[KeyCipher] = "AES 256" }, KeyCipher},
 		{"cipher too long", func(s map[string]any, _ vpn.Secrets) { s[KeyCipher] = strings.Repeat("A", 201) }, KeyCipher},
 		{"digest with quote", func(s map[string]any, _ vpn.Secrets) { s[KeyAuthDigest] = `SHA"1` }, KeyAuthDigest},

@@ -58,10 +58,12 @@ func (profileImporter) Import(protocol domain.Protocol, text string) (api.Import
 	warnings := make([]api.ImportWarning, len(result.Warnings))
 	for i, w := range result.Warnings {
 		warnings[i] = api.ImportWarning{
-			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, Message: w.Message,
+			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, File: w.File, Message: w.Message,
 		}
 	}
-	return api.ImportDraft{Settings: result.Settings, Secrets: result.Secrets, Warnings: warnings}, nil
+	return api.ImportDraft{
+		Settings: result.Settings, Secrets: result.Secrets, Warnings: warnings, Missing: result.Missing,
+	}, nil
 }
 
 func toCheckResults(results []netguard.CheckResult) []api.CheckResult {

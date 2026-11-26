@@ -135,6 +135,12 @@ export const OPENVPN_SCHEMA: FormSchema = {
           ],
         },
         { key: 'tlsCryptKey', type: 'secret', labelKey: 'openvpn.tlsCryptKey', multiline: true },
+        {
+          key: 'tlsCryptV2Key',
+          type: 'secret',
+          labelKey: 'openvpn.tlsCryptV2Key',
+          multiline: true,
+        },
       ],
     },
     {

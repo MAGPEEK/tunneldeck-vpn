@@ -39,6 +39,7 @@ func Describe() vpn.FormSchema {
 			field(SecretTLSAuthKey, vpn.FieldSecret, multiline),
 			selectField(KeyKeyDirection, keyDirections, DefaultKeyDirection, visibleWithSecret(SecretTLSAuthKey)),
 			field(SecretTLSCryptKey, vpn.FieldSecret, multiline),
+			field(SecretTLSCryptV2Key, vpn.FieldSecret, multiline),
 		),
 		section("advanced",
 			field(KeyResolveRetry, vpn.FieldText, defaultValue(DefaultResolveRetry)),

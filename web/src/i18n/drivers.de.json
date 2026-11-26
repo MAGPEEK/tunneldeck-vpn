@@ -31,6 +31,7 @@
   "openvpn.keyDirection.0": "0 (Server-Seite)",
   "openvpn.keyDirection.bidirectional": "Beide Richtungen",
   "openvpn.tlsCryptKey": "TLS-Crypt-Schlüssel",
+  "openvpn.tlsCryptV2Key": "TLS-Crypt-v2-Client-Schlüssel",
   "openvpn.resolveRetry": "Namensauflösung wiederholen (Sekunden oder infinite)",
   "openvpn.keepalive": "Keepalive (Intervall und Timeout in Sekunden)",
   "openvpn.remoteNetworks": "Entfernte Netze (hinter dem VPN, ein CIDR pro Zeile)",

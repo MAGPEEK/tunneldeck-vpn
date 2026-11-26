@@ -1,0 +1,47 @@
+# rendered by TunnelDeck-VPN - do not edit
+client
+dev tdvpn0
+dev-type tun
+remote vpn.example.com 1194 udp
+resolv-retry infinite
+nobind
+persist-tun
+disable-dco
+
+# server verification
+remote-cert-tls server
+<ca>
+<CA PEM>
+</ca>
+<cert>
+<CLIENT CERT PEM>
+</cert>
+<key>
+<CLIENT KEY PEM>
+</key>
+<tls-crypt-v2>
+<TLS CRYPT V2 KEY>
+</tls-crypt-v2>
+
+# credentials over management, never in this file
+auth-user-pass
+auth-retry none
+
+# extra options
+server-poll-timeout 4
+remote-random
+tls-version-min 1.2
+reneg-sec 604800
+tun-mtu 1420
+push-peer-info
+
+# routing is owned by TunnelDeck-VPN
+route-noexec
+route-nopull
+pull-filter ignore "ifconfig-ipv6"
+
+# management
+management /run/tunneldeck/mgmt.sock unix
+management-hold
+management-query-passwords
+verb 3

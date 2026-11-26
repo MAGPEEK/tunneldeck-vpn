@@ -81,7 +81,7 @@
   "dashboard": {
     "emptyTitle": "Add your first VPN profile",
     "emptyBody": "A profile holds the server address, sign-in details and encryption settings of one VPN connection.",
-    "createProfile": "Create profile"
+    "createProfile": "Create manually"
   },
   "connection": {
     "label": "Connection",
@@ -166,7 +166,6 @@
     "no_dco": "This host's kernel has no data channel offload; expect lower throughput."
   },
   "profiles": {
-    "import": "Import .ovpn",
     "new": "New profile",
     "deleteFailed": "The profile could not be deleted. Disconnect it first and try again.",
     "column": {
@@ -191,11 +190,16 @@
     "confirmDeleteButton": "Delete profile",
     "cancel": "Cancel",
     "empty": "No profiles yet",
-    "importTitle": "Import an .ovpn file",
-    "importFile": "Configuration file",
-    "importPaste": "Or paste the configuration",
+    "importTitle": "Paste an OpenVPN configuration",
+    "importPaste": "Configuration text",
     "importInvalid": "The configuration cannot be read.",
-    "importSubmit": "Import"
+    "importSubmit": "Import",
+    "loadFile": "Load .ovpn file",
+    "pasteConfig": "Paste configuration",
+    "dropHint": "Drop the .ovpn file to load it",
+    "loadFailed": "Could not load {{file}}",
+    "importWrongType": "Only .ovpn or .conf files can be loaded.",
+    "importUnreadable": "The file could not be read."
   },
   "profileForm": {
     "newTitle": "New profile",
@@ -213,7 +217,9 @@
     "appliesOnNextConnect": "Changes apply on the next connect.",
     "reconnectNow": "Reconnect now",
     "copyName": "{{name}} (copy)",
-    "duplicateNotice": "Secrets such as passwords and keys are not copied. Enter them again."
+    "duplicateNotice": "Secrets such as passwords and keys are not copied. Enter them again.",
+    "missingTitle": "Still missing from the file",
+    "missingFromFile": "Not in the file – please enter."
   },
   "schemaForm": {
     "line": "{{label}}, line {{number}}",
@@ -252,7 +258,7 @@
       "inline_block": "inline blocks are only allowed for keys and certificates.",
       "line_too_long": "is too long.",
       "invalid_value": "has a value TunnelDeck-VPN cannot use.",
-      "file_reference": "refers to a file; paste its content into the profile instead.",
+      "file_reference": "refers to the file {{file}}, which is not part of the profile. Embed its content in the .ovpn file, or paste it into the highlighted field.",
       "additional_remote": "is an additional server; only the first one is used.",
       "unsupported_device": "sets a device type TunnelDeck-VPN does not support.",
       "inline_block_unsupported": "is an inline block TunnelDeck-VPN does not support.",
@@ -261,7 +267,8 @@
       "compression_kept": "compression stays on because the server requires it.",
       "ns_cert_type_mapped": "was replaced by the server certificate check.",
       "server_cert_usage_added": "The server certificate check was switched on.",
-      "static_key_unsupported": "uses static-key mode, which is insecure and deprecated; use certificates or username and password instead."
+      "static_key_unsupported": "uses static-key mode, which is insecure and deprecated; use certificates or username and password instead.",
+      "setenv_ignored": "sets a variable that only scripts and VPN apps use; it is not needed."
     }
   },
   "firewall": {
@@ -646,6 +653,10 @@
     "vpn_address_invalid": "The VPN did not assign a valid IPv4 address.",
     "firewall_public_port_own_address": "A rule to this device’s own address needs no port on the VPN address; leave it empty.",
     "firewall_destination_not_in_lan": "Must be inside the local LAN ({{subnets}}).",
-    "firewall_template_own_address": "Enter another device in the local LAN, not this device’s own address."
+    "firewall_template_own_address": "Enter another device in the local LAN, not this device’s own address.",
+    "openvpn_file_empty": "The file is empty or contains only comments.",
+    "openvpn_not_a_profile": "This is not an OpenVPN profile: it contains no OpenVPN directive.",
+    "openvpn_tls_crypt_v2_key_invalid": "Must be an OpenVPN tls-crypt-v2 client key.",
+    "openvpn_tls_crypt_v2_combined": "Cannot be combined with a tls-auth or tls-crypt key."
   }
 }

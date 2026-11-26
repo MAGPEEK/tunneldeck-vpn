@@ -253,7 +253,11 @@ func (fakeImporter) Import(protocol domain.Protocol, text string) (ImportDraft, 
 	return ImportDraft{
 		Settings: settings,
 		Secrets:  map[string]string{"password": testSecret},
-		Warnings: []ImportWarning{{Code: "dropped", Severity: "warning", Directive: "up", Line: 3, Message: "dropped"}},
+		Warnings: []ImportWarning{
+			{Code: "dropped", Severity: "warning", Directive: "up", Line: 3, Message: "dropped"},
+			{Code: "file_reference", Severity: "rejected", Directive: "ca", Line: 4, File: "ca.crt", Message: "file"},
+		},
+		Missing: []string{"username"},
 	}, nil
 }
 

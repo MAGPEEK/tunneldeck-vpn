@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeEventSource } from '../../test/fakeEventSource';
 import { problem, type MockRoutes } from '../../test/fetchMock';
-import { makeProfile, makeStatus } from '../../test/fixtures';
+import { DRIVERS, makeProfile, makeStatus } from '../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const profile = makeProfile();
@@ -72,8 +72,49 @@ describe('DashboardPage', () => {
       await screen.findByRole('heading', { name: 'Add your first VPN profile' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Log' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Create profile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create manually' }));
     expect(window.location.pathname).toBe('/profiles/new');
+  });
+
+  it('loads an .ovpn file from the empty state into the new-profile form', async () => {
+    const { fetchMock } = renderApp(
+      routes({
+        'GET /api/profiles': { body: [] },
+        'GET /api/drivers': { body: DRIVERS },
+        'POST /api/profiles/import': {
+          body: {
+            settings: { remoteHost: 'vpn.example.com', authMode: 'password' },
+            secrets: {},
+            warnings: [],
+            missing: ['username', 'password'],
+          },
+        },
+      }),
+    );
+    await screen.findByRole('heading', { name: 'Add your first VPN profile' });
+    expect(screen.getByRole('button', { name: 'Load .ovpn file' })).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('profile-file-input'), {
+      target: { files: [new File(['client\nremote vpn.example.com'], 'Office.ovpn')] },
+    });
+
+    expect(await screen.findByLabelText('Name')).toHaveValue('Office');
+    expect(window.location.pathname).toBe('/profiles/new');
+    const call = fetchMock.mock.calls.find(([url]) => url === '/api/profiles/import');
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      protocol: 'openvpn',
+      text: 'client\nremote vpn.example.com',
+    });
+  });
+
+  it('explains a file that is not a profile on the empty state', async () => {
+    renderApp(routes({ 'GET /api/profiles': { body: [] } }));
+    await screen.findByRole('heading', { name: 'Add your first VPN profile' });
+    fireEvent.change(screen.getByTestId('profile-file-input'), {
+      target: { files: [new File(['x'], 'photo.jpg')] },
+    });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load photo.jpg');
+    expect(alert).toHaveTextContent('Only .ovpn or .conf files can be loaded.');
   });
 
   it('shows the connection, metrics, host protection and log', async () => {

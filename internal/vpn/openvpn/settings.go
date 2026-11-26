@@ -41,6 +41,7 @@ const (
 	SecretKeyPassphrase = "keyPassphrase"
 	SecretTLSAuthKey    = "tlsAuthKey"
 	SecretTLSCryptKey   = "tlsCryptKey"
+	SecretTLSCryptV2Key = "tlsCryptV2Key"
 )
 
 // Values of the select settings.
@@ -99,7 +100,7 @@ var (
 		KeyCACert, KeyClientCert, KeyKeyDirection, KeyCipher, KeyAuthDigest,
 		KeyResolveRetry, KeyKeepalive, KeyVerifyServerCertUsage, KeyRemoteNetworks, KeyExtraOptions,
 	)
-	secretKeys = set(SecretPassword, SecretClientKey, SecretPKCS12, SecretKeyPassphrase, SecretTLSAuthKey, SecretTLSCryptKey)
+	secretKeys = set(SecretPassword, SecretClientKey, SecretPKCS12, SecretKeyPassphrase, SecretTLSAuthKey, SecretTLSCryptKey, SecretTLSCryptV2Key)
 )
 
 var (
@@ -125,6 +126,7 @@ type profileConfig struct {
 	pkcs12                string
 	tlsAuthKey            string
 	tlsCryptKey           string
+	tlsCryptV2Key         string
 	keyDirection          string
 	cipher                string
 	authDigest            string
@@ -195,9 +197,8 @@ func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (pr
 	c.remoteNetworks = r.remoteNetworks(c.remoteHost, lan)
 	c.tlsAuthKey = r.staticKey(SecretTLSAuthKey, secrets[SecretTLSAuthKey])
 	c.tlsCryptKey = r.staticKey(SecretTLSCryptKey, secrets[SecretTLSCryptKey])
-	if c.tlsAuthKey != "" && c.tlsCryptKey != "" {
-		r.errs.AddIssue(SecretTLSCryptKey, domain.Issue("openvpn_tls_crypt_with_tls_auth"), "cannot be combined with tlsAuthKey")
-	}
+	c.tlsCryptV2Key = r.tlsCryptV2Key(secrets[SecretTLSCryptV2Key])
+	r.oneControlChannelKey(c)
 	r.credentials(c, secrets)
 	if c.usesCertificate() {
 		r.clientIdentity(&c, secrets)
@@ -232,6 +233,7 @@ var keyMaterialCodes = map[error]string{
 	errNotPrivateKey:  "openvpn_private_key_invalid",
 	errNotStaticKey:   "openvpn_static_key_invalid",
 	errNotPKCS12:      "openvpn_pkcs12_invalid",
+	errNotTLSCryptV2:  "openvpn_tls_crypt_v2_key_invalid",
 }
 
 // settingsReader reads typed settings with defaults and collects errors.
@@ -527,4 +529,26 @@ func isHost(s string) bool {
 		}
 	}
 	return true
+}
+
+func (r settingsReader) tlsCryptV2Key(text string) string {
+	if text == "" {
+		return ""
+	}
+	canonical, err := canonicalTLSCryptV2Key(text)
+	if err != nil {
+		r.addKeyMaterialError(SecretTLSCryptV2Key, err)
+	}
+	return canonical
+}
+
+// oneControlChannelKey rejects combinations of tls-auth, tls-crypt and
+// tls-crypt-v2: OpenVPN uses one of them to protect the control channel.
+func (r settingsReader) oneControlChannelKey(c profileConfig) {
+	if c.tlsAuthKey != "" && c.tlsCryptKey != "" {
+		r.errs.AddIssue(SecretTLSCryptKey, domain.Issue("openvpn_tls_crypt_with_tls_auth"), "cannot be combined with tlsAuthKey")
+	}
+	if c.tlsCryptV2Key != "" && (c.tlsAuthKey != "" || c.tlsCryptKey != "") {
+		r.errs.AddIssue(SecretTLSCryptV2Key, domain.Issue("openvpn_tls_crypt_v2_combined"), "cannot be combined with tlsAuthKey or tlsCryptKey")
+	}
 }

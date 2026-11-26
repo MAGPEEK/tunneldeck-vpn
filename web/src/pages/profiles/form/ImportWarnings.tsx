@@ -38,7 +38,9 @@ export function ImportWarnings({ warnings }: { warnings: ImportWarning[] }) {
                     <code className={styles.directive}>{warning.directive}</code>
                   )}{' '}
                   {severity === 'rejected' && <strong>{t('importWarnings.notImported')}: </strong>}
-                  {translateDynamic(t, `importWarnings.code.${warning.code}`, warning.message)}
+                  {translateDynamic(t, `importWarnings.code.${warning.code}`, warning.message, {
+                    file: warning.file,
+                  })}
                 </li>
               ))}
             </ul>

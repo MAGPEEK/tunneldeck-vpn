@@ -166,6 +166,14 @@ func TestRenderImportRenderIsStable(t *testing.T) {
 			secrets: vpn.Secrets{SecretClientKey: m.clientKeyPEM, SecretTLSCryptKey: m.tlsCryptKey},
 		},
 		{
+			name: "tls-crypt-v2",
+			settings: map[string]any{
+				KeyRemoteHost: "vpn.example.com", KeyAuthMode: AuthModeCertificate,
+				KeyCACert: m.caPEM, KeyClientCert: m.clientCertPEM,
+			},
+			secrets: vpn.Secrets{SecretClientKey: m.clientKeyPEM, SecretTLSCryptV2Key: m.tlsCryptV2Key},
+		},
+		{
 			name: "pkcs12",
 			settings: map[string]any{
 				KeyRemoteHost: "vpn.example.com", KeyAuthMode: AuthModeCertificate, KeyCACert: m.caPEM,
@@ -316,7 +324,7 @@ func TestImportDirectives(t *testing.T) {
 		{
 			name:         "pkcs12 file reference",
 			text:         "pkcs12 client.p12\nremote-cert-tls server",
-			want:         map[string]any{KeyAuthMode: AuthModePassword},
+			want:         map[string]any{KeyAuthMode: AuthModeCertificate},
 			wantWarnings: []string{"pkcs12:file_reference"},
 		},
 		{

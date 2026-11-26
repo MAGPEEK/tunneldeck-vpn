@@ -275,11 +275,13 @@ func TestImportProfile(t *testing.T) {
 		Settings map[string]any    `json:"settings"`
 		Secrets  map[string]string `json:"secrets"`
 		Warnings []ImportWarning   `json:"warnings"`
+		Missing  []string          `json:"missing"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Settings["host"] != "vpn.example.com" || got.Secrets["password"] != testSecret || len(got.Warnings) != 1 {
+	if got.Settings["host"] != "vpn.example.com" || got.Secrets["password"] != testSecret || len(got.Warnings) != 2 ||
+		got.Warnings[1].File != "ca.crt" || len(got.Missing) != 1 || got.Missing[0] != "username" {
 		t.Errorf("draft = %+v", got)
 	}
 

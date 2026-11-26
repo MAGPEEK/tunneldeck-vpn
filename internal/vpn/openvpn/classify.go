@@ -46,6 +46,10 @@ var (
 		code: CodeDeprecatedIgnored, severity: SeverityWarning,
 		message: "dropped: deprecated, OpenVPN 2.7 ignores it",
 	}
+	verdictSetenvIgnored = verdict{
+		code: CodeSetenvIgnored, severity: SeverityWarning,
+		message: "dropped: only scripts and client apps read these variables, and TunnelDeck-VPN runs neither",
+	}
 	verdictStaticKey = verdict{
 		code: CodeStaticKeyUnsupported, severity: SeverityRejected,
 		message: "static-key mode is deprecated in OpenVPN 2.7 and insecure, and is not supported; " +
@@ -57,7 +61,8 @@ var (
 const directiveStaticKey = "secret"
 
 // directivesRunningCode run scripts or load code. setenv is included because
-// "setenv opt <directive>" dispatches any directive.
+// "setenv opt <directive>" dispatches any directive; plain variables are
+// dropped with verdictSetenvIgnored instead.
 var directivesRunningCode = set(
 	"up", "down", "route-up", "route-pre-down", "ipchange", "tls-verify",
 	"auth-user-pass-verify", "client-connect", "client-disconnect",
@@ -71,7 +76,7 @@ var directivesRunningCode = set(
 var directivesEscapingSandbox = set(
 	"daemon", "inetd", "log", "log-append", "syslog", "status", "writepid",
 	"config", "cd", "chroot", "tmp-dir", "replay-persist", "tls-export-cert",
-	"askpass", "pkcs12", "capath", "crl-verify", "extra-certs", "dh", "tls-crypt-v2",
+	"askpass", "pkcs12", "capath", "crl-verify", "extra-certs", "dh",
 )
 
 // prefixesEscapingSandbox covers management* and dev, dev-type, dev-node.
@@ -90,7 +95,7 @@ var directivesAlwaysEmitted = set(
 // directivesManagedByField are rendered from profile fields.
 var directivesManagedByField = set(
 	"remote", "proto", "port", "rport", "ca", "cert", "key", "tls-auth",
-	"tls-crypt", "key-direction", "cipher", "ncp-ciphers", "auth", "comp-lzo",
+	"tls-crypt", "tls-crypt-v2", "key-direction", "cipher", "ncp-ciphers", "auth", "comp-lzo",
 	"resolv-retry", "keepalive", "remote-cert-tls", "ns-cert-type",
 	"auth-user-pass",
 )
@@ -105,6 +110,8 @@ func classify(d directive) (v verdict, removed bool) {
 	switch {
 	case !directiveName.MatchString(d.name):
 		return verdictInvalidName, true
+	case isPlainSetenv(d):
+		return verdictSetenvIgnored, true
 	case directivesRunningCode[d.name]:
 		return verdictRunsCode, true
 	case d.name == directiveStaticKey:
@@ -125,6 +132,12 @@ func classify(d directive) (v verdict, removed bool) {
 	return verdict{}, false
 }
 
+// isPlainSetenv reports a setenv that only sets an environment variable.
+// "setenv opt" applies a directive and must be checked as code.
+func isPlainSetenv(d directive) bool {
+	return (d.name == "setenv" || d.name == "setenv-safe") && d.arg(0) != "opt"
+}
+
 func hasAnyPrefix(name string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(name, prefix) {
@@ -140,4 +153,11 @@ func set(names ...string) map[string]bool {
 		m[name] = true
 	}
 	return m
+}
+
+// isOpenVPNDirective reports whether the classifier knows d as an OpenVPN
+// directive, whatever happens to it.
+func isOpenVPNDirective(d directive) bool {
+	v, removed := classify(d)
+	return removed && v.code != CodeInvalidDirective
 }
