@@ -30,7 +30,6 @@ docker ps --format '{{.Names}}\t{{.Image}}'
 ### Auf einer Synology
 
 - **Per SSH:** Melden Sie sich am NAS an und führen Sie `sudo docker exec tunneldeck tunneldeck reset-admin` aus.
-- **Im Container Manager:** Container > tunneldeck > Details > Terminal > Erstellen, als Befehl `sh` wählen und im neuen Terminal `tunneldeck reset-admin` eingeben. Die genauen Menünamen hängen von der DSM-Version ab; prüfen Sie sie auf Ihrem NAS.
 
 ### Erwartete Ausgabe
 
@@ -59,8 +58,8 @@ Nutzen Sie diesen Weg, wenn Sie keine Shell im Container öffnen können.
      TUNNELDECK_RESET_ADMIN: "1"
    ```
 
-   oder auf einer Synology im YAML des Projekts (Container Manager > Projekt > tunneldeck) bzw. in den Umgebungseinstellungen des Containers.
-2. Erstellen Sie den Container neu (`docker compose up -d` oder im Container Manager Projekt > Aktion > Erstellen).
+   (der Synology Container Manager funktioniert dabei wie jeder Docker-Host).
+2. Erstellen Sie den Container neu (`docker compose up -d`).
 3. Öffnen Sie die Oberfläche und legen Sie das neue Admin-Konto an.
 4. **Entfernen Sie die Variable wieder** und erstellen Sie den Container erneut.
 
