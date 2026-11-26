@@ -3,7 +3,7 @@
 services:
   tunneldeck:
     build: .
-    image: magpeek/tunneldeck-vpn:0.2.0-alpha.6
+    image: magpeek/tunneldeck-vpn:0.2.0
     container_name: tunneldeck
     network_mode: host
     cap_add:

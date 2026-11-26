@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
+First release of the 0.2 line, field-tested on a Synology DS723+ with mdex. It contains everything from 0.2.0-alpha.1 to 0.2.0-alpha.6 and the changes below.
+
 ### Changed
 
 - The remote access address on the Dashboard and the System page is a plain link; the Copy button next to it is gone.
