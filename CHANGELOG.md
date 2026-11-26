@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-26
+
 ### Added
 
 - Public IP detection: after every connect TunnelDeck-VPN asks a "what is my IP" service through the tunnel (a connection bound to the VPN IP, so it uses the tunnel's routing) which public IPv4 address the internet sees, for example the fixed mdex address behind a VPN IP like 172.21.31.170. The Dashboard shows it as "Public IP" in "Connection details" and in the connection line below the VPN IP, and the System page uses it for the remote access URL (marked as detected); a public address entered in the profile always takes precedence. On by default with `https://api.ipify.org`; the System page card "Public IP detection" switches it off or changes the service URL. `GET /api/connection` returns `publicIp`, the event stream sends `publicIp` events, `GET/PUT /api/public-ip-lookup` reads and changes the setting, and `settings.json` moves to schema version 5 (migrated automatically).
