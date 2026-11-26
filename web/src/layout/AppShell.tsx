@@ -1,5 +1,6 @@
 import {
   BrickWall,
+  CircleHelp,
   LayoutDashboard,
   List,
   LogOut,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { to: '/firewall', label: 'nav.firewall', Icon: BrickWall },
   { to: '/log', label: 'nav.log', Icon: ScrollText },
   { to: '/system', label: 'nav.system', Icon: Settings },
+  { to: '/help', label: 'nav.help', Icon: CircleHelp },
 ] as const;
 
 function navLinkClass({ isActive }: { isActive: boolean }): string | undefined {

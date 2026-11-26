@@ -1,0 +1,14 @@
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+}
+
+.link:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}

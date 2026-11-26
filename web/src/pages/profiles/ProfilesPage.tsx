@@ -11,6 +11,7 @@ import { Notice } from '../../components/Notice';
 import { Page } from '../../layout/Page';
 import { useConnection, useProfiles } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
+import { HelpLink } from '../help/HelpLink';
 import { ImportFailureNotice } from './import/ImportFailureNotice';
 import { LoadProfileFileButton } from './import/LoadProfileFileButton';
 import { ProfileDropZone } from './import/ProfileDropZone';
@@ -57,6 +58,7 @@ export function ProfilesPage() {
             >
               {t('profiles.new')}
             </Button>
+            <HelpLink section="profiles" />
           </>
         }
       >

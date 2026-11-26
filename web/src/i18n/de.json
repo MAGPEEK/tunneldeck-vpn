@@ -8,7 +8,8 @@
     "profiles": "Profile",
     "firewall": "Firewall",
     "log": "Protokoll",
-    "system": "System"
+    "system": "System",
+    "help": "Hilfe"
   },
   "pages": {
     "dashboard": {
@@ -25,6 +26,9 @@
     },
     "system": {
       "title": "System"
+    },
+    "help": {
+      "title": "Hilfe"
     }
   },
   "language": {
@@ -802,5 +806,40 @@
     "hours": "{{count}} h",
     "minutes": "{{count}} min",
     "underMinute": "unter 1 min"
+  },
+  "help": {
+    "forThisPage": "Hilfe zu dieser Seite",
+    "contents": "Inhalt",
+    "sections": {
+      "getting-started": "Erste Schritte",
+      "profiles": "Profile",
+      "connecting": "Verbinden",
+      "firewall": "Firewall",
+      "remote-access": "Fernzugriff",
+      "system-checks": "Systemprüfungen",
+      "troubleshooting": "Fehlersuche",
+      "admin-reset": "Administratorkonto zurücksetzen",
+      "about": "Über"
+    },
+    "about": {
+      "version": "Installierte Version",
+      "versionUnknown": "unbekannt",
+      "license": "Lizenz",
+      "linksRelease": "Die Links zur Dokumentation zeigen auf {{ref}}, die hier installierte Version.",
+      "linksMain": "Entwicklungsversion: Die Links zur Dokumentation zeigen auf den neuesten Stand auf GitHub (main).",
+      "releaseNotes": "Versionshinweise zu dieser Version",
+      "releases": "Versionen",
+      "repository": "Quellcode auf GitHub",
+      "reportProblem": "Problem melden",
+      "documentation": "Dokumentation auf GitHub"
+    },
+    "docs": {
+      "readme": "Überblick (README)",
+      "linux": "Einrichtung auf einem Linux-Docker-Host",
+      "synology": "Einrichtung auf Synology",
+      "migrate-from-rut240": "Umstieg von einem Teltonika RUT240",
+      "system-checks": "Prüfungen der System-Seite erklärt",
+      "reset-admin": "Administratorpasswort verloren"
+    }
   }
 }

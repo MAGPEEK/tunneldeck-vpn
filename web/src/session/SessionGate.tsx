@@ -16,18 +16,31 @@ import { SetupPage } from '../pages/setup/SetupPage';
 import { SystemPage } from '../pages/system/SystemPage';
 import { useSession } from './useSession';
 
-// The firewall editor is the largest page; it loads on first visit.
+// The firewall editor and the help texts are the largest pages; they load on first visit.
 const FirewallPage = lazy(() =>
   import('../pages/firewall/FirewallPage').then((module) => ({ default: module.FirewallPage })),
 );
+const HelpPage = lazy(() =>
+  import('../pages/help/HelpPage').then((module) => ({ default: module.HelpPage })),
+);
 
-function FirewallLoading() {
+function PageLoading({ title }: { title: string }) {
   const { t } = useTranslation();
   return (
-    <Page title={t('pages.firewall.title')}>
+    <Page title={title}>
       <p aria-busy="true">{t('session.loading')}</p>
     </Page>
   );
+}
+
+function FirewallLoading() {
+  const { t } = useTranslation();
+  return <PageLoading title={t('pages.firewall.title')} />;
+}
+
+function HelpLoading() {
+  const { t } = useTranslation();
+  return <PageLoading title={t('pages.help.title')} />;
 }
 
 function AppRoutes() {
@@ -50,6 +63,14 @@ function AppRoutes() {
           <Route path="host-access" element={<Navigate to="/firewall" replace />} />
           <Route path="log" element={<LogPage />} />
           <Route path="system" element={<SystemPage />} />
+          <Route
+            path="help"
+            element={
+              <Suspense fallback={<HelpLoading />}>
+                <HelpPage />
+              </Suspense>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

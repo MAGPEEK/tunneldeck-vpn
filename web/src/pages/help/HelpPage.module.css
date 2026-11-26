@@ -1,0 +1,90 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Keeps a section heading clear of the top edge when jumped to. */
+.anchor {
+  scroll-margin-top: var(--space-4);
+}
+
+.toc {
+  margin: 0;
+  padding-left: var(--space-5);
+  columns: 2 220px;
+}
+
+.toc li {
+  padding: var(--space-1) 0;
+  break-inside: avoid;
+}
+
+.blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.blocks p,
+.blocks ul,
+.blocks dl {
+  margin: 0;
+}
+
+.blocks ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: var(--space-5);
+}
+
+.subheading {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.terms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.terms dt {
+  font-weight: var(--font-weight-medium);
+}
+
+.terms dd {
+  margin: var(--space-1) 0 0;
+}
+
+.blocks code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.values {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-5);
+}
+
+.values dt {
+  color: var(--text-secondary);
+}
+
+.values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.secondary {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}

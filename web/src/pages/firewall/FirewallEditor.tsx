@@ -17,6 +17,7 @@ import { Notice } from '../../components/Notice';
 import { Page } from '../../layout/Page';
 import { useFirewallDevices } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
+import { HelpLink } from '../help/HelpLink';
 import styles from './FirewallPage.module.css';
 import { HostContext } from './HostContext';
 import { IntentCards } from './IntentCards';
@@ -205,6 +206,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
           <Button variant="primary" disabled={!dirty} loading={save.isPending} onClick={submit}>
             {t('firewall.save')}
           </Button>
+          <HelpLink section="firewall" />
         </>
       }
     >

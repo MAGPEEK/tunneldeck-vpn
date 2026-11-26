@@ -51,13 +51,24 @@ describe('session routing', () => {
     const names = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(names).toEqual(['Dashboard', 'Profiles', 'Firewall', 'Log', 'System']);
+    expect(names).toEqual(['Dashboard', 'Profiles', 'Firewall', 'Log', 'System', 'Help']);
 
     fireEvent.click(within(nav).getByRole('link', { name: 'Log' }));
 
     expect(screen.getByRole('heading', { level: 1, name: 'Log' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/log');
     expect(await screen.findByText('TunnelDeck started')).toBeInTheDocument();
+  });
+
+  it('lists help last and opens the help page', async () => {
+    renderApp({ 'GET /api/session': { body: SIGNED_IN } });
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+
+    fireEvent.click(within(nav).getByRole('link', { name: 'Help' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/help');
+    expect(within(nav).getByRole('link', { name: 'Help' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('redirects the old host-access path to the firewall', async () => {

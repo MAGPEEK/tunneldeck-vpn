@@ -3,6 +3,7 @@ import { Notice } from '../../components/Notice';
 import { Page } from '../../layout/Page';
 import { useFirewall } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
+import { HelpLink } from '../help/HelpLink';
 import { FirewallEditor } from './FirewallEditor';
 
 export function FirewallPage() {
@@ -12,7 +13,7 @@ export function FirewallPage() {
     return <FirewallEditor saved={firewall.data} />;
   }
   return (
-    <Page title={t('pages.firewall.title')}>
+    <Page title={t('pages.firewall.title')} actions={<HelpLink section="firewall" />}>
       <p>{t('firewall.explanation')}</p>
       {firewall.isError && (
         <Notice tone="danger" role="alert">

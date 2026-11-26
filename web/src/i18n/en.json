@@ -8,7 +8,8 @@
     "profiles": "Profiles",
     "firewall": "Firewall",
     "log": "Log",
-    "system": "System"
+    "system": "System",
+    "help": "Help"
   },
   "pages": {
     "dashboard": {
@@ -25,6 +26,9 @@
     },
     "system": {
       "title": "System"
+    },
+    "help": {
+      "title": "Help"
     }
   },
   "language": {
@@ -802,5 +806,40 @@
     "hours": "{{count}} h",
     "minutes": "{{count}} min",
     "underMinute": "under 1 min"
+  },
+  "help": {
+    "forThisPage": "Help for this page",
+    "contents": "Contents",
+    "sections": {
+      "getting-started": "Getting started",
+      "profiles": "Profiles",
+      "connecting": "Connecting",
+      "firewall": "Firewall",
+      "remote-access": "Remote access",
+      "system-checks": "System checks",
+      "troubleshooting": "Troubleshooting",
+      "admin-reset": "Admin reset",
+      "about": "About"
+    },
+    "about": {
+      "version": "Installed version",
+      "versionUnknown": "unknown",
+      "license": "License",
+      "linksRelease": "Documentation links point to {{ref}}, the version installed here.",
+      "linksMain": "Development build: documentation links point to the latest state on GitHub (main).",
+      "releaseNotes": "Release notes of this version",
+      "releases": "Releases",
+      "repository": "Source code on GitHub",
+      "reportProblem": "Report a problem",
+      "documentation": "Documentation on GitHub"
+    },
+    "docs": {
+      "readme": "Overview (README)",
+      "linux": "Linux Docker host setup",
+      "synology": "Synology setup",
+      "migrate-from-rut240": "Moving from a Teltonika RUT240",
+      "system-checks": "System page checks explained",
+      "reset-admin": "Lost admin password"
+    }
   }
 }
