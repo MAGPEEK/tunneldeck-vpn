@@ -113,3 +113,15 @@ SPEC §18: protocol chooser offers WireGuard; schema form renders it; "Generate 
 ## [x] 27. WireGuard e2e and docs — careful — after: 26
 
 SPEC §18: WireGuard server container in `test/e2e`, matrix case D-wireguard on both backends; README, docs/linux, docs/synology, filemap, CHANGELOG.
+
+## [ ] 28. IPsec driver backend — heavy — after: 27
+
+SPEC §19: strongSwan charon with kernel-libipsec in the image, VICI client in Go, `internal/vpn/ipsec` (schema with templates, validation, advisories, swanctl/strongswan.conf rendering into tmpfs, supervisor, state machine, counters), certificate/PKCS#12 upload handling, registry wiring, tests.
+
+## [ ] 29. IPsec UI — medium — after: 28
+
+SPEC §19: protocol chooser offers IPsec/IKEv2 with templates; auth method switch; certificate uploads; mode switch (virtual IP / net-to-net) with subnet lists and the static-route hint; dashboard texts; help; i18n de/en.
+
+## [ ] 30. IPsec e2e and docs — careful — after: 29
+
+SPEC §19: strongSwan gateway in test/e2e with PSK, certificate and EAP, both modes, both backends; gateway guides (LANCOM, FRITZ!Box, OPNsense) in docs (de/en), README, filemap, CHANGELOG.
