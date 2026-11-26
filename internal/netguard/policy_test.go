@@ -239,6 +239,23 @@ func TestWantedPolicyRulesExcludeTheHostsOwnAddress(t *testing.T) {
 	}
 }
 
+func TestWantedPolicyRulesForAnAnyPortForward(t *testing.T) {
+	lan := parseLANAddresses(lanListing)
+	firewall := rulesOnly(portForward(domain.ProtocolTCP, "192.168.2.5", domain.PortRange{}))
+	var got []string
+	for _, rule := range wantedPolicyRules(firewall, lan) {
+		got = append(got, strings.Join(rule.addArgs(), " "))
+	}
+	assertCalls(t, got, []string{
+		"rule add from 192.168.2.5/32 to 192.168.2.0/24 lookup main priority 7100",
+		"rule add from 192.168.2.5/32 to 0.0.0.0/0 ipproto 6 lookup 7194 priority 7191",
+	})
+	listed := listedRule{priority: replyPriority, tokens: strings.Fields("from 192.168.2.5 ipproto tcp lookup 7194")}
+	if rule, ok := listed.parse(); !ok || rule != wantedPolicyRules(firewall, lan)[1] {
+		t.Errorf("listed rule %+v (ok %v) does not match the wanted reply rule", rule, ok)
+	}
+}
+
 func TestParsePolicyListing(t *testing.T) {
 	listing := parsePolicyListing("0:\tfrom all lookup local\n" +
 		"7100:\tfrom all to 192.168.2.0/24 lookup 254\n" +

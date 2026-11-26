@@ -42,6 +42,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 				"-S TUNNELDECK-INPUT",
 				"-A TUNNELDECK-INPUT -j DROP",
 				"-S INPUT",
+				"-A TUNNELDECK-INPUT "+uiPortDrop,
 				"-A TUNNELDECK-INPUT "+established,
 				"-A TUNNELDECK-INPUT -j DROP",
 				"-D TUNNELDECK-INPUT 1",
@@ -80,6 +81,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 				"-C INPUT -i tdvpn0 -j TUNNELDECK-INPUT",
 				"-I INPUT 1 -i tdvpn0 -j TUNNELDECK-INPUT",
 				"-D INPUT -i tdvpn0 -j DROP",
+				"-A TUNNELDECK-INPUT "+uiPortDrop,
 				"-A TUNNELDECK-INPUT "+established,
 				"-A TUNNELDECK-INPUT -j DROP",
 				"-D TUNNELDECK-INPUT 1",
@@ -207,6 +209,49 @@ func TestRuleShapes(t *testing.T) {
 				"! -o tdvpn0 -d 192.168.2.3/32 -p udp --dport 22 -m conntrack --ctstate DNAT -j MASQUERADE"},
 		},
 		{
+			name: "inbound host rules on any port: tcp+udp from a source, drop udp",
+			firewall: rulesOnly(
+				changed(hostRule(domain.ProtocolTCPUDP, domain.PortRange{}), func(r *domain.FirewallRule) { r.Source = "10.8.0.0/24" }),
+				changed(hostRule(domain.ProtocolUDP, domain.PortRange{}), func(r *domain.FirewallRule) { r.Action = domain.ActionDrop }),
+			),
+			input: inputWith(
+				"-p tcp -s 10.8.0.0/24 -j ACCEPT",
+				"-p udp -s 10.8.0.0/24 -j ACCEPT",
+				"-p udp -j DROP",
+			),
+			forward: testForward,
+		},
+		{
+			name:     "forward on any port keeps the web UI port for the host",
+			firewall: rulesOnly(portForward(domain.ProtocolTCPUDP, "192.168.2.5", domain.PortRange{})),
+			input:    inputWith(),
+			forward: forwardWith(
+				"-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j ACCEPT",
+				"-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j ACCEPT"),
+			prerouting: []string{
+				"-p tcp --dport 8080 -j RETURN",
+				"-p tcp -j DNAT --to-destination 192.168.2.5",
+				"-p udp -j DNAT --to-destination 192.168.2.5"},
+			postrouting: []string{
+				"! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j MASQUERADE",
+				"! -o tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j MASQUERADE"},
+		},
+		{
+			name:       "udp forward on any port needs no exclusions",
+			firewall:   rulesOnly(changed(portForward(domain.ProtocolUDP, "192.168.2.5", domain.PortRange{}), func(r *domain.FirewallRule) { r.KeepSourceAddress = true })),
+			input:      inputWith(),
+			forward:    forwardWith("-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j ACCEPT"),
+			prerouting: []string{"-p udp -j DNAT --to-destination 192.168.2.5"},
+		},
+		{
+			name:         "outbound udp on any port",
+			firewall:     rulesOnly(outboundRule(domain.ProtocolUDP, "192.168.2.0/24", "10.0.0.0/8")),
+			forwardJumps: []string{officeJump},
+			input:        inputWith(),
+			forward:      forwardWith("-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -p udp -j ACCEPT"),
+			postrouting:  []string{"-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -j MASQUERADE"},
+		},
+		{
 			name: "ESP and GRE forwarding",
 			firewall: rulesOnly(
 				changed(portForward(domain.ProtocolESP, "192.168.2.2", domain.PortRange{}), func(r *domain.FirewallRule) { r.KeepSourceAddress = true }),
@@ -248,7 +293,7 @@ func TestRuleShapes(t *testing.T) {
 				hostRule(domain.ProtocolTCP, domain.SinglePort(22)),
 			}},
 			input: []string{
-				invalidDrop, established,
+				uiPortDrop, invalidDrop, established,
 				"-p tcp --syn -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 --hashlimit-mode srcip --hashlimit-name td-syn-in -j DROP",
 				"-p icmp --icmp-type echo-request -m hashlimit --hashlimit-above 5/sec --hashlimit-burst 10 --hashlimit-name td-ping-in -j DROP",
 				"-p tcp --dport 22 -j ACCEPT",
@@ -419,7 +464,9 @@ func TestConntrackFallsBackToStateMatch(t *testing.T) {
 	}
 	calls := f.takeCalls()
 	afterListings := len(detectLegacy) + 3
-	assertCalls(t, calls[afterListings:afterListings+3], []string{conntrackRule, stateRule, legacy + "-A TUNNELDECK-INPUT -j DROP"})
+	assertCalls(t, calls[afterListings:afterListings+4], []string{
+		legacy + "-A TUNNELDECK-INPUT " + uiPortDrop, conntrackRule, stateRule, legacy + "-A TUNNELDECK-INPUT -j DROP",
+	})
 	for _, want := range []string{
 		legacy + "-A TUNNELDECK-FORWARD -i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -j ACCEPT",
 		natPrefix + "-A TUNNELDECK-POSTROUTING ! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -j MASQUERADE",

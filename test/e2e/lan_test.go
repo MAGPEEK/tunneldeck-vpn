@@ -85,6 +85,7 @@ func runLANScenario(t *testing.T, s stack, host lanHost) {
 	t.Run("port-forward-masquerade", sc.checkPortForwardMasquerade)
 	t.Run("port-forward-keep-source", sc.checkPortForwardKeepSource)
 	t.Run("port-forward-source-restriction", sc.checkPortForwardSourceRestriction)
+	t.Run("port-forward-any-port", sc.checkAnyPortForward)
 	t.Run("outbound-policy-routing", sc.checkOutboundRouting)
 	t.Run("ipsec-nat-t", sc.checkIPsec)
 	t.Run("esp-forwarding", sc.checkESPForwarding)
@@ -126,7 +127,7 @@ func (sc *lanScenario) checkLANSelfChecks(t *testing.T) {
 }
 
 // checkMigration: the container started with the version 1 settings.json
-// of testdata/. Its two host-access rules are inbound rules to this device
+// of testdata/. Its two host-access rules are inbound rules to the host
 // with generated names; the file itself is rewritten as version 2 only by
 // the first change, here saving the migrated rules unchanged.
 func (sc *lanScenario) checkMigration(t *testing.T) {
@@ -233,22 +234,50 @@ func (sc *lanScenario) checkPortForwardSourceRestriction(t *testing.T) {
 	}
 }
 
-// expectWebClient fetches lan-web's client address through the tunnel.
+// checkAnyPortForward: a TCP forward without a port sends public port 80
+// to lan-web's port 80, while the web UI port stays with TunnelDeck and
+// closed to the tunnel, although lan-web listens on it too.
+func (sc *lanScenario) checkAnyPortForward(t *testing.T) {
+	listener := "0.0.0.0:" + strconv.Itoa(uiPort)
+	sc.stack.exec(t, lanWebService, "httpd", "-p", listener, "-h", "/www")
+	t.Cleanup(func() { _, _ = sc.stack.tryExec(lanWebService, "pkill", "-f", "httpd -p "+listener) })
+	forward := firewallRule{
+		Name: "Everything to lan-web", Direction: "inbound", Action: "accept", Protocol: "tcp",
+		Destination: firewallDestination{Kind: "address", CIDR: lanWebAddress.String()}, Enabled: true,
+	}
+	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{forward}), "forward every TCP port to lan-web")
+	sc.expectWebClientOn(t, lanWebPort, sc.host.lanAddress.String())
+	sc.expectReachable(t, sc.vpnIP, uiPort, false)
+}
+
+// expectWebClient fetches lan-web's client address through the public
+// HTTP port of the tunnel address.
 func (sc *lanScenario) expectWebClient(t *testing.T, want string) {
 	t.Helper()
-	body, err := sc.fetchWebClient()
+	sc.expectWebClientOn(t, publicHTTPPort, want)
+}
+
+// expectWebClientOn fetches lan-web's client address through port of the
+// tunnel address.
+func (sc *lanScenario) expectWebClientOn(t *testing.T, port int, want string) {
+	t.Helper()
+	body, err := sc.fetchWebClientOn(port)
 	if err != nil {
-		t.Fatalf("GET through %s:%d from the probe failed, want lan-web's answer: %v\n%s", sc.vpnIP, publicHTTPPort, err, body)
+		t.Fatalf("GET through %s:%d from the probe failed, want lan-web's answer: %v\n%s", sc.vpnIP, port, err, body)
 	}
 	if got := strings.TrimSpace(body); got != want {
 		t.Errorf("lan-web saw client %q, want %q", got, want)
 	}
 }
 
-// fetchWebClient asks lan-web, through the public port of the tunnel
-// address, which client address it sees. The probe runs on the VPN side.
-func (sc *lanScenario) fetchWebClient() (string, error) {
-	url := fmt.Sprintf("http://%s:%d/cgi-bin/source", sc.vpnIP, publicHTTPPort)
+// fetchWebClient asks lan-web, through the public HTTP port of the tunnel
+// address, which client address it sees.
+func (sc *lanScenario) fetchWebClient() (string, error) { return sc.fetchWebClientOn(publicHTTPPort) }
+
+// fetchWebClientOn asks lan-web, through port of the tunnel address, which
+// client address it sees. The probe runs on the VPN side.
+func (sc *lanScenario) fetchWebClientOn(port int) (string, error) {
+	url := fmt.Sprintf("http://%s:%d/cgi-bin/source", sc.vpnIP, port)
 	return sc.stack.tryExec(sc.variant.service, "curl", "--silent", "--show-error", "--fail",
 		"--max-time", "5", "--interface", probeSource, url)
 }

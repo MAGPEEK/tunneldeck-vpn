@@ -46,6 +46,33 @@ func TestSetRemoteAccessPortReinstallsAnInstalledFirewall(t *testing.T) {
 	assertCalls(t, f.takeCalls(), reinstallCalls(state, testInput, testForward, nil, nil))
 }
 
+func TestAnyPortForwardKeepsTheRemoteAccessPortForTheHost(t *testing.T) {
+	f := newFakeRunner()
+	g := newLegacyGuard(f)
+	if err := g.SetRemoteAccessPort(context.Background(), remotePort); err != nil {
+		t.Fatalf("SetRemoteAccessPort: %v", err)
+	}
+	forward := rulesOnly(portForward(domain.ProtocolTCP, "192.168.2.5", domain.PortRange{}))
+	state := installedState{input: 1, forward: 1}
+	scriptState(f, state)
+	if err := g.InstallFirewall(context.Background(), forward, uiPort); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	input := inputWith(remoteAccept)
+	accept := forwardWith("-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j ACCEPT")
+	dnat := "-p tcp -j DNAT --to-destination 192.168.2.5"
+	masquerade := []string{"! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j MASQUERADE"}
+	assertCalls(t, f.takeCalls(), slices.Concat(detectLegacy, reinstallCalls(state, input, accept,
+		[]string{"-p tcp --dport 8080 -j RETURN", "-p tcp --dport 8443 -j RETURN", dnat}, masquerade)))
+
+	scriptState(f, state)
+	if err := g.SetRemoteAccessPort(context.Background(), 0); err != nil {
+		t.Fatalf("close port: %v", err)
+	}
+	assertCalls(t, f.takeCalls(), reinstallCalls(state, inputWith(), accept,
+		[]string{"-p tcp --dport 8080 -j RETURN", dnat}, masquerade))
+}
+
 func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {
 	f := newFakeRunner()
 	g := newLegacyGuard(f)

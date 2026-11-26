@@ -24,11 +24,23 @@ export function problem(
   status: number,
   code: string,
   detail: string,
-  options: { fields?: Record<string, string>; headers?: Record<string, string> } = {},
+  options: {
+    fields?: Record<string, string>;
+    fieldCodes?: Record<string, { code: string; params?: Record<string, string> }>;
+    headers?: Record<string, string>;
+  } = {},
 ): MockResponse {
   return {
     status,
-    body: { type: 'about:blank', title: 'Error', status, detail, code, fields: options.fields },
+    body: {
+      type: 'about:blank',
+      title: 'Error',
+      status,
+      detail,
+      code,
+      fields: options.fields,
+      fieldCodes: options.fieldCodes,
+    },
     headers: { 'Content-Type': 'application/problem+json', ...options.headers },
   };
 }

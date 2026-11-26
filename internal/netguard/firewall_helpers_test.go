@@ -22,7 +22,7 @@ var testFirewall = domain.Firewall{Rules: []domain.FirewallRule{
 	hostAccess("web", domain.ProtocolTCP, 80, "", false),
 }}
 
-// hostAccess returns an accepting inbound rule to this device on one port,
+// hostAccess returns an accepting inbound rule to the host on one port,
 // shaped like a migrated stage-1 host-access rule.
 func hostAccess(id string, proto domain.FirewallProtocol, port int, source string, enabled bool) domain.FirewallRule {
 	return domain.FirewallRule{
@@ -73,11 +73,13 @@ const (
 	invalidDrop    = "-m conntrack --ctstate INVALID -j DROP"
 	killSwitchDrop = "! -i tdvpn0 ! -o tdvpn0 -j DROP"
 	dropAll        = "-j DROP"
+	// uiPortDrop keeps the web UI port (uiPort) closed to the tunnel.
+	uiPortDrop = "-p tcp --dport 8080 -j DROP"
 )
 
 // inputWith is TUNNELDECK-INPUT with every protection off.
 func inputWith(rules ...string) []string {
-	return slices.Concat([]string{established}, rules, []string{dropAll})
+	return slices.Concat([]string{uiPortDrop, established}, rules, []string{dropAll})
 }
 
 // forwardWith is TUNNELDECK-FORWARD with every protection off and no LAN

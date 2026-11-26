@@ -23,8 +23,33 @@ var (
 // ValidationError carries one message per invalid field so the API can
 // return them as "fields". Messages describe the rule that was broken and
 // never echo the submitted value, so secrets cannot leak through them.
+// Issues holds the machine-readable form of the fields that have one, so
+// a client can show the message in its own language.
 type ValidationError struct {
 	Fields map[string]string
+	Issues map[string]FieldIssue
+}
+
+// FieldIssue is a stable code for why a field is invalid plus the values a
+// translated message needs, for example {"max": "64"}. Codes are
+// snake_case and never change their meaning; params, like messages, never
+// echo submitted values.
+type FieldIssue struct {
+	Code   string            `json:"code"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// Issue returns the FieldIssue with code and params given as name, value
+// pairs.
+func Issue(code string, params ...string) FieldIssue {
+	issue := FieldIssue{Code: code}
+	if len(params) > 0 {
+		issue.Params = make(map[string]string, len(params)/2)
+		for i := 0; i+1 < len(params); i += 2 {
+			issue.Params[params[i]] = params[i+1]
+		}
+	}
+	return issue
 }
 
 // NewValidationError returns a ValidationError with a single field message.
@@ -34,23 +59,55 @@ func NewValidationError(field, message string) *ValidationError {
 	return v
 }
 
-// Add records a message for field. The first message for a field wins.
+// NewFieldError returns a ValidationError with a single coded field message.
+func NewFieldError(field string, issue FieldIssue, message string) *ValidationError {
+	v := &ValidationError{}
+	v.AddIssue(field, issue, message)
+	return v
+}
+
+// Add records a message without a code for field. The first message for
+// a field wins.
 func (v *ValidationError) Add(field, message string) {
+	v.record(field, message, nil)
+}
+
+// AddIssue records a message for field together with its issue. The first
+// message for a field wins, with its issue or lack of one.
+func (v *ValidationError) AddIssue(field string, issue FieldIssue, message string) {
+	v.record(field, message, &issue)
+}
+
+func (v *ValidationError) record(field, message string, issue *FieldIssue) {
+	if _, exists := v.Fields[field]; exists {
+		return
+	}
 	if v.Fields == nil {
 		v.Fields = make(map[string]string)
 	}
-	if _, exists := v.Fields[field]; !exists {
-		v.Fields[field] = message
+	v.Fields[field] = message
+	if issue == nil {
+		return
 	}
+	if v.Issues == nil {
+		v.Issues = make(map[string]FieldIssue)
+	}
+	v.Issues[field] = *issue
 }
 
-// Merge adds all fields of other, each prefixed with prefix.
+// Merge adds all fields of other with their issues, each prefixed with
+// prefix.
 func (v *ValidationError) Merge(prefix string, other *ValidationError) {
 	if other == nil {
 		return
 	}
 	for field, message := range other.Fields {
-		v.Add(prefix+field, message)
+		issue, coded := other.Issues[field]
+		if coded {
+			v.AddIssue(prefix+field, issue, message)
+		} else {
+			v.Add(prefix+field, message)
+		}
 	}
 }
 

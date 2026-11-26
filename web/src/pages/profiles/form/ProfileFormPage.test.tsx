@@ -159,6 +159,33 @@ describe('new profile', () => {
     expect(screen.getByLabelText('Time')).toHaveAccessibleDescription(/HH:MM/);
     expect(screen.getByRole('alert')).toHaveTextContent('protocol: is not supported');
   });
+
+  it('translates coded server validation errors', async () => {
+    renderApp(
+      routes({
+        'POST /api/profiles': problem(422, 'validation_failed', 'invalid', {
+          fields: {
+            name: 'must be between 1 and 64 characters',
+            'settings.remoteHost': 'must be a host name or an IP address',
+          },
+          fieldCodes: {
+            name: { code: 'length_between', params: { min: '1', max: '64' } },
+            'settings.remoteHost': { code: 'host_invalid' },
+          },
+        }),
+      }),
+      '/profiles/new',
+    );
+    await screen.findByLabelText('Server address');
+    submitForm();
+
+    expect(await screen.findByLabelText('Name')).toHaveAccessibleDescription(
+      'Between 1 and 64 characters.',
+    );
+    expect(screen.getByLabelText('Server address')).toHaveAccessibleDescription(
+      'Enter a host name or an IP address.',
+    );
+  });
 });
 
 describe('edit profile', () => {

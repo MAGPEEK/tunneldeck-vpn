@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '../../api/client';
+import { localizedFieldErrors } from '../../api/fieldErrors';
 import { ipsecTemplate, type FirewallRule } from '../../api/firewall';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
@@ -23,7 +24,7 @@ export function IpsecTemplateForm({ onInsert, onCancel }: IpsecTemplateFormProps
   const [deviceAddress, setDeviceAddress] = useState('');
   const [peers, setPeers] = useState<string[]>([]);
   const create = useMutation({ mutationFn: ipsecTemplate, onSuccess: onInsert });
-  const fields = isApiError(create.error) ? create.error.fields : {};
+  const fields = isApiError(create.error) ? localizedFieldErrors(t, create.error) : {};
   const peerErrors = Object.entries(fields)
     .filter(([key]) => key.startsWith('peers['))
     .map(([, message]) => message);

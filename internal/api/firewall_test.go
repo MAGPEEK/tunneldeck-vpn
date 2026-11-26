@@ -19,6 +19,7 @@ func firewallBody(rules ...string) string {
 const (
 	sshRule      = `{"name":"SSH","direction":"inbound","protocol":"tcp","destination":{"kind":"host"},"destinationPort":{"from":22},"enabled":true}`
 	ikeForward   = `{"name":"IKE","direction":"inbound","protocol":"udp","destination":{"kind":"address","cidr":"192.168.2.2"},"destinationPort":{"from":500},"keepSourceAddress":true,"enabled":true}`
+	anyPortWeb   = `{"name":"Web","direction":"inbound","protocol":"tcp","destination":{"kind":"address","cidr":"192.168.2.3"},"enabled":true}`
 	lancomOutput = `{"name":"LANCOM out","direction":"outbound","protocol":"any","source":"192.168.2.2","destination":{"kind":"address","cidr":"0.0.0.0/0"},"enabled":true}`
 )
 
@@ -119,6 +120,16 @@ func TestPutFirewallRejects(t *testing.T) {
 			},
 			wantFields: []string{"rules[0].destinationPort"},
 		},
+		{
+			name:       "any-port forward with a public port",
+			body:       firewallBody(strings.Replace(anyPortWeb, `"enabled"`, `"publicPort":{"from":80},"enabled"`, 1)),
+			wantFields: []string{"rules[0].publicPort"},
+		},
+		{
+			name:       "any-port forward conflicts with another forward",
+			body:       firewallBody(anyPortWeb, strings.Replace(strings.Replace(ikeForward, "udp", "tcp", 1), "192.168.2.2", "192.168.2.4", 1)),
+			wantFields: []string{"rules[0].destinationPort", "rules[1].destinationPort"},
+		},
 		{name: "destination outside the LAN", body: firewallBody(strings.Replace(ikeForward, "192.168.2.2", "10.0.0.2", 1)), wantFields: []string{"rules[0].destination"}},
 		{
 			name: "LAN not detected", body: firewallBody(ikeForward),
@@ -140,14 +151,38 @@ func TestPutFirewallRejects(t *testing.T) {
 			}
 			p := assertProblem(t, env.do(t, http.MethodPut, "/api/firewall", tt.body), status, code)
 			for _, field := range tt.wantFields {
-				if p.Fields[field] == "" {
-					t.Errorf("fields = %v, want %s", p.Fields, field)
+				if p.Fields[field] == "" || p.FieldCodes[field].Code == "" {
+					t.Errorf("fields = %v, codes = %v, want %s with a code", p.Fields, p.FieldCodes, field)
 				}
 			}
 			if len(env.firewall.installs()) != 0 || len(env.firewallStore.Firewall().Rules) != 0 {
 				t.Error("an invalid request was stored or applied")
 			}
 		})
+	}
+}
+
+func TestPutFirewallAcceptsAnyPortRules(t *testing.T) {
+	env := newTestEnv(t)
+	anyPortHost := strings.Replace(strings.Replace(sshRule, `"destinationPort":{"from":22},`, ``, 1), `"tcp"`, `"udp"`, 1)
+	rec := env.do(t, http.MethodPut, "/api/firewall", firewallBody(anyPortHost, anyPortWeb))
+	assertStatus(t, rec, http.StatusOK)
+	got := decode[firewallResponse](t, rec)
+	if len(got.Rules) != 2 || !got.Rules[0].DestinationPort.IsZero() || !got.Rules[1].DestinationPort.IsZero() {
+		t.Fatalf("rules = %+v", got.Rules)
+	}
+	if installs := env.firewall.installs(); len(installs) != 1 {
+		t.Fatalf("installs = %+v", installs)
+	}
+}
+
+func TestValidationProblemCarriesFieldCodes(t *testing.T) {
+	env := newTestEnv(t)
+	rec := env.do(t, http.MethodPut, "/api/firewall", firewallBody(strings.Replace(sshRule, `{"from":22}`, `{"from":1000,"to":3000}`, 1)))
+	assertStatus(t, rec, http.StatusUnprocessableEntity)
+	want := `"fieldCodes":{"rules[0].destinationPort":{"code":"port_range_too_long","params":{"max":"1000"}}}`
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("body = %s, want it to contain %s", rec.Body.String(), want)
 	}
 }
 

@@ -98,9 +98,9 @@ func (s Settings) validate() *ValidationError {
 	for key, value := range s {
 		switch {
 		case key == "":
-			v.Add("settings", "keys must not be empty")
+			v.AddIssue("settings", Issue("keys_empty"), "keys must not be empty")
 		case !json.Valid(value):
-			v.Add("settings."+key, "is not valid JSON")
+			v.AddIssue("settings."+key, Issue("invalid_json"), "is not valid JSON")
 		}
 	}
 	return v

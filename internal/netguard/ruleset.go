@@ -95,10 +95,17 @@ func (rs ruleset) chainContent() []struct {
 	return out
 }
 
+// hostPorts are the TCP ports the host keeps for itself: the web UI port,
+// never reachable from the tunnel, and the remote-access port, 0 while
+// remote access is off.
+type hostPorts struct {
+	ui, remoteAccess int
+}
+
 // buildRuleset renders the chains for firewall (SPEC §16.1, §16.1a). Only
-// enabled rules install anything, in list order. remoteAccessPort is 0
-// while remote access is off; lan are the host's LAN subnets.
-func buildRuleset(firewall domain.Firewall, remoteAccessPort int, lan []netip.Prefix) ruleset {
+// enabled rules install anything, in list order. lan are the host's LAN
+// subnets.
+func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []netip.Prefix) ruleset {
 	var enabled []parsedRule
 	for _, rule := range firewall.Rules {
 		if rule.Enabled {
@@ -106,9 +113,9 @@ func buildRuleset(firewall domain.Firewall, remoteAccessPort int, lan []netip.Pr
 		}
 	}
 	return ruleset{
-		input:       inputContent(firewall.FirewallSettings, enabled, remoteAccessPort),
+		input:       inputContent(firewall.FirewallSettings, enabled, reserved),
 		forward:     forwardContent(firewall.FirewallSettings, enabled, lan),
-		prerouting:  preroutingContent(enabled),
+		prerouting:  preroutingContent(enabled, reserved),
 		postrouting: postroutingContent(enabled),
 		killSwitch:  killSwitchJumps(enabled),
 	}
@@ -118,7 +125,7 @@ func buildRuleset(firewall domain.Firewall, remoteAccessPort int, lan []netip.Pr
 type parsedRule struct {
 	domain.FirewallRule
 	source      netip.Prefix // zero for "any"
-	destination netip.Prefix // zero for this device
+	destination netip.Prefix // zero for the host
 }
 
 func parseRule(rule domain.FirewallRule) parsedRule {
@@ -140,8 +147,13 @@ func (r parsedRule) isOutboundAccept() bool {
 	return r.Direction == domain.DirectionOutbound && r.EffectiveAction() == domain.ActionAccept
 }
 
-func inputContent(settings domain.FirewallSettings, rules []parsedRule, remoteAccessPort int) [][]string {
+// inputContent drops TCP to the web UI port before anything else, so no
+// rule, not even one for every port, can open it to the tunnel.
+func inputContent(settings domain.FirewallSettings, rules []parsedRule, reserved hostPorts) [][]string {
 	var out [][]string
+	if reserved.ui != 0 {
+		out = append(out, tcpPortRule(reserved.ui, "DROP"))
+	}
 	if settings.DropInvalid {
 		out = append(out, ctRule(ctInvalid, "DROP"))
 	}
@@ -157,10 +169,14 @@ func inputContent(settings domain.FirewallSettings, rules []parsedRule, remoteAc
 			out = append(out, append(match, actionTarget(rule.EffectiveAction(), proto)...))
 		}
 	}
-	if remoteAccessPort != 0 {
-		out = append(out, []string{"-p", "tcp", "--dport", strconv.Itoa(remoteAccessPort), "-j", "ACCEPT"})
+	if reserved.remoteAccess != 0 {
+		out = append(out, tcpPortRule(reserved.remoteAccess, "ACCEPT"))
 	}
 	return append(out, []string{"-j", "DROP"})
+}
+
+func tcpPortRule(port int, target string) []string {
+	return []string{"-p", "tcp", "--dport", strconv.Itoa(port), "-j", target}
 }
 
 func forwardContent(settings domain.FirewallSettings, rules []parsedRule, lan []netip.Prefix) [][]string {
@@ -244,8 +260,18 @@ func outboundRules(rule parsedRule) [][]string {
 	return out
 }
 
-func preroutingContent(rules []parsedRule) [][]string {
+// preroutingContent translates port forwards. While a forward covers every
+// TCP port, the host's own ports return first, so they are never
+// forwarded.
+func preroutingContent(rules []parsedRule, reserved hostPorts) [][]string {
 	var out [][]string
+	if forwardsEveryTCPPort(rules) {
+		for _, port := range []int{reserved.ui, reserved.remoteAccess} {
+			if port != 0 {
+				out = append(out, tcpPortRule(port, "RETURN"))
+			}
+		}
+	}
 	for _, rule := range rules {
 		if !rule.IsPortForward() {
 			continue
@@ -257,6 +283,13 @@ func preroutingContent(rules []parsedRule) [][]string {
 		}
 	}
 	return out
+}
+
+func forwardsEveryTCPPort(rules []parsedRule) bool {
+	return slices.ContainsFunc(rules, func(rule parsedRule) bool {
+		return rule.IsPortForward() && rule.DestinationPort.IsZero() &&
+			slices.Contains(rule.Protocol.Protocols(), domain.ProtocolTCP)
+	})
 }
 
 // dnatTarget is the --to-destination of a port forward: the address alone

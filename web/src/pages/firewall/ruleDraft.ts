@@ -140,7 +140,8 @@ function port(text: string): PortRange | undefined {
 /**
  * The rule as the API takes it. Fields that do not apply to the protocol,
  * direction or destination are dropped, so switching back and forth in the
- * editor loses nothing until the rule is saved.
+ * editor loses nothing until the rule is saved. An empty port means any
+ * port; a forward on any port has no public port.
  */
 export function toRule(draft: RuleDraft): FirewallRule {
   const forward = isPortForward(draft);
@@ -165,8 +166,7 @@ export function toRule(draft: RuleDraft): FirewallRule {
   if (hasPorts(draft.protocol)) {
     const sourcePort = port(draft.sourcePort);
     const destinationPort = port(draft.destinationPort);
-    const publicPort =
-      draft.direction === 'inbound' && !toHost ? port(draft.publicPort) : undefined;
+    const publicPort = forward && destinationPort ? port(draft.publicPort) : undefined;
     if (sourcePort) rule.sourcePort = sourcePort;
     if (destinationPort) rule.destinationPort = destinationPort;
     if (publicPort) rule.publicPort = publicPort;

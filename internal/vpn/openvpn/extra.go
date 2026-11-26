@@ -2,7 +2,10 @@ package openvpn
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"tunneldeck/internal/domain"
 )
 
 // lineStatus is the outcome of reading one config line.
@@ -93,6 +96,15 @@ func classifyKept(d directive) (verdict, lineStatus) {
 		return lineTooLong, lineRemoved
 	}
 	return verdict{}, lineKept
+}
+
+// rejectionIssue names the rejected lines for a translated message.
+func rejectionIssue(rejected []Warning) domain.FieldIssue {
+	lines := make([]string, len(rejected))
+	for i, w := range rejected {
+		lines[i] = strconv.Itoa(w.Line)
+	}
+	return domain.Issue("openvpn_extra_options_rejected", "lines", strings.Join(lines, ", "))
 }
 
 // describeRejections joins rejected lines into one validation message. Only

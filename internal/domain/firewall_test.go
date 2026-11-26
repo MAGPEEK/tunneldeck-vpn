@@ -2,7 +2,9 @@ package domain
 
 import (
 	"encoding/json"
+	"errors"
 	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -64,6 +66,13 @@ func TestFirewallRuleValidate(t *testing.T) {
 		{"host reject tcp without port", with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) {
 			r.DestinationPort, r.Action = PortRange{}, ActionReject
 		}), nil},
+		{"host accept tcp on any port", with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }), nil},
+		{"host accept tcp+udp on any port from a source", with(hostIn(ProtocolTCPUDP, 0), func(r *FirewallRule) {
+			r.DestinationPort, r.Source = PortRange{}, "10.8.0.0/24"
+		}), nil},
+		{"host any destination port, fixed source port", with(hostIn(ProtocolUDP, 0), func(r *FirewallRule) {
+			r.DestinationPort, r.SourcePort = PortRange{}, SinglePort(500)
+		}), nil},
 		{"host with source port", with(hostIn(ProtocolUDP, 500), func(r *FirewallRule) { r.SourcePort = SinglePort(500) }), nil},
 		{"forward udp", forward(ProtocolUDP, "192.168.2.2", 500), nil},
 		{"forward bare /32", forward(ProtocolUDP, "192.168.2.2/32", 500), nil},
@@ -73,12 +82,18 @@ func TestFirewallRuleValidate(t *testing.T) {
 			r.KeepSourceAddress = true
 		}), nil},
 		{"forward esp", forward(ProtocolESP, "192.168.2.2", 0), nil},
+		{"forward tcp on any port", forward(ProtocolTCP, "192.168.2.2", 0), nil},
+		{"forward tcp+udp on any port", forward(ProtocolTCPUDP, "192.168.2.2", 0), nil},
 		{"forward gre", forward(ProtocolGRE, "192.168.2.2", 0), nil},
 		{"outbound everything", outbound("192.168.2.2", "0.0.0.0/0"), nil},
 		{"outbound tcp port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
 			r.Protocol, r.DestinationPort = ProtocolTCP, SinglePort(443)
 		}), nil},
 		{"outbound drop", with(outbound("192.168.2.0/24", "10.1.0.0/16"), func(r *FirewallRule) { r.Action = ActionDrop }), nil},
+		{"outbound udp on any port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) { r.Protocol = ProtocolUDP }), nil},
+		{"outbound reject tcp on any port", with(outbound("192.168.2.0/24", "10.0.0.0/8"), func(r *FirewallRule) {
+			r.Protocol, r.Action = ProtocolTCP, ActionReject
+		}), nil},
 
 		{"no name", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Name = "  " }), []string{"name"}},
 		{"long name", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.Name = strings.Repeat("ä", 65) }), []string{"name"}},
@@ -111,7 +126,12 @@ func TestFirewallRuleValidate(t *testing.T) {
 		{"source port on icmp", with(hostIn(ProtocolICMP, 0), func(r *FirewallRule) {
 			r.DestinationPort, r.SourcePort = PortRange{}, SinglePort(1)
 		}), []string{"sourcePort"}},
-		{"accept without port", with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }), []string{"destinationPort"}},
+		{"any-port forward with a public port", with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) {
+			r.PublicPort = SinglePort(80)
+		}), []string{"publicPort"}},
+		{"any-port host rule with a public port", with(hostIn(ProtocolUDP, 0), func(r *FirewallRule) {
+			r.DestinationPort, r.PublicPort = PortRange{}, SinglePort(53)
+		}), []string{"publicPort"}},
 		{"port zero range", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.DestinationPort = PortRange{From: 0, To: 5} }), []string{"destinationPort"}},
 		{"port too high", hostIn(ProtocolTCP, 65536), []string{"destinationPort"}},
 		{"reversed range", with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.DestinationPort = PortRange{From: 30, To: 20} }), []string{"destinationPort"}},
@@ -128,7 +148,9 @@ func TestFirewallRuleValidate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertFields(t, tt.rule.Validate(), tt.wantFields)
+			err := tt.rule.Validate()
+			assertFields(t, err, tt.wantFields)
+			assertCoded(t, err)
 		})
 	}
 }
@@ -176,11 +198,39 @@ func TestValidateFirewallRules(t *testing.T) {
 		})}, []string{"rules[1].publicPort"}},
 		{"second esp forward", []FirewallRule{forward(ProtocolESP, "192.168.2.2", 0), forward(ProtocolESP, "192.168.2.3", 0)},
 			[]string{"rules[1].protocol"}},
-		{"invalid rule", []FirewallRule{hostIn(ProtocolTCP, 22), hostIn(ProtocolTCP, 0)}, []string{"rules[1].destinationPort"}},
+		{"invalid rule", []FirewallRule{hostIn(ProtocolTCP, 22), hostIn(ProtocolTCP, 70000)}, []string{"rules[1].destinationPort"}},
+		{"any-port forward clashes with a later forward", []FirewallRule{
+			forward(ProtocolTCP, "192.168.2.2", 0), forward(ProtocolTCP, "192.168.2.3", 443),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"any-port forward clashes with an earlier forward", []FirewallRule{
+			with(forward(ProtocolUDP, "192.168.2.3", 9500), func(r *FirewallRule) { r.PublicPort = SinglePort(500) }),
+			forward(ProtocolTCPUDP, "192.168.2.2", 0),
+		}, []string{"rules[0].publicPort", "rules[1].destinationPort"}},
+		{"any-port forward clashes with a host rule", []FirewallRule{
+			hostIn(ProtocolTCP, 22), forward(ProtocolTCP, "192.168.2.2", 0),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"two any-port forwards to different devices", []FirewallRule{
+			forward(ProtocolTCP, "192.168.2.2", 0), forward(ProtocolTCP, "192.168.2.3", 0),
+		}, []string{"rules[0].destinationPort", "rules[1].destinationPort"}},
+		{"any-port forward to the same device from two sources", []FirewallRule{
+			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.1" }),
+			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Source = "198.51.100.2" }),
+		}, nil},
+		{"any-port forward of another protocol", []FirewallRule{forward(ProtocolTCP, "192.168.2.2", 0), ike}, nil},
+		{"disabled any-port forward", []FirewallRule{
+			with(forward(ProtocolTCP, "192.168.2.2", 0), func(r *FirewallRule) { r.Enabled = false }),
+			forward(ProtocolTCP, "192.168.2.3", 443),
+		}, nil},
+		{"any-port host rule beside a forward", []FirewallRule{
+			with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} }),
+			forward(ProtocolTCP, "192.168.2.3", 443),
+		}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertFields(t, ValidateFirewallRules(tt.rules), tt.wantFields)
+			err := ValidateFirewallRules(tt.rules)
+			assertFields(t, err, tt.wantFields)
+			assertCoded(t, err)
 		})
 	}
 }
@@ -204,13 +254,17 @@ func TestCheckReservedPorts(t *testing.T) {
 		{"remote access port", []FirewallRule{hostIn(ProtocolTCPUDP, remote)}, []string{"rules[0].destinationPort"}},
 		{"remote access port on udp", []FirewallRule{hostIn(ProtocolUDP, remote)}, nil},
 		{"remote access port disabled", []FirewallRule{with(hostIn(ProtocolTCP, remote), func(r *FirewallRule) { r.Enabled = false })}, nil},
+		{"any-port host rule", []FirewallRule{with(hostIn(ProtocolTCP, 0), func(r *FirewallRule) { r.DestinationPort = PortRange{} })}, nil},
+		{"any-port forward", []FirewallRule{forward(ProtocolTCPUDP, "192.168.2.2", 0)}, nil},
 		{"outbound to the UI port", []FirewallRule{with(outbound("192.168.2.2", "0.0.0.0/0"), func(r *FirewallRule) {
 			r.Protocol, r.DestinationPort = ProtocolTCP, SinglePort(ui)
 		})}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertFields(t, CheckReservedPorts(tt.rules, ui, remote), tt.wantFields)
+			err := CheckReservedPorts(tt.rules, ui, remote)
+			assertFields(t, err, tt.wantFields)
+			assertCoded(t, err)
 		})
 	}
 	if err := CheckReservedPorts([]FirewallRule{hostIn(ProtocolTCP, ui)}, 0, 0); err != nil {
@@ -233,6 +287,35 @@ func TestCheckLANDestinations(t *testing.T) {
 	assertFields(t, err, []string{"rules[0].destination"})
 	if !strings.Contains(err.Error(), "none detected") {
 		t.Errorf("err = %v, want it to say no LAN was detected", err)
+	}
+}
+
+func TestCheckLANDestinationsCodes(t *testing.T) {
+	rules := []FirewallRule{forward(ProtocolUDP, "172.16.0.9", 500)}
+	var v *ValidationError
+	if !errors.As(CheckLANDestinations(rules, []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")}), &v) {
+		t.Fatal("want a validation error")
+	}
+	want := Issue("firewall_destination_outside_lan", "subnets", "192.168.2.0/24")
+	if got := v.Issues["rules[0].destination"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("issue = %+v, want %+v", got, want)
+	}
+	if !errors.As(CheckLANDestinations(rules, nil), &v) || v.Issues["rules[0].destination"].Code != "firewall_lan_not_detected" {
+		t.Errorf("issues = %+v, want firewall_lan_not_detected", v.Issues)
+	}
+}
+
+// assertCoded fails unless every field message of err has an issue code.
+func assertCoded(t *testing.T, err error) {
+	t.Helper()
+	var v *ValidationError
+	if !errors.As(err, &v) {
+		return
+	}
+	for field := range v.Fields {
+		if v.Issues[field].Code == "" {
+			t.Errorf("field %q has no issue code", field)
+		}
 	}
 }
 

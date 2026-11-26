@@ -23,15 +23,22 @@ var icmpTypeNames = map[string]bool{
 
 var numericICMPType = regexp.MustCompile(`^([0-9]{1,3})(/([0-9]{1,3}))?$`)
 
+// Examples named by the address messages.
+const (
+	exampleLANNetwork    = "192.168.1.0/24"
+	exampleRemoteNetwork = "10.0.0.0/8"
+)
+
 // Validate checks one rule on its own. Field names are relative to the rule
 // ("name", "protocol", "destinationPort", ...). Checks that need other rules
 // or the host are in ValidateFirewallRules, CheckReservedPorts and
-// CheckLANDestinations.
+// CheckLANDestinations. An empty source or destination port matches any
+// port.
 func (r FirewallRule) Validate() error {
 	v := &ValidationError{}
 	r.validateName(v)
 	if r.Direction != DirectionInbound && r.Direction != DirectionOutbound {
-		v.Add("direction", "must be inbound or outbound")
+		v.AddIssue("direction", Issue("firewall_direction_invalid"), "must be inbound or outbound")
 		return v
 	}
 	r.validateAction(v)
@@ -42,7 +49,8 @@ func (r FirewallRule) Validate() error {
 		r.validatePorts(v)
 	}
 	if r.KeepSourceAddress && !r.IsPortForward() {
-		v.Add("keepSourceAddress", "applies only to inbound rules to another device")
+		v.AddIssue("keepSourceAddress", Issue("firewall_keep_source_forward_only"),
+			"applies only to inbound rules to another device")
 	}
 	return v.OrNil()
 }
@@ -51,9 +59,10 @@ func (r FirewallRule) validateName(v *ValidationError) {
 	name := strings.TrimSpace(r.Name)
 	switch {
 	case name == "":
-		v.Add("name", "is required")
+		v.AddIssue("name", Issue("required"), "is required")
 	case utf8.RuneCountInString(r.Name) > MaxFirewallRuleNameLength:
-		v.Add("name", fmt.Sprintf("must be at most %d characters", MaxFirewallRuleNameLength))
+		v.AddIssue("name", Issue("too_long", "max", strconv.Itoa(MaxFirewallRuleNameLength)),
+			fmt.Sprintf("must be at most %d characters", MaxFirewallRuleNameLength))
 	}
 }
 
@@ -62,10 +71,10 @@ func (r FirewallRule) validateAction(v *ValidationError) {
 	case "", ActionAccept:
 	case ActionDrop, ActionReject:
 		if r.IsPortForward() {
-			v.Add("action", "rules to another device always accept")
+			v.AddIssue("action", Issue("firewall_forward_accepts_only"), "rules to another device always accept")
 		}
 	default:
-		v.Add("action", "must be accept, drop or reject")
+		v.AddIssue("action", Issue("firewall_action_invalid"), "must be accept, drop or reject")
 	}
 }
 
@@ -73,21 +82,23 @@ func (r FirewallRule) validateAction(v *ValidationError) {
 // can be checked against it.
 func (r FirewallRule) validateProtocol(v *ValidationError) bool {
 	if !r.Protocol.valid() {
-		v.Add("protocol", "must be tcp, udp, tcp+udp, icmp, esp, gre or any")
+		v.AddIssue("protocol", Issue("firewall_protocol_invalid"), "must be tcp, udp, tcp+udp, icmp, esp, gre or any")
 		return false
 	}
 	switch {
 	case r.IsPortForward() && (r.Protocol == ProtocolAny || r.Protocol == ProtocolICMP):
-		v.Add("protocol", "rules to another device forward tcp, udp, tcp+udp, esp or gre")
+		v.AddIssue("protocol", Issue("firewall_forward_protocol"), "rules to another device forward tcp, udp, tcp+udp, esp or gre")
 	case r.Direction == DirectionInbound && r.Protocol == ProtocolAny && r.EffectiveAction() == ActionAccept:
-		v.Add("protocol", "accepting any protocol would open every port of this device; choose a protocol")
+		v.AddIssue("protocol", Issue("firewall_accept_any_protocol"),
+			"accepting any protocol would open every port of the host; choose a protocol")
 	}
 	switch {
 	case r.ICMPType == "":
 	case r.Protocol != ProtocolICMP:
-		v.Add("icmpType", "applies only to protocol icmp")
+		v.AddIssue("icmpType", Issue("firewall_icmp_type_needs_icmp"), "applies only to protocol icmp")
 	case !validICMPType(r.ICMPType):
-		v.Add("icmpType", "must be an ICMP type name such as echo-request, or a number with an optional /code")
+		v.AddIssue("icmpType", Issue("firewall_icmp_type_invalid"),
+			"must be an ICMP type name such as echo-request, or a number with an optional /code")
 	}
 	return true
 }
@@ -111,29 +122,37 @@ func validICMPType(s string) bool {
 func (r FirewallRule) validateSource(v *ValidationError) {
 	if r.Source == "" {
 		if r.Direction == DirectionOutbound {
-			v.Add("source", "is required: the LAN device or subnet whose traffic goes through the tunnel")
+			v.AddIssue("source", Issue("firewall_outbound_source_required"),
+				"is required: the LAN device or subnet whose traffic goes through the tunnel")
 		}
 		return
 	}
 	prefix, err := ParseIPv4Prefix(r.Source)
 	switch {
 	case err != nil:
-		v.Add("source", "must be an IPv4 address or a network in CIDR notation without host bits, e.g. 192.168.1.0/24")
+		addPrefixIssue(v, "source", exampleLANNetwork)
 	case r.Direction == DirectionOutbound && prefix.Bits() == 0:
-		v.Add("source", "must be a LAN device or subnet, not every address")
+		v.AddIssue("source", Issue("firewall_outbound_source_everything"), "must be a LAN device or subnet, not every address")
 	}
+}
+
+// addPrefixIssue reports field as not an IPv4 address or network, naming
+// example.
+func addPrefixIssue(v *ValidationError, field, example string) {
+	v.AddIssue(field, Issue("ipv4_prefix_invalid", "example", example),
+		"must be an IPv4 address or a network in CIDR notation without host bits, e.g. "+example)
 }
 
 func (r FirewallRule) validateDestination(v *ValidationError) {
 	d := r.Destination
 	switch {
 	case d.Kind == DestinationHost && r.Direction == DirectionOutbound:
-		v.Add("destination", "outbound rules go to an address or network behind the VPN")
+		v.AddIssue("destination", Issue("firewall_outbound_to_host"), "outbound rules go to an address or network behind the VPN")
 	case d.Kind == DestinationHost && d.CIDR != "":
-		v.Add("destination", "this device takes no address")
+		v.AddIssue("destination", Issue("firewall_host_takes_no_address"), "the host takes no address")
 	case d.Kind == DestinationHost:
 	case d.Kind != DestinationAddress:
-		v.Add("destination", "kind must be host or address")
+		v.AddIssue("destination", Issue("firewall_destination_kind_invalid"), "kind must be host or address")
 	default:
 		r.validateDestinationAddress(v)
 	}
@@ -143,9 +162,9 @@ func (r FirewallRule) validateDestinationAddress(v *ValidationError) {
 	prefix, err := ParseIPv4Prefix(r.Destination.CIDR)
 	switch {
 	case err != nil:
-		v.Add("destination", "must be an IPv4 address or a network in CIDR notation without host bits, e.g. 10.0.0.0/8")
+		addPrefixIssue(v, "destination", exampleRemoteNetwork)
 	case r.Direction == DirectionInbound && prefix.Bits() != 32:
-		v.Add("destination", "must be a single IPv4 address for inbound rules")
+		v.AddIssue("destination", Issue("firewall_inbound_single_address"), "must be a single IPv4 address for inbound rules")
 	}
 }
 
@@ -156,20 +175,17 @@ func (r FirewallRule) validatePorts(v *ValidationError) {
 	if !r.Protocol.HasPorts() {
 		for field, p := range ports {
 			if !p.IsZero() {
-				v.Add(field, "applies only to tcp, udp and tcp+udp")
+				v.AddIssue(field, Issue("firewall_ports_need_tcp_udp"), "applies only to tcp, udp and tcp+udp")
 			}
 		}
 		return
 	}
 	for field, p := range ports {
 		if !p.IsZero() {
-			if msg := p.problem(); msg != "" {
-				v.Add(field, msg)
+			if issue, msg := p.problem(); msg != "" {
+				v.AddIssue(field, issue, msg)
 			}
 		}
-	}
-	if r.DestinationPort.IsZero() && r.Direction == DirectionInbound && r.EffectiveAction() == ActionAccept {
-		v.Add("destinationPort", "is required for inbound tcp and udp rules that accept")
 	}
 	r.validatePublicPort(v)
 }
@@ -180,11 +196,14 @@ func (r FirewallRule) validatePublicPort(v *ValidationError) {
 	}
 	switch {
 	case r.Direction != DirectionInbound:
-		v.Add("publicPort", "applies only to inbound rules")
+		v.AddIssue("publicPort", Issue("firewall_public_port_inbound_only"), "applies only to inbound rules")
+	case r.DestinationPort.IsZero():
+		v.AddIssue("publicPort", Issue("firewall_public_port_needs_destination_port"),
+			"must be empty while the destination port is empty (any port)")
 	case r.Destination.Kind == DestinationHost && !r.PublicPort.Equal(r.DestinationPort):
-		v.Add("publicPort", "must equal the destination port for rules to this device")
-	case !r.DestinationPort.IsZero() && r.PublicPort.Len() != r.DestinationPort.Len():
-		v.Add("publicPort", "must cover as many ports as the destination port")
+		v.AddIssue("publicPort", Issue("firewall_public_port_host"), "must equal the destination port for rules to the host")
+	case r.PublicPort.Len() != r.DestinationPort.Len():
+		v.AddIssue("publicPort", Issue("firewall_public_port_length"), "must cover as many ports as the destination port")
 	}
 }
 
@@ -192,7 +211,8 @@ func (r FirewallRule) validatePublicPort(v *ValidationError) {
 // duplicate matches, and keeps the shared public address unambiguous: an
 // accepting port forward must not share a public port (or, for esp and
 // gre, the protocol) with another accepting inbound rule that goes
-// elsewhere. Field names have the form "rules[i].field".
+// elsewhere. A conflict with an any-port forward is reported on both
+// rules. Field names have the form "rules[i].field".
 func ValidateFirewallRules(rules []FirewallRule) error {
 	v := &ValidationError{}
 	seenID := make(map[string]bool, len(rules))
@@ -202,7 +222,7 @@ func ValidateFirewallRules(rules []FirewallRule) error {
 		ruleErr := asValidationError(rule.Validate())
 		v.Merge(prefix, ruleErr)
 		if rule.ID != "" && seenID[rule.ID] {
-			v.Add(prefix+"id", "is used by another rule")
+			v.AddIssue(prefix+"id", Issue("firewall_duplicate_id"), "is used by another rule")
 		}
 		seenID[rule.ID] = true
 		if ruleErr != nil {
@@ -210,18 +230,36 @@ func ValidateFirewallRules(rules []FirewallRule) error {
 		}
 		key := rule.matchKey()
 		if first, dup := seenMatch[key]; dup {
-			v.Add(prefix+"name", fmt.Sprintf("duplicates rule %d (same direction, protocol, addresses and ports)", first))
+			v.AddIssue(prefix+"name", Issue("firewall_duplicate_rule", "rule", strconv.Itoa(first)),
+				fmt.Sprintf("duplicates rule %d (same direction, protocol, addresses and ports)", first))
 			continue
 		}
 		seenMatch[key] = i
-		for j := range i {
-			if rules[j].Validate() == nil && publicAddressConflict(rules[j], rule) {
-				v.Add(prefix+conflictField(rule), fmt.Sprintf("conflicts with rule %d on the shared public address", j))
-				break
-			}
-		}
+		addPublicAddressConflict(v, rules, i)
 	}
 	return v.OrNil()
+}
+
+// addPublicAddressConflict reports the first valid earlier rule that
+// conflicts with rules[i] on the shared public address.
+func addPublicAddressConflict(v *ValidationError, rules []FirewallRule, i int) {
+	rule := rules[i]
+	for j, other := range rules[:i] {
+		if other.Validate() != nil || !publicAddressConflict(other, rule) {
+			continue
+		}
+		addConflict(v, i, rule, j)
+		if rule.isAnyPortForward() || other.isAnyPortForward() {
+			addConflict(v, j, other, i)
+		}
+		return
+	}
+}
+
+func addConflict(v *ValidationError, index int, rule FirewallRule, with int) {
+	v.AddIssue(fmt.Sprintf("rules[%d].%s", index, conflictField(rule)),
+		Issue("firewall_public_address_conflict", "rule", strconv.Itoa(with)),
+		fmt.Sprintf("conflicts with rule %d on the shared public address", with))
 }
 
 // matchKey identifies the traffic a rule matches; equal keys are
@@ -246,8 +284,9 @@ func canonicalPrefix(s string) string {
 
 // publicAddressConflict reports whether two inbound accepting rules claim
 // the same traffic on the public address for different targets. At least
-// one must be a port forward: overlapping rules to this device only
-// accept, which never conflicts.
+// one must be a port forward: overlapping rules to the host only accept,
+// which never conflicts. An any-port forward claims every public port of
+// its protocol, but only while both rules are enabled.
 func publicAddressConflict(a, b FirewallRule) bool {
 	if a.Direction != DirectionInbound || b.Direction != DirectionInbound ||
 		a.EffectiveAction() != ActionAccept || b.EffectiveAction() != ActionAccept ||
@@ -260,6 +299,9 @@ func publicAddressConflict(a, b FirewallRule) bool {
 		return !sameTarget
 	}
 	sameMapping := sameTarget && a.DestinationPort.Equal(b.DestinationPort) && a.PublicPorts().Equal(b.PublicPorts())
+	if a.isAnyPortForward() || b.isAnyPortForward() {
+		return a.Enabled && b.Enabled && !sameMapping
+	}
 	return a.PublicPorts().Overlaps(b.PublicPorts()) && !sameMapping
 }
 
@@ -292,7 +334,8 @@ func publicPortField(r FirewallRule) string {
 // CheckReservedPorts rejects inbound accepting tcp/udp rules whose public
 // ports include the web UI port (any rule, SPEC §6) or, when
 // remoteAccessPort is not 0, enabled TCP rules including the port of remote
-// access (SPEC §8.1). A port of 0 is not checked.
+// access (SPEC §8.1). A port of 0 is not checked. Rules without a port
+// (any port) pass: netguard keeps both ports for the host (SPEC §16.1).
 func CheckReservedPorts(rules []FirewallRule, uiPort, remoteAccessPort int) error {
 	v := &ValidationError{}
 	for i, rule := range rules {
@@ -302,10 +345,10 @@ func CheckReservedPorts(rules []FirewallRule, uiPort, remoteAccessPort int) erro
 		field := fmt.Sprintf("rules[%d].%s", i, publicPortField(rule))
 		public := rule.PublicPorts()
 		if uiPort != 0 && public.Contains(uiPort) {
-			v.Add(field, "must not include the web UI port")
+			v.AddIssue(field, Issue("firewall_ui_port"), "must not include the web UI port")
 		}
 		if remoteAccessPort != 0 && rule.Enabled && rule.Protocol != ProtocolUDP && public.Contains(remoteAccessPort) {
-			v.Add(field, "must not include the port of remote access")
+			v.AddIssue(field, Issue("firewall_remote_access_port"), "must not include the port of remote access")
 		}
 	}
 	return v.OrNil()
@@ -323,10 +366,18 @@ func CheckLANDestinations(rules []FirewallRule, lan []netip.Prefix) error {
 		}
 		prefix, err := ParseIPv4Prefix(rule.Destination.CIDR)
 		if err != nil || !insideAny(prefix.Addr(), lan) {
-			v.Add(fmt.Sprintf("rules[%d].destination", i), "must be inside a LAN subnet of this device ("+describePrefixes(lan)+")")
+			v.AddIssue(fmt.Sprintf("rules[%d].destination", i), lanIssue(lan),
+				"must be inside a LAN subnet of the host ("+describePrefixes(lan)+")")
 		}
 	}
 	return v.OrNil()
+}
+
+func lanIssue(lan []netip.Prefix) FieldIssue {
+	if len(lan) == 0 {
+		return Issue("firewall_lan_not_detected")
+	}
+	return Issue("firewall_destination_outside_lan", "subnets", describePrefixes(lan))
 }
 
 func insideAny(addr netip.Addr, prefixes []netip.Prefix) bool {

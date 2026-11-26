@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -87,12 +89,12 @@ func (p Profile) Validate() error {
 	v := &ValidationError{}
 	v.Merge("", asValidationError(ValidateProfileName(p.Name)))
 	if p.Protocol == "" {
-		v.Add("protocol", "is required")
+		v.AddIssue("protocol", Issue("required"), "is required")
 	}
 	v.Merge("", p.Settings.validate())
 	for key := range p.Secrets {
 		if key == "" {
-			v.Add("secrets", "keys must not be empty")
+			v.AddIssue("secrets", Issue("keys_empty"), "keys must not be empty")
 		}
 	}
 	v.Merge("dailyReconnect.", asValidationError(p.DailyReconnect.Validate()))
@@ -106,10 +108,11 @@ func ValidateProfileName(name string) error {
 	trimmed := strings.TrimSpace(name)
 	length := utf8.RuneCountInString(trimmed)
 	if length < ProfileNameMinLength || length > ProfileNameMaxLength {
-		return NewValidationError("name", "must be between 1 and 64 characters")
+		return NewFieldError("name", Issue("length_between", "min", strconv.Itoa(ProfileNameMinLength), "max", strconv.Itoa(ProfileNameMaxLength)),
+			fmt.Sprintf("must be between %d and %d characters", ProfileNameMinLength, ProfileNameMaxLength))
 	}
 	if strings.ContainsFunc(trimmed, isControlOrFormat) {
-		return NewValidationError("name", "must not contain control characters")
+		return NewFieldError("name", Issue("control_characters"), "must not contain control characters")
 	}
 	return nil
 }
@@ -134,7 +137,7 @@ func DefaultDailyReconnect() DailyReconnect {
 // checked even when the schedule is off, because it is stored either way.
 func (d DailyReconnect) Validate() error {
 	if !isClockTime(d.Time) {
-		return NewValidationError("time", "must be a time in HH:MM format (00:00 to 23:59)")
+		return NewFieldError("time", Issue("time_format"), "must be a time in HH:MM format (00:00 to 23:59)")
 	}
 	return nil
 }

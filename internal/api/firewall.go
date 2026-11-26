@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -137,7 +138,7 @@ func firewallSettings(body *firewallSettingsRequest, v *domain.ValidationError) 
 		{"pingLimit", body.PingLimit, &settings.PingLimit},
 	} {
 		if f.value == nil {
-			v.Add("settings."+f.name, "is required")
+			v.AddIssue("settings."+f.name, domain.Issue("required"), "is required")
 			continue
 		}
 		*f.into = *f.value
@@ -157,9 +158,10 @@ func (s *Server) ipsecTemplate(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(body.Name)
 	switch {
 	case name == "":
-		v.Add("name", "is required")
+		v.AddIssue("name", domain.Issue("required"), "is required")
 	case utf8.RuneCountInString(name) > domain.MaxIPsecTemplateNameLength:
-		v.Add("name", fmt.Sprintf("must be at most %d characters", domain.MaxIPsecTemplateNameLength))
+		v.AddIssue("name", domain.Issue("too_long", "max", strconv.Itoa(domain.MaxIPsecTemplateNameLength)),
+			fmt.Sprintf("must be at most %d characters", domain.MaxIPsecTemplateNameLength))
 	}
 	device := s.templateDevice(r.Context(), body.DeviceAddress, v)
 	peers := templatePeers(body.Peers, v)
@@ -171,11 +173,11 @@ func (s *Server) ipsecTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 // templateDevice parses the device address, which must be a single IPv4
-// address inside a LAN subnet of this device.
+// address inside a LAN subnet of the host.
 func (s *Server) templateDevice(ctx context.Context, address string, v *domain.ValidationError) netip.Addr {
 	device, err := netip.ParseAddr(address)
 	if err != nil || !device.Is4() {
-		v.Add("deviceAddress", "must be an IPv4 address, e.g. 192.168.2.2")
+		v.AddIssue("deviceAddress", domain.Issue("ipv4_address_invalid", "example", "192.168.2.2"), "must be an IPv4 address, e.g. 192.168.2.2")
 		return netip.Addr{}
 	}
 	probe := []domain.FirewallRule{{
@@ -184,7 +186,8 @@ func (s *Server) templateDevice(ctx context.Context, address string, v *domain.V
 	}}
 	var fields *domain.ValidationError
 	if errors.As(domain.CheckLANDestinations(probe, s.hostNetwork(ctx).Subnets), &fields) {
-		v.Add("deviceAddress", fields.Fields["rules[0].destination"])
+		const field = "rules[0].destination"
+		v.AddIssue("deviceAddress", fields.Issues[field], fields.Fields[field])
 	}
 	return device
 }
@@ -194,7 +197,8 @@ func templatePeers(peers []string, v *domain.ValidationError) []netip.Prefix {
 	for i, peer := range peers {
 		prefix, err := domain.ParseIPv4Prefix(peer)
 		if err != nil {
-			v.Add(fmt.Sprintf("peers[%d]", i), "must be an IPv4 address or a network in CIDR notation without host bits, e.g. 203.0.113.7")
+			v.AddIssue(fmt.Sprintf("peers[%d]", i), domain.Issue("ipv4_prefix_invalid", "example", "203.0.113.7"),
+				"must be an IPv4 address or a network in CIDR notation without host bits, e.g. 203.0.113.7")
 			continue
 		}
 		parsed = append(parsed, prefix)
@@ -206,7 +210,7 @@ func templatePeers(peers []string, v *domain.ValidationError) []netip.Prefix {
 // (SPEC §16.3).
 func (s *Server) goneHostAccess(w http.ResponseWriter, _ *http.Request) {
 	writeProblem(w, newProblem(http.StatusGone, CodeGone,
-		"/api/host-access was replaced by /api/firewall; host-access rules are inbound firewall rules to this device."))
+		"/api/host-access was replaced by /api/firewall; host-access rules are inbound firewall rules to the host."))
 }
 
 func (s *Server) firewallState(ctx context.Context, firewall domain.Firewall) firewallResponse {

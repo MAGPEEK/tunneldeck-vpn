@@ -125,7 +125,7 @@ Off by default. Setting `remoteAccess { enabled bool, port int (default 8443), c
 
 ## 9. HTTP API
 
-JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+json`): `{ "type": "about:blank", "title": "...", "status": 400, "detail": "...", "code": "validation_failed", "fields": { "name": "..." } }` — `code` (stable machine-readable string) and `fields` are extension members. 429 responses carry `Retry-After` (seconds).
+JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+json`): `{ "type": "about:blank", "title": "...", "status": 400, "detail": "...", "code": "validation_failed", "fields": { "name": "..." } }` — `code` (stable machine-readable string) and `fields` are extension members. Validation problems also carry `fieldCodes`, an extension member with a stable code and optional string params per field, e.g. `{ "rules[0].destinationPort": { "code": "port_range_too_long", "params": { "max": "1000" } } }`; the UI translates known codes (`fieldError.<code>`) and shows the English `fields` message for any other field. 429 responses carry `Retry-After` (seconds).
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -240,14 +240,16 @@ Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions 
 
 ### 16.1 Rule model
 
-`FirewallRule { id, direction: inbound | outbound, protocol: tcp | udp | esp | gre | any, source: CIDR (optional = any), destination: IPv4 address or CIDR, destinationPort: port or range (tcp/udp only), publicPort: port or range (inbound tcp/udp only, default = destinationPort), keepSourceAddress: bool (inbound to other devices, default false), enabled, comment }`. Default policy: everything not allowed by a rule is dropped in both directions. Rules are evaluated in list order; the UI allows reordering.
+`FirewallRule { id, direction: inbound | outbound, protocol: tcp | udp | esp | gre | any, source: CIDR (optional = any), destination: IPv4 address or CIDR, destinationPort: port or range (tcp/udp only; empty = any port), publicPort: port or range (inbound tcp/udp only, default = destinationPort; must be empty while destinationPort is), keepSourceAddress: bool (inbound to other devices, default false), enabled, comment }`. Default policy: everything not allowed by a rule is dropped in both directions. Rules are evaluated in list order; the UI allows reordering.
 
 - **Inbound** (VPN side → LAN): `source` = allowed remote addresses (default any).
-  - Destination = the host's own LAN address (shown as "This device") → accept in `TUNNELDECK-INPUT`; `publicPort` must equal `destinationPort`. This is today's host-access rule.
+  - Destination = the host's own LAN address (kind `host`, shown as "Host" with the detected address, e.g. "Host (192.168.2.10)") → accept in `TUNNELDECK-INPUT`; `publicPort` must equal `destinationPort`. This is today's host-access rule. An empty `destinationPort` accepts the protocol on every port. `TUNNELDECK-INPUT` drops TCP to the HTTP UI port before any rule, so no rule can open it to the tunnel; the remote-access HTTPS port keeps its own accept.
   - Destination = another LAN address → DNAT `tdvpn0:publicPort → destination:destinationPort` in a `TUNNELDECK-PREROUTING` nat chain, accept in `TUNNELDECK-FORWARD`, and unless `keepSourceAddress` is set, MASQUERADE on the LAN interface so the target answers the host without route changes. With `keepSourceAddress` the target needs a route back via the host (typically an outbound rule for the same device, see below); the UI says so.
+  - An empty `destinationPort` (and `publicPort`) forwards every port of the protocol to the destination. Its DNAT returns early for TCP to the HTTP UI port and, while remote access is on, to the remote-access port, so the host keeps both. Such a forward conflicts with every other enabled accepting inbound rule of an overlapping protocol that goes elsewhere (reported on both rules).
   - `esp`/`gre` have no ports: they forward the whole protocol to one destination (only one such rule per protocol, since the public address is shared).
 - **Outbound** (LAN → VPN side): `source` = LAN device or subnet (required), `destination` = remote address or network behind the VPN (CIDR, `0.0.0.0/0` = everything). Matching traffic is policy-routed into table 7194 (`ip rule from <source> to <destination> lookup 7194`, with a higher-priority rule that keeps LAN-to-LAN traffic in the main table), accepted in `TUNNELDECK-FORWARD`, and MASQUERADEd on `tdvpn0`. LAN devices must send this traffic to the host (host as gateway, or a static route in the LAN router for the destination network); the UI shows that hint. When the tunnel is down, matching traffic is dropped, never sent out via the normal internet connection (kill switch).
 - Replies to established connections are always allowed in both directions (conntrack).
+- An empty `sourcePort` or `destinationPort` means any port in every direction and for every action (accept, drop, reject); netguard then omits `--sport`/`--dport`.
 - Validation: one inbound rule per (protocol, publicPort) on the shared public address; the HTTP UI port can never be a public port; the remote-access HTTPS port is reserved; `destination` of inbound rules must be inside a LAN subnet of the host; ranges ≤ 1000 ports.
 - Requires `net.ipv4.ip_forward=1` on the host; the self-check reports it (Docker hosts normally have it on) and the docs explain how to enable it. Coexists with Docker's own `FORWARD`/`DOCKER-USER` chains by inserting the jump at position 1.
 
@@ -273,7 +275,7 @@ A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels usi
 
 ### 16.3 Migration and API
 
-- `settings.json` schemaVersion 1 → 2: every host-access rule becomes an inbound rule with destination "This device". 
+- `settings.json` schemaVersion 1 → 2: every host-access rule becomes an inbound rule with destination "Host" (kind `host`). 
 - `GET/PUT /api/firewall` replaces `/api/host-access` (the old endpoint answers 410 Gone with a pointer).
 - Breaking change → release 0.2.0.
 

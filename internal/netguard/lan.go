@@ -63,16 +63,22 @@ func (g *Guard) detectLAN(ctx context.Context) ([]lanAddress, error) {
 
 // parseLANAddresses reads lines like
 // "2: eth0    inet 192.168.2.10/24 brd 192.168.2.255 scope global eth0\ ...".
+// Host- and link-scoped addresses are skipped, and so is any link-local
+// address (169.254.0.0/16, RFC 3927): an interface without DHCP assigns
+// one itself, and it is no LAN.
 func parseLANAddresses(out string) []lanAddress {
 	var addrs []lanAddress
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[2] != "inet" || valueAfter(fields, "scope") == "host" {
+		if len(fields) < 4 || fields[2] != "inet" {
+			continue
+		}
+		if scope := valueAfter(fields, "scope"); scope == "host" || scope == "link" {
 			continue
 		}
 		iface, _, _ := strings.Cut(fields[1], "@")
 		prefix, err := netip.ParsePrefix(fields[3])
-		if err != nil || !prefix.Addr().Is4() || !isLANInterface(iface) {
+		if err != nil || !prefix.Addr().Is4() || prefix.Addr().IsLinkLocalUnicast() || !isLANInterface(iface) {
 			continue
 		}
 		addrs = append(addrs, lanAddress{iface: iface, prefix: prefix})

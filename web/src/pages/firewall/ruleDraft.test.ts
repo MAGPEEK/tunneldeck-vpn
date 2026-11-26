@@ -72,6 +72,15 @@ describe('toRule', () => {
     expect(rule.action).toBe('drop');
   });
 
+  it('sends an empty port as any port, without a public port for a forward', () => {
+    const anyPort = { ...toDraft(forward), destinationPort: '', sourcePort: '' };
+    expect(toRule(anyPort)).toEqual({
+      ...forward,
+      destinationPort: undefined,
+      publicPort: undefined,
+    });
+  });
+
   it('forces accept for port forwards and keeps the ICMP type only for ICMP', () => {
     expect(toRule({ ...toDraft(forward), action: 'reject' }).action).toBe('accept');
     const ping = { ...newDraft('inbound'), protocol: 'icmp' as const, icmpType: 'echo-request' };

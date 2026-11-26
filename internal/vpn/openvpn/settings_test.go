@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -198,7 +199,28 @@ func TestValidateRejects(t *testing.T) {
 			if _, ok := validationFields(t, err)[tt.wantField]; !ok {
 				t.Errorf("error %v does not name field %q", err, tt.wantField)
 			}
+			var v *domain.ValidationError
+			if errors.As(err, &v) && v.Issues[tt.wantField].Code == "" {
+				t.Errorf("field %q has no issue code: %+v", tt.wantField, v.Issues)
+			}
 		})
+	}
+}
+
+func TestRemoteNetworkIssueNamesTheFirstProblem(t *testing.T) {
+	lan := []netip.Prefix{netip.MustParsePrefix("192.168.2.0/24")}
+	settings := mdexSettings()
+	settings[KeyRemoteNetworks] = []string{"10.99.0.0/24", "192.168.2.0/25", "10.1.2.3/24"}
+	var v *domain.ValidationError
+	if !errors.As(ValidateWithLAN(newProfile(t, settings, mdexSecrets()), lan), &v) {
+		t.Fatal("want a validation error")
+	}
+	want := domain.Issue("remote_network_overlaps_lan", "entry", "2", "subnets", "192.168.2.0/24")
+	if got := v.Issues[KeyRemoteNetworks]; !reflect.DeepEqual(got, want) {
+		t.Errorf("issue = %+v, want %+v", got, want)
+	}
+	if message := v.Fields[KeyRemoteNetworks]; !strings.Contains(message, "entry 2 ") || !strings.Contains(message, "entry 3 ") {
+		t.Errorf("message = %q, want both problems", message)
 	}
 }
 

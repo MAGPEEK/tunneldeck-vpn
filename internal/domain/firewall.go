@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/netip"
+	"strconv"
 )
 
 // FirewallDirection says on which side of the tunnel a rule's traffic
@@ -70,8 +71,8 @@ type DestinationKind string
 
 // Destination kinds.
 const (
-	// DestinationHost is "This device": the host's own LAN address,
-	// whatever it currently is.
+	// DestinationHost is the host itself (shown as "Host"): its own LAN
+	// address, whatever it currently is.
 	DestinationHost DestinationKind = "host"
 	// DestinationAddress is an IPv4 address or network in CIDR.
 	DestinationAddress DestinationKind = "address"
@@ -130,17 +131,18 @@ func (p PortRange) Overlaps(o PortRange) bool {
 // Equal compares ranges by the ports they hold, so {22} equals {22, 22}.
 func (p PortRange) Equal(o PortRange) bool { return p.From == o.From && p.Last() == o.Last() }
 
-// problem returns why a set range is unusable, or "".
-func (p PortRange) problem() string {
+// problem returns why a set range is unusable, or an empty message.
+func (p PortRange) problem() (FieldIssue, string) {
 	switch {
 	case p.From < MinPort || p.From > MaxPort || p.Last() < MinPort || p.Last() > MaxPort:
-		return "ports must be between 1 and 65535"
+		return Issue("port_out_of_range"), "ports must be between 1 and 65535"
 	case p.Last() < p.From:
-		return "the range must not end before it starts"
+		return Issue("port_range_reversed"), "the range must not end before it starts"
 	case p.Len() > MaxPortRangeLength:
-		return fmt.Sprintf("a range covers at most %d ports", MaxPortRangeLength)
+		return Issue("port_range_too_long", "max", strconv.Itoa(MaxPortRangeLength)),
+			fmt.Sprintf("a range covers at most %d ports", MaxPortRangeLength)
 	}
-	return ""
+	return FieldIssue{}, ""
 }
 
 func (p PortRange) String() string {
@@ -152,7 +154,8 @@ func (p PortRange) String() string {
 
 // FirewallRule is one line of the two-direction firewall (SPEC §16.1,
 // §16.1a). An empty Source matches any source; an empty Action means
-// accept; a zero PublicPort means "same as DestinationPort".
+// accept; a zero SourcePort or DestinationPort matches any port; a zero
+// PublicPort means "same as DestinationPort".
 type FirewallRule struct {
 	ID                string              `json:"id"`
 	Name              string              `json:"name"`
@@ -182,6 +185,12 @@ func (r FirewallRule) EffectiveAction() FirewallAction {
 // device (DNAT) rather than to the host.
 func (r FirewallRule) IsPortForward() bool {
 	return r.Direction == DirectionInbound && r.Destination.Kind == DestinationAddress
+}
+
+// isAnyPortForward reports whether r forwards every port of its tcp/udp
+// protocol to another LAN device.
+func (r FirewallRule) isAnyPortForward() bool {
+	return r.IsPortForward() && r.Protocol.HasPorts() && r.DestinationPort.IsZero()
 }
 
 // PublicPorts returns the ports on the shared public address an inbound

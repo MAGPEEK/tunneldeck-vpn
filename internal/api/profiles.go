@@ -146,7 +146,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		p.Protocol = stored.Protocol
 	}
 	if p.Protocol != stored.Protocol {
-		writeError(w, r, domain.NewValidationError("protocol", "cannot be changed"))
+		writeError(w, r, domain.NewFieldError("protocol", domain.Issue("protocol_immutable"), "cannot be changed"))
 		return
 	}
 	merged := p
@@ -189,7 +189,7 @@ func (s *Server) validateProfile(p domain.Profile) error {
 		d, err := s.driver(p.Protocol)
 		switch {
 		case errors.Is(err, domain.ErrNotFound):
-			v.Add("protocol", "is not supported")
+			v.AddIssue("protocol", domain.Issue("protocol_unsupported"), "is not supported")
 		case err != nil:
 			return err
 		default:
@@ -246,7 +246,7 @@ func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	draft, err := s.deps.Importer.Import(req.Protocol, req.Text)
 	if errors.Is(err, domain.ErrNotFound) {
-		err = domain.NewValidationError("protocol", "is not supported")
+		err = domain.NewFieldError("protocol", domain.Issue("protocol_unsupported"), "is not supported")
 	}
 	if err != nil {
 		writeError(w, r, err)

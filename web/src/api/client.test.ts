@@ -53,6 +53,37 @@ describe('request', () => {
     });
   });
 
+  it('reads field codes and skips malformed ones', async () => {
+    mockFetch({
+      'PUT /api/firewall': {
+        status: 422,
+        body: {
+          type: 'about:blank',
+          title: 'Unprocessable Entity',
+          status: 422,
+          code: 'validation_failed',
+          fields: { 'rules[0].name': 'is required', 'rules[1].name': 'is too long', x: 'bad' },
+          fieldCodes: {
+            'rules[0].name': { code: 'required' },
+            'rules[1].name': { code: 'too_long', params: { max: '64' } },
+            x: { params: {} },
+          },
+        },
+        headers: { 'Content-Type': 'application/problem+json' },
+      },
+    });
+
+    const error = await request('/api/firewall', { method: 'PUT' }).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      fieldCodes: {
+        'rules[0].name': { code: 'required' },
+        'rules[1].name': { code: 'too_long', params: { max: '64' } },
+      },
+    });
+    expect((error as ApiError).fieldCodes).not.toHaveProperty('x');
+  });
+
   it('uses the problem title when detail is missing', async () => {
     mockFetch({
       'GET /api/system': {

@@ -113,9 +113,9 @@ Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleib
 
 ## 10. Firewall-Regeln und IPsec
 
-Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zur NAS selbst (**Dieses Gerät**) und zu anderen Geräten in ihrem LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, Dieses Gerät, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:
+Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zur NAS selbst (**Host**) und zu anderen Geräten in ihrem LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, Host, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:
 
-- Eine eingehende Regel an **Dieses Gerät** öffnet einen Port der NAS an der Tunneladresse (zum Beispiel `5001` von DSM). Host-Zugriffsregeln von 0.1 werden beim ersten Start von 0.2 zu solchen Regeln.
+- Eine eingehende Regel an den **Host** öffnet einen Port der NAS an der Tunneladresse (zum Beispiel `5001` von DSM). Host-Zugriffsregeln von 0.1 werden beim ersten Start von 0.2 zu solchen Regeln.
 - Eine eingehende Regel an eine andere LAN-Adresse ist eine **Portweiterleitung**. Mit **Quelladresse behalten** sieht das Gerät die echte entfernte Adresse und braucht die NAS als Gateway.
 - Eine **ausgehende** Regel schickt den Verkehr eines LAN-Geräts durch den Tunnel. Das Gerät braucht die NAS als Gateway oder eine Route im LAN-Router, die auf die NAS zeigt. Solange der Tunnel nicht steht, wird dieser Verkehr verworfen (Kill-Switch).
 

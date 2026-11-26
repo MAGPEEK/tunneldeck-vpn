@@ -113,9 +113,9 @@ This removes the admin account and all sessions; profiles and settings stay. Ope
 
 ## 10. Firewall rules and IPsec
 
-The **Firewall** page controls what crosses the tunnel in both directions, to the NAS itself (**This device**) and to other devices in its LAN; everything no rule allows is dropped, replies always pass, rules apply top to bottom. The concepts (inbound and outbound rules, This device, port forwards, keep source address, the gateway requirement, the kill switch) are explained in [`linux.md`, section 10](linux.md#10-firewall-rules); they are the same on DSM. In short:
+The **Firewall** page controls what crosses the tunnel in both directions, to the NAS itself (**Host**) and to other devices in its LAN; everything no rule allows is dropped, replies always pass, rules apply top to bottom. The concepts (inbound and outbound rules, Host, port forwards, keep source address, the gateway requirement, the kill switch) are explained in [`linux.md`, section 10](linux.md#10-firewall-rules); they are the same on DSM. In short:
 
-- An inbound rule to **This device** opens a port of the NAS on the tunnel address (for example DSM's `5001`). Host-access rules of 0.1 become such rules on the first start of 0.2.
+- An inbound rule to the **Host** opens a port of the NAS on the tunnel address (for example DSM's `5001`). Host-access rules of 0.1 become such rules on the first start of 0.2.
 - An inbound rule to another LAN address is a **port forward**. With **Keep source address** on, the device sees the real remote address and needs the NAS as its gateway.
 - An **outbound** rule sends a LAN device's traffic through the tunnel. The device needs the NAS as gateway, or a route in the LAN router that points to the NAS. While the tunnel is down that traffic is dropped (kill switch).
 

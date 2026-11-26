@@ -9,30 +9,31 @@ export function protocolText(t: TFunction, draft: RuleDraft): string {
     : name;
 }
 
-function withPort(address: string, port: string): string {
-  return port.trim() === '' ? address : `${address} :${port.trim()}`;
-}
-
 /**
- * "203.0.113.0/24 → This device :5001" or "any → 192.168.2.2 :443 (public 4444)":
- * ports appear only for protocols that have them, the public port only when
- * it differs from the destination port.
+ * "203.0.113.0/24 :any → Host :5001" or "any :any → 192.168.2.2 :443 (public 4444)":
+ * ports appear only for protocols that have them, "any" for an empty port,
+ * the public port only when it differs from the destination port.
  */
 export function routeText(t: TFunction, draft: RuleDraft): string {
+  const any = t('firewall.any');
   const ports = hasPorts(draft.protocol);
-  const source = withPort(draft.source.trim() || t('firewall.any'), ports ? draft.sourcePort : '');
+  const withPort = (address: string, port: string) =>
+    ports ? `${address} :${port.trim() || any}` : address;
   const toHost = draft.direction === 'inbound' && draft.destinationKind === 'host';
+  const source = withPort(draft.source.trim() || any, draft.sourcePort);
+  const destinationPort = draft.destinationPort.trim();
   const destination = withPort(
-    toHost ? t('firewall.thisDevice') : draft.destinationCidr.trim() || t('firewall.any'),
-    ports ? draft.destinationPort : '',
+    toHost ? t('firewall.host') : draft.destinationCidr.trim() || any,
+    destinationPort,
   );
   const publicPort = draft.publicPort.trim();
   const showPublic =
     ports &&
     !toHost &&
     draft.direction === 'inbound' &&
+    destinationPort !== '' &&
     publicPort !== '' &&
-    publicPort !== draft.destinationPort.trim();
+    publicPort !== destinationPort;
   const suffix = showPublic ? ` ${t('firewall.publicPort', { port: publicPort })}` : '';
   return `${source} → ${destination}${suffix}`;
 }

@@ -3,12 +3,12 @@ import type { FirewallState } from '../../api/firewall';
 import { Notice } from '../../components/Notice';
 import styles from './FirewallPage.module.css';
 
-/** "This device: 192.168.2.10 · LAN: 192.168.2.0/24 · IP forwarding: on", a warning when off. */
+/** "Host: 192.168.2.10 · LAN: 192.168.2.0/24 · IP forwarding: on", a warning when off. */
 export function HostContext({ state }: { state: FirewallState }) {
   const { t } = useTranslation();
   const notDetected = t('firewall.context.notDetected');
   const line = [
-    t('firewall.context.thisDevice', { address: state.hostAddress || notDetected }),
+    t('firewall.context.host', { address: state.hostAddress || notDetected }),
     t('firewall.context.lan', { subnets: state.lanSubnets.join(', ') || notDetected }),
     t('firewall.context.ipForward', {
       state: t(state.ipForward ? 'firewall.context.on' : 'firewall.context.off'),

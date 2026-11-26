@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -30,6 +31,27 @@ func TestValidationError(t *testing.T) {
 	var nilV *ValidationError
 	if nilV.OrNil() != nil {
 		t.Fatal("nil *ValidationError must be nil as error")
+	}
+}
+
+func TestValidationErrorIssues(t *testing.T) {
+	v := &ValidationError{}
+	v.Add("plain", "no code")
+	v.AddIssue("plain", Issue("required"), "ignored: the first message wins")
+	v.AddIssue("name", Issue("too_long", "max", "64"), "must be at most 64 characters")
+	v.AddIssue("name", Issue("required"), "ignored")
+	v.Merge("rules[1].", NewFieldError("port", Issue("port_out_of_range"), "ports must be between 1 and 65535"))
+	v.Merge("rules[2].", NewValidationError("id", "dup"))
+
+	want := map[string]FieldIssue{
+		"name":          {Code: "too_long", Params: map[string]string{"max": "64"}},
+		"rules[1].port": {Code: "port_out_of_range"},
+	}
+	if !reflect.DeepEqual(v.Issues, want) {
+		t.Errorf("Issues = %+v, want %+v", v.Issues, want)
+	}
+	if v.Fields["plain"] != "no code" || v.Fields["rules[2].id"] != "dup" || len(v.Fields) != 4 {
+		t.Errorf("Fields = %v", v.Fields)
 	}
 }
 

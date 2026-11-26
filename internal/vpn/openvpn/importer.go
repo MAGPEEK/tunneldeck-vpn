@@ -41,7 +41,7 @@ type ImportResult struct {
 // block without its closing tag; the error is a *domain.ValidationError.
 func ImportOVPN(text string) (ImportResult, error) {
 	if len(text) > maxImportBytes {
-		return ImportResult{}, domain.NewValidationError(importField, "must be at most 1 MiB")
+		return ImportResult{}, domain.NewFieldError(importField, domain.Issue("file_too_large", "max", "1 MiB"), "must be at most 1 MiB")
 	}
 	text = strings.TrimPrefix(text, utf8BOM)
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
@@ -55,7 +55,8 @@ func ImportOVPN(text string) (ImportResult, error) {
 		}
 		end := blockEnd(lines, i, match[1])
 		if end < 0 {
-			return ImportResult{}, domain.NewValidationError(importField,
+			return ImportResult{}, domain.NewFieldError(importField,
+				domain.Issue("openvpn_block_not_closed", "line", strconv.Itoa(number), "block", match[1]),
 				fmt.Sprintf("line %d: inline block <%s> is not closed", number, match[1]))
 		}
 		im.block(match[1], lines[i+1:end], number)

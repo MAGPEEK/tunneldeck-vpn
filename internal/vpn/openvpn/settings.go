@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"tunneldeck/internal/domain"
@@ -160,7 +161,7 @@ func RemoteNetworks(p domain.Profile) []netip.Prefix {
 	}
 	var networks []netip.Prefix
 	for _, entry := range entries {
-		if prefix, problem := parseRemoteNetwork(entry); problem == "" && !slices.Contains(networks, prefix) {
+		if prefix, problem := parseRemoteNetwork(entry); problem.message == "" && !slices.Contains(networks, prefix) {
 			networks = append(networks, prefix)
 		}
 	}
@@ -173,7 +174,7 @@ func RemoteNetworks(p domain.Profile) []netip.Prefix {
 func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (profileConfig, *domain.ValidationError) {
 	r := settingsReader{settings: p.Settings, errs: &domain.ValidationError{}}
 	if p.Protocol != domain.ProtocolOpenVPN {
-		r.errs.Add("protocol", "must be openvpn")
+		r.errs.AddIssue("protocol", domain.Issue("protocol_unsupported"), "must be openvpn")
 	}
 	r.rejectUnknownKeys(secrets)
 	c := profileConfig{
@@ -183,8 +184,8 @@ func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (pr
 		compression:           r.choice(KeyCompression, DefaultCompression, compressions),
 		authMode:              r.choice(KeyAuthMode, DefaultAuthMode, authModes),
 		keyDirection:          r.choice(KeyKeyDirection, DefaultKeyDirection, keyDirections),
-		cipher:                r.matching(KeyCipher, "", cipherList, "must be a cipher name or a colon-separated list of cipher names"),
-		authDigest:            r.matching(KeyAuthDigest, "", digestName, "must be a digest name such as SHA256 or none"),
+		cipher:                r.matching(KeyCipher, "", cipherList, domain.Issue("openvpn_cipher_invalid"), "must be a cipher name or a colon-separated list of cipher names"),
+		authDigest:            r.matching(KeyAuthDigest, "", digestName, domain.Issue("openvpn_digest_invalid"), "must be a digest name such as SHA256 or none"),
 		resolveRetry:          r.resolveRetry(),
 		keepalive:             r.keepalive(),
 		verifyServerCertUsage: r.boolean(KeyVerifyServerCertUsage, true),
@@ -195,7 +196,7 @@ func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (pr
 	c.tlsAuthKey = r.staticKey(SecretTLSAuthKey, secrets[SecretTLSAuthKey])
 	c.tlsCryptKey = r.staticKey(SecretTLSCryptKey, secrets[SecretTLSCryptKey])
 	if c.tlsAuthKey != "" && c.tlsCryptKey != "" {
-		r.errs.Add(SecretTLSCryptKey, "cannot be combined with tlsAuthKey")
+		r.errs.AddIssue(SecretTLSCryptKey, domain.Issue("openvpn_tls_crypt_with_tls_auth"), "cannot be combined with tlsAuthKey")
 	}
 	r.credentials(c, secrets)
 	if c.usesCertificate() {
@@ -214,14 +215,23 @@ func (r settingsReader) clientIdentity(c *profileConfig, secrets vpn.Secrets) {
 		return
 	}
 	if r.str(KeyClientCert, "") != "" || secrets[SecretClientKey] != "" {
-		r.errs.Add(SecretPKCS12, "cannot be combined with clientCert and clientKey; use one of the two")
+		r.errs.AddIssue(SecretPKCS12, domain.Issue("openvpn_pkcs12_with_client_cert"), "cannot be combined with clientCert and clientKey; use one of the two")
 		return
 	}
 	canonical, err := canonicalPKCS12(bundle)
 	if err != nil {
-		r.errs.Add(SecretPKCS12, err.Error())
+		r.addKeyMaterialError(SecretPKCS12, err)
 	}
 	c.pkcs12 = canonical
+}
+
+// keyMaterialCodes are the issue codes of the errors the canonical*
+// functions return.
+var keyMaterialCodes = map[error]string{
+	errNotCertificate: "openvpn_certificate_invalid",
+	errNotPrivateKey:  "openvpn_private_key_invalid",
+	errNotStaticKey:   "openvpn_static_key_invalid",
+	errNotPKCS12:      "openvpn_pkcs12_invalid",
 }
 
 // settingsReader reads typed settings with defaults and collects errors.
@@ -233,14 +243,24 @@ type settingsReader struct {
 func (r settingsReader) rejectUnknownKeys(secrets vpn.Secrets) {
 	for key := range r.settings {
 		if !settingKeys[key] {
-			r.errs.Add(key, "is not an OpenVPN setting")
+			r.errs.AddIssue(key, domain.Issue("openvpn_unknown_setting"), "is not an OpenVPN setting")
 		}
 	}
 	for key := range secrets {
 		if !secretKeys[key] {
-			r.errs.Add(key, "is not an OpenVPN secret")
+			r.errs.AddIssue(key, domain.Issue("openvpn_unknown_secret"), "is not an OpenVPN secret")
 		}
 	}
+}
+
+// addKeyMaterialError reports a certificate, key or PKCS#12 error of a
+// canonical* function for key.
+func (r settingsReader) addKeyMaterialError(key string, err error) {
+	if code, known := keyMaterialCodes[err]; known {
+		r.errs.AddIssue(key, domain.Issue(code), err.Error())
+		return
+	}
+	r.errs.Add(key, err.Error())
 }
 
 // str returns the string under key, or fallback when it is absent.
@@ -250,7 +270,7 @@ func (r settingsReader) str(key, fallback string) string {
 	}
 	value, err := r.settings.String(key)
 	if err != nil {
-		r.errs.Add(key, "must be a string")
+		r.errs.AddIssue(key, domain.Issue("not_string"), "must be a string")
 		return fallback
 	}
 	return value
@@ -259,16 +279,16 @@ func (r settingsReader) str(key, fallback string) string {
 func (r settingsReader) choice(key, fallback string, allowed []string) string {
 	value := r.str(key, fallback)
 	if !slices.Contains(allowed, value) {
-		r.errs.Add(key, "must be one of "+strings.Join(allowed, ", "))
+		r.errs.AddIssue(key, domain.Issue("one_of", "values", strings.Join(allowed, ", ")), "must be one of "+strings.Join(allowed, ", "))
 		return fallback
 	}
 	return value
 }
 
-func (r settingsReader) matching(key, fallback string, pattern *regexp.Regexp, message string) string {
+func (r settingsReader) matching(key, fallback string, pattern *regexp.Regexp, issue domain.FieldIssue, message string) string {
 	value := r.str(key, fallback)
 	if value != "" && (len(value) > maxValueLength || !pattern.MatchString(value)) {
-		r.errs.Add(key, message)
+		r.errs.AddIssue(key, issue, message)
 		return fallback
 	}
 	return value
@@ -280,7 +300,7 @@ func (r settingsReader) boolean(key string, fallback bool) bool {
 	}
 	value, err := r.settings.Bool(key)
 	if err != nil {
-		r.errs.Add(key, "must be true or false")
+		r.errs.AddIssue(key, domain.Issue("not_boolean"), "must be true or false")
 		return fallback
 	}
 	return value
@@ -290,9 +310,9 @@ func (r settingsReader) remoteHost() string {
 	host := r.str(KeyRemoteHost, "")
 	switch {
 	case host == "":
-		r.errs.Add(KeyRemoteHost, "is required")
+		r.errs.AddIssue(KeyRemoteHost, domain.Issue("required"), "is required")
 	case !isHost(host):
-		r.errs.Add(KeyRemoteHost, "must be a host name or an IP address")
+		r.errs.AddIssue(KeyRemoteHost, domain.Issue("host_invalid"), "must be a host name or an IP address")
 	}
 	return host
 }
@@ -303,7 +323,7 @@ func (r settingsReader) port() int {
 	}
 	port, err := r.settings.Int(KeyPort)
 	if err != nil || port < 1 || port > 65535 {
-		r.errs.Add(KeyPort, "must be a whole number between 1 and 65535")
+		r.errs.AddIssue(KeyPort, domain.Issue("port_invalid"), "must be a whole number between 1 and 65535")
 		return DefaultPort
 	}
 	return port
@@ -315,7 +335,7 @@ func (r settingsReader) resolveRetry() string {
 		return DefaultResolveRetry
 	}
 	if value != ResolveRetryInfinite && !retrySeconds.MatchString(value) {
-		r.errs.Add(KeyResolveRetry, "must be infinite or a number of seconds")
+		r.errs.AddIssue(KeyResolveRetry, domain.Issue("openvpn_resolve_retry_invalid"), "must be infinite or a number of seconds")
 		return DefaultResolveRetry
 	}
 	return value
@@ -328,7 +348,7 @@ func (r settingsReader) keepalive() string {
 	}
 	match := keepalivePair.FindStringSubmatch(value)
 	if match == nil || match[1] == "0" || match[2] == "0" {
-		r.errs.Add(KeyKeepalive, "must be two positive numbers of seconds, for example 10 60")
+		r.errs.AddIssue(KeyKeepalive, domain.Issue("openvpn_keepalive_invalid"), "must be two positive numbers of seconds, for example 10 60")
 		return ""
 	}
 	return value
@@ -344,52 +364,63 @@ func (r settingsReader) remoteNetworks(remoteHost string, lan []netip.Prefix) []
 	}
 	entries, err := r.settings.StringList(KeyRemoteNetworks)
 	if err != nil {
-		r.errs.Add(KeyRemoteNetworks, "must be a list of strings")
+		r.errs.AddIssue(KeyRemoteNetworks, domain.Issue("not_string_list"), "must be a list of strings")
 		return nil
 	}
 	if len(entries) > maxRemoteNetworks {
-		r.errs.Add(KeyRemoteNetworks, fmt.Sprintf("must have at most %d entries", maxRemoteNetworks))
+		r.errs.AddIssue(KeyRemoteNetworks, domain.Issue("too_many_entries", "max", strconv.Itoa(maxRemoteNetworks)),
+			fmt.Sprintf("must have at most %d entries", maxRemoteNetworks))
 		return nil
 	}
 	server, _ := netip.ParseAddr(remoteHost)
 	var networks []netip.Prefix
 	var problems []string
+	var first domain.FieldIssue
 	for i, entry := range entries {
 		prefix, problem := parseRemoteNetwork(entry)
 		switch {
-		case problem != "":
+		case problem.message != "":
 		case slices.Contains(networks, prefix):
-			problem = "is listed twice"
+			problem = entryProblem{"remote_network_duplicate", "is listed twice"}
 		case server.IsValid() && prefix.Contains(server.Unmap()):
-			problem = "contains the server address, which must stay outside the tunnel"
+			problem = entryProblem{"remote_network_contains_server", "contains the server address, which must stay outside the tunnel"}
 		case overlapsAny(prefix, lan):
-			problem = "overlaps a LAN subnet of this device (" + describeNetworks(lan) + ")"
+			problem = entryProblem{"remote_network_overlaps_lan", "overlaps a LAN subnet of the host (" + describeNetworks(lan) + ")"}
 		}
-		if problem != "" {
-			problems = append(problems, fmt.Sprintf("entry %d %s", i+1, problem))
+		if problem.message == "" {
+			networks = append(networks, prefix)
 			continue
 		}
-		networks = append(networks, prefix)
+		if len(problems) == 0 {
+			first = domain.Issue(problem.code, "entry", strconv.Itoa(i+1), "subnets", describeNetworks(lan))
+		}
+		problems = append(problems, fmt.Sprintf("entry %d %s", i+1, problem.message))
 	}
 	if len(problems) > 0 {
-		r.errs.Add(KeyRemoteNetworks, strings.Join(problems, "; "))
+		r.errs.AddIssue(KeyRemoteNetworks, first, strings.Join(problems, "; "))
 	}
 	return networks
 }
 
-// parseRemoteNetwork parses one remote network. problem describes why
-// entry is unusable without repeating it.
-func parseRemoteNetwork(entry string) (prefix netip.Prefix, problem string) {
+// entryProblem is why one list entry is unusable: a stable code and a
+// message that does not repeat the entry. An empty message means none.
+type entryProblem struct {
+	code, message string
+}
+
+// parseRemoteNetwork parses one remote network.
+func parseRemoteNetwork(entry string) (netip.Prefix, entryProblem) {
 	prefix, err := netip.ParsePrefix(entry)
 	switch {
 	case err != nil || !prefix.Addr().Is4():
-		return netip.Prefix{}, "must be an IPv4 network in CIDR notation, such as 10.1.2.0/24"
+		return netip.Prefix{}, entryProblem{"remote_network_not_cidr", "must be an IPv4 network in CIDR notation, such as 10.1.2.0/24"}
 	case prefix.String() != entry || prefix != prefix.Masked():
-		return netip.Prefix{}, "must be written as the network address with its prefix length, such as 10.1.2.0/24"
+		return netip.Prefix{}, entryProblem{"remote_network_not_canonical",
+			"must be written as the network address with its prefix length, such as 10.1.2.0/24"}
 	case prefix.Bits() == 0:
-		return netip.Prefix{}, "must not cover every address"
+		return netip.Prefix{}, entryProblem{"remote_network_everything", "must not cover every address"}
 	}
-	return prefix, ""
+	return prefix, entryProblem{}
 }
 
 func overlapsAny(prefix netip.Prefix, others []netip.Prefix) bool {
@@ -408,25 +439,25 @@ func (r settingsReader) certificates(key string, required bool) string {
 	text := r.str(key, "")
 	if text == "" {
 		if required {
-			r.errs.Add(key, "is required")
+			r.errs.AddIssue(key, domain.Issue("required"), "is required")
 		}
 		return ""
 	}
 	canonical, err := canonicalCertificates(text)
 	if err != nil {
-		r.errs.Add(key, err.Error())
+		r.addKeyMaterialError(key, err)
 	}
 	return canonical
 }
 
 func (r settingsReader) privateKey(text string) string {
 	if text == "" {
-		r.errs.Add(SecretClientKey, "is required unless a pkcs12 file is given")
+		r.errs.AddIssue(SecretClientKey, domain.Issue("openvpn_client_key_required"), "is required unless a pkcs12 file is given")
 		return ""
 	}
 	canonical, err := canonicalPrivateKey(text)
 	if err != nil {
-		r.errs.Add(SecretClientKey, err.Error())
+		r.addKeyMaterialError(SecretClientKey, err)
 	}
 	return canonical
 }
@@ -437,7 +468,7 @@ func (r settingsReader) staticKey(key, text string) string {
 	}
 	canonical, err := canonicalStaticKey(text)
 	if err != nil {
-		r.errs.Add(key, err.Error())
+		r.addKeyMaterialError(key, err)
 	}
 	return canonical
 }
@@ -457,11 +488,11 @@ func (r settingsReader) credentials(c profileConfig, secrets vpn.Secrets) {
 func (r settingsReader) credential(key, value string, required bool) {
 	switch {
 	case value == "" && required:
-		r.errs.Add(key, "is required")
+		r.errs.AddIssue(key, domain.Issue("required"), "is required")
 	case len(value) > maxCredentialBytes:
-		r.errs.Add(key, "must be at most 255 bytes")
+		r.errs.AddIssue(key, domain.Issue("too_long_bytes", "max", strconv.Itoa(maxCredentialBytes)), fmt.Sprintf("must be at most %d bytes", maxCredentialBytes))
 	case hasControlCharacter(value):
-		r.errs.Add(key, "must not contain control characters")
+		r.errs.AddIssue(key, domain.Issue("control_characters"), "must not contain control characters")
 	}
 }
 
@@ -471,12 +502,12 @@ func (r settingsReader) extraOptions() extraResult {
 	}
 	lines, err := r.settings.StringList(KeyExtraOptions)
 	if err != nil {
-		r.errs.Add(KeyExtraOptions, "must be a list of strings")
+		r.errs.AddIssue(KeyExtraOptions, domain.Issue("not_string_list"), "must be a list of strings")
 		return extraResult{}
 	}
 	result := checkExtraOptions(lines)
 	if len(result.rejected) > 0 {
-		r.errs.Add(KeyExtraOptions, describeRejections(result.rejected))
+		r.errs.AddIssue(KeyExtraOptions, rejectionIssue(result.rejected), describeRejections(result.rejected))
 	}
 	return result
 }

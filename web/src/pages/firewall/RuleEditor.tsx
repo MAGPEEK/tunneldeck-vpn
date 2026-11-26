@@ -212,6 +212,8 @@ function InboundDestination({
   const toHost = draft.destinationKind === 'host';
   const ports = visiblePortFields(draft);
   const destinationError = errors.destination;
+  const anyPort = draft.destinationPort.trim() === '';
+  const publicPortDisabled = toHost || anyPort;
   return (
     <>
       <fieldset className={styles.radioGroup}>
@@ -223,7 +225,7 @@ function InboundDestination({
             checked={toHost}
             onChange={() => onChange({ destinationKind: 'host' })}
           />
-          {t('firewall.editor.thisDevice', {
+          {t('firewall.editor.host', {
             address: hostAddress || t('firewall.context.notDetected'),
           })}
         </label>
@@ -259,6 +261,7 @@ function InboundDestination({
         {ports.includes('destinationPort') && (
           <PortInput
             label={t('firewall.editor.destinationPort')}
+            hint={!toHost && anyPort ? t('firewall.editor.anyPortForwardHint') : undefined}
             value={draft.destinationPort}
             error={errors.destinationPort}
             onChange={(destinationPort) => onChange({ destinationPort })}
@@ -270,9 +273,9 @@ function InboundDestination({
             hint={t(
               toHost ? 'firewall.editor.publicPortHostHint' : 'firewall.editor.publicPortHint',
             )}
-            value={toHost ? '' : draft.publicPort}
+            value={publicPortDisabled ? '' : draft.publicPort}
             placeholder={draft.destinationPort.trim() || undefined}
-            disabled={toHost}
+            disabled={publicPortDisabled}
             error={errors.publicPort}
             onChange={(publicPort) => onChange({ publicPort })}
           />

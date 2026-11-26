@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- Firewall rules with an empty port match any port: for TCP, UDP and TCP+UDP an empty source or destination port means every port, inbound and outbound, for allow, drop and reject. An inbound rule to the host with an empty destination port opens that protocol on all ports; `TUNNELDECK-INPUT` now drops TCP to the web UI port before any rule, so no rule can open it to the tunnel. A port forward with an empty destination port forwards every port of its protocol to the device (the port on the VPN address must be empty too); its DNAT skips the web UI port and, while remote access is on, the remote-access port, and it conflicts with every other enabled forward of an overlapping protocol (reported on both rules).
+- Validation problems carry `fieldCodes` (RFC 9457 extension member): a stable code and optional params per field. The Firewall page and the profile forms show these errors in the UI language (German or English) and fall back to the server's message for unknown codes.
+
+### Changed
+
+- Web UI: the destination "This device" is now called "Host" (de: "Host"), shown with the detected address, e.g. "Host (192.168.2.10)"; the API kind stays `host`. Port inputs show the placeholder "any" (de: "beliebig"), and the rule list shows "any" for an empty source or destination port. "Public port" is now "Port on the VPN address" (de: "Port auf der VPN-Adresse") with a clearer hint; it is disabled while the destination port is empty, and an any-port forward explains that every port except the web UI ports goes to the device.
+
+### Fixed
+
+- LAN detection no longer lists link-local addresses (169.254.0.0/16, for example on an unplugged NAS port) as LAN subnets.
+
 ## [0.2.0-alpha.1] - 2026-11-26
 
 ### Changed

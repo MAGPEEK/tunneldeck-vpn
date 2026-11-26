@@ -3,6 +3,7 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { isApiError } from '../../api/client';
+import { localizedFieldErrors } from '../../api/fieldErrors';
 import { importProfile } from '../../api/profiles';
 import { queryKeys } from '../../api/queryKeys';
 import { Button } from '../../components/Button';
@@ -42,10 +43,13 @@ export function ImportPanel({ onCancel }: { onCancel: () => void }) {
     parse.mutate(text);
   };
 
-  const fieldError =
+  const importFields =
     isApiError(parse.error) && parse.error.code === 'validation_failed'
-      ? (parse.error.fields.file ?? parse.error.fields.text ?? t('profiles.importInvalid'))
+      ? localizedFieldErrors(t, parse.error)
       : undefined;
+  const fieldError = importFields
+    ? (importFields.file ?? importFields.text ?? t('profiles.importInvalid'))
+    : undefined;
 
   return (
     <Card title={t('profiles.importTitle')}>

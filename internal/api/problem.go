@@ -33,15 +33,18 @@ const (
 
 const problemContentType = "application/problem+json"
 
-// problem is an RFC 9457 problem details object; Code and Fields are
-// extension members.
+// problem is an RFC 9457 problem details object; Code, Fields and
+// FieldCodes are extension members. FieldCodes holds the stable code (and
+// its parameters) of every field message that has one, so clients can
+// translate it; Fields keeps the English message for all fields.
 type problem struct {
-	Type   string            `json:"type"`
-	Title  string            `json:"title"`
-	Status int               `json:"status"`
-	Detail string            `json:"detail,omitempty"`
-	Code   string            `json:"code"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Type       string                       `json:"type"`
+	Title      string                       `json:"title"`
+	Status     int                          `json:"status"`
+	Detail     string                       `json:"detail,omitempty"`
+	Code       string                       `json:"code"`
+	Fields     map[string]string            `json:"fields,omitempty"`
+	FieldCodes map[string]domain.FieldIssue `json:"fieldCodes,omitempty"`
 }
 
 func newProblem(status int, code, detail string) problem {
@@ -70,6 +73,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.As(err, &validation):
 		p := newProblem(http.StatusUnprocessableEntity, CodeValidationFailed, "The request contains invalid fields.")
 		p.Fields = validation.Fields
+		p.FieldCodes = validation.Issues
 		writeProblem(w, p)
 	case errors.As(err, &rateLimit):
 		seconds := max(1, int(math.Ceil(rateLimit.RetryAfter.Seconds())))

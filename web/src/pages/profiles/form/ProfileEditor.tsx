@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { isApiError } from '../../../api/client';
+import { localizedFieldErrors } from '../../../api/fieldErrors';
 import {
   createProfile,
   updateProfile,
@@ -111,7 +112,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
     : [];
   const fieldErrors =
     isApiError(save.error) && save.error.code === 'validation_failed'
-      ? splitProfileErrors(save.error.fields, visibleKeys)
+      ? splitProfileErrors(localizedFieldErrors(t, save.error), visibleKeys)
       : undefined;
 
   return (

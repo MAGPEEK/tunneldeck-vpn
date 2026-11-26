@@ -270,11 +270,11 @@ func prepareUpdate(p *domain.Profile, current profileRecord, clearSecrets []stri
 	}
 	v := &domain.ValidationError{}
 	if p.Protocol != current.Protocol {
-		v.Add("protocol", "cannot be changed")
+		v.AddIssue("protocol", domain.Issue("protocol_immutable"), "cannot be changed")
 	}
 	for _, field := range clearSecrets {
 		if p.Secrets[field] != "" {
-			v.Add("secrets."+field, "cannot be replaced and cleared at once")
+			v.AddIssue("secrets."+field, domain.Issue("secret_replace_and_clear"), "cannot be replaced and cleared at once")
 		}
 	}
 	return v.OrNil()

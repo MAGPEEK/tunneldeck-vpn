@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '../../api/client';
+import { localizedFieldErrors } from '../../api/fieldErrors';
 import {
   putFirewall,
   type FirewallDirection,
@@ -95,7 +96,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
     },
     onError: (error, sent) => {
       if (isApiError(error) && error.code === 'validation_failed') {
-        const byDraft = errorsByDraft(error.fields, sent);
+        const byDraft = errorsByDraft(localizedFieldErrors(t, error), sent);
         setErrors(byDraft);
         openFirst(Object.keys(byDraft), sent);
       }

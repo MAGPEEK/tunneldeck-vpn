@@ -10,12 +10,14 @@ import (
 
 // InstallFirewall creates or updates the four chains of SPEC §16 and puts
 // their jumps at position 1 of the built-in chains: TUNNELDECK-INPUT
-// (filter INPUT, -i tdvpn0) accepts inbound rules to this device;
+// (filter INPUT, -i tdvpn0) drops TCP to uiPort, then accepts inbound
+// rules to the host;
 // TUNNELDECK-FORWARD (filter FORWARD, -i/-o tdvpn0 plus one kill-switch
 // jump per outbound source and destination) accepts port forwards and
 // outbound rules and drops outbound traffic that would bypass the tunnel;
 // TUNNELDECK-PREROUTING (nat PREROUTING, -i tdvpn0) translates port
-// forwards; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
+// forwards, except uiPort and the remote-access port when a forward covers
+// every TCP port; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
 // forwards on the LAN side and outbound traffic on the tunnel. The global
 // settings add their rules at the top of the filter chains (buildRuleset).
 // Rules are installed in list order. Calling it again with the same
@@ -102,7 +104,7 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 		return err
 	}
 	var errs []error
-	for _, chain := range buildRuleset(firewall, g.remoteAccessPort, subnets(lan)).chainContent() {
+	for _, chain := range buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, subnets(lan)).chainContent() {
 		errs = append(errs, g.installChain(ctx, chain.spec, chain.content))
 	}
 	if err := errors.Join(errs...); err != nil {
