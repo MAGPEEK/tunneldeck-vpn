@@ -4,6 +4,7 @@ import type {
   ChannelEvent,
   ConnectionStatus,
   LogLine,
+  PublicIpEvent,
   StateEvent,
   TrafficEvent,
 } from '../api/connection';
@@ -73,6 +74,13 @@ function applyChannel(client: QueryClient, event: ChannelEvent): void {
   );
 }
 
+/** Records the detected public IP; an empty one is unknown. */
+function applyPublicIp(client: QueryClient, event: PublicIpEvent): void {
+  client.setQueryData<ConnectionStatus>(queryKeys.connection, (status) =>
+    status ? { ...status, publicIp: event.publicIp || undefined } : status,
+  );
+}
+
 function applyLog(client: QueryClient, line: LogLine): void {
   client.setQueryData<LogLine[]>(queryKeys.logs, (lines) =>
     lines ? appendLogLines(lines, [line]) : lines,
@@ -91,6 +99,10 @@ function listen(client: QueryClient, source: EventSource): void {
   source.addEventListener('channel', (event) => {
     const data = parse<ChannelEvent>(event);
     if (data) applyChannel(client, data);
+  });
+  source.addEventListener('publicIp', (event) => {
+    const data = parse<PublicIpEvent>(event);
+    if (data) applyPublicIp(client, data);
   });
   source.addEventListener('log', (event) => {
     const data = parse<LogLine>(event);

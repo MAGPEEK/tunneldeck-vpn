@@ -28,15 +28,23 @@ export function RemoteAccessCard() {
   );
 }
 
-/** The URL remote access is reached at: the connected profile's public address, else the VPN IP. */
+/**
+ * The URL remote access is reached at: the connected profile's public
+ * address, else the detected public IP, else the VPN IP.
+ */
 function RemoteAccessUrl({ remote }: { remote: RemoteAccess }) {
   const { t } = useTranslation();
   const connection = useConnection();
   const profiles = useProfiles();
   const status = connection.data;
   const profile = profiles.data?.find((candidate) => candidate.id === status?.profileId);
-  const vpnIp = status?.state === 'connected' ? status.vpnIp : undefined;
-  const target = remoteAccessTarget(remote.port, profile?.publicAddress, vpnIp);
+  const connected = status?.state === 'connected';
+  const target = remoteAccessTarget(
+    remote.port,
+    profile?.publicAddress,
+    connected ? status.publicIp : undefined,
+    connected ? status.vpnIp : undefined,
+  );
   if (!target) {
     return null;
   }

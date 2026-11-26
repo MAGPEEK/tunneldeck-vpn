@@ -105,6 +105,7 @@
       "devices_one": "{{count}} Gerät",
       "devices_other": "{{count}} Geräte",
       "vpnIp": "VPN-IP:",
+      "publicIp": "Öffentliche IP:",
       "version": "TunnelDeck-VPN {{version}}",
       "openFirewall": "Firewall öffnen",
       "summary": "{{state}}. VPN-Server {{host}}, dieses Gerät, lokales LAN {{lan}}. {{rules}}, {{forwards}}.",
@@ -698,7 +699,18 @@
     "uploaded": "Zertifikat hochgeladen.",
     "vpnIpHint": "Tragen Sie die öffentliche Adresse im Profil ein, falls Ihr Anbieter eine andere verwendet.",
     "editProfile": "Profil bearbeiten",
-    "url": "Adresse"
+    "url": "Adresse",
+    "detectedNote": "Öffentliche IP automatisch erkannt."
+  },
+  "publicIpLookup": {
+    "title": "Erkennung der öffentlichen IP",
+    "description": "Nach jedem Verbindungsaufbau fragt TunnelDeck-VPN durch den Tunnel bei einem Dienst nach, welche öffentliche IPv4-Adresse das Internet sieht. Die Übersicht und die Adresse für den Fernzugriff zeigen sie an, sofern im Profil keine öffentliche Adresse eingetragen ist – diese hat immer Vorrang.",
+    "enable": "Öffentliche IP automatisch erkennen",
+    "url": "Adresse des Dienstes",
+    "urlHint": "Eine http- oder https-Adresse, die die IPv4-Adresse als reinen Text zurückgibt.",
+    "privacy": "Der Dienst sieht die öffentliche IP-Adresse des Tunnels und den Namen TunnelDeck-VPN als User-Agent; sonst wird nichts übertragen.",
+    "save": "Änderungen speichern",
+    "saved": "Erkennung der öffentlichen IP gespeichert."
   },
   "fieldError": {
     "required": "Erforderlich.",
@@ -791,7 +803,9 @@
     "openvpn_not_a_profile": "Das ist kein OpenVPN-Profil: Die Datei enthält keine OpenVPN-Direktive.",
     "openvpn_tls_crypt_v2_key_invalid": "Muss ein OpenVPN-tls-crypt-v2-Client-Schlüssel sein.",
     "openvpn_tls_crypt_v2_combined": "Lässt sich nicht mit einem tls-auth- oder tls-crypt-Schlüssel kombinieren.",
-    "public_address_invalid": "Geben Sie eine IPv4-Adresse oder einen Hostnamen ein, z. B. 203.0.113.10 oder vpn.example.com."
+    "public_address_invalid": "Geben Sie eine IPv4-Adresse oder einen Hostnamen ein, z. B. 203.0.113.10 oder vpn.example.com.",
+    "public_ip_url_invalid": "Geben Sie eine vollständige http- oder https-Adresse ein, z. B. https://api.ipify.org.",
+    "url_credentials_not_allowed": "Darf keinen Benutzernamen und kein Passwort enthalten."
   },
   "uptime": {
     "months_one": "{{count}} Monat",

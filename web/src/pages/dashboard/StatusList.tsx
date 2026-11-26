@@ -8,6 +8,7 @@ import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import type { StateTone } from '../../components/StatePill';
 import { formatBytes, formatDateTime, parseTime } from '../../format/format';
+import { shownPublicIp } from '../../publicIp/shownPublicIp';
 import { CustomizePanel, CustomizeToggle } from './CustomizePanel';
 import type { DashboardItem, DashboardItems } from './dashboardItems';
 import {
@@ -26,7 +27,10 @@ export interface StatusListProps {
   deviceCount: number | undefined;
   /** null when this build has no remote access. */
   remoteAccess: RemoteAccess | null | undefined;
-  /** Public address of the shown profile; "" or undefined when not set. */
+  /**
+   * Public address of the shown profile; "" or undefined when not set. It
+   * wins over the detected public IP.
+   */
   publicAddress?: string;
   /** Which rows (and the connection line) this browser shows. */
   items: DashboardItems;
@@ -101,6 +105,7 @@ function addressRow({ status, publicAddress, t, locale }: RowContext): Row {
   const live = tunnelUp(status.state);
   const since = status.state === 'connected' ? parseTime(status.since) : undefined;
   const vpnIp = live ? status.vpnIp : undefined;
+  const publicIp = shownPublicIp(publicAddress, live ? status.publicIp : undefined);
   return {
     id: 'address',
     label: t('dashboard.details.address'),
@@ -115,7 +120,7 @@ function addressRow({ status, publicAddress, t, locale }: RowContext): Row {
         </span>
         <span>
           {t('dashboard.details.publicIp')}:{' '}
-          <span className={styles.mono}>{publicAddress || '–'}</span>
+          <span className={styles.mono}>{publicIp?.address ?? '–'}</span>
         </span>
       </span>,
     ],

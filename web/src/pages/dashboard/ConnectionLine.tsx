@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { Globe, MonitorSmartphone, ShieldCheck, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,7 @@ import type { FirewallState } from '../../api/firewall';
 import type { StateTone } from '../../components/StatePill';
 import { formatBitRate } from '../../format/format';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { shownPublicIp } from '../../publicIp/shownPublicIp';
 import { ConnectedSince } from './ConnectedSince';
 import styles from './ConnectionLine.module.css';
 import {
@@ -30,6 +32,8 @@ export interface ConnectionLineProps {
   /** Devices seen on the local LAN; undefined while unknown. */
   deviceCount: number | undefined;
   version: string | undefined;
+  /** Public address of the shown profile; it wins over the detected public IP. */
+  publicAddress?: string;
 }
 
 /** VPN server, this device and the local LAN in one row, joined by state-coloured links. */
@@ -39,6 +43,7 @@ export function ConnectionLine(props: ConnectionLineProps) {
   const locale = i18n.resolvedLanguage ?? 'en';
   const layout = lineLayout(useMediaQuery(NARROW_QUERY));
   const live = tunnelUp(status.state);
+  const publicIp = shownPublicIp(props.publicAddress, live ? status.publicIp : undefined);
   const rate = (bytesPerSecond: number) => (live ? formatBitRate(bytesPerSecond, locale) : '–');
   const rules = firewall ? activeRules(firewall) : 0;
   const forwards = firewall ? activeForwards(firewall) : 0;
@@ -82,9 +87,15 @@ export function ConnectionLine(props: ConnectionLineProps) {
         <Node icon={MonitorSmartphone} title={t('dashboard.line.lan')} sub={lan || '–'} />
       </div>
       <div className={styles.footer}>
-        <span>
-          {t('dashboard.line.vpnIp')}{' '}
-          <span className={styles.mono}>{(live && status.vpnIp) || '–'}</span>
+        <span className={styles.addresses}>
+          <span>
+            {t('dashboard.line.vpnIp')}{' '}
+            <span className={styles.mono}>{(live && status.vpnIp) || '–'}</span>
+          </span>
+          <span>
+            {t('dashboard.line.publicIp')}{' '}
+            <span className={styles.mono}>{publicIp?.address ?? '–'}</span>
+          </span>
         </span>
         <span className={styles.center}>
           {[firewall?.hostAddress, version && t('dashboard.line.version', { version })]
@@ -101,7 +112,7 @@ export function ConnectionLine(props: ConnectionLineProps) {
 }
 
 function lanText(
-  t: ReturnType<typeof useTranslation>['t'],
+  t: TFunction,
   firewall: FirewallState | undefined,
   deviceCount: number | undefined,
 ): string {

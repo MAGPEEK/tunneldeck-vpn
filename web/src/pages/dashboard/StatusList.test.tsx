@@ -173,6 +173,22 @@ describe('StatusList', () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it.each([
+    ['the profile address over the detected one', '46.16.217.194', '198.51.100.9', '46.16.217.194'],
+    ['the detected address without a profile address', '', '198.51.100.9', '198.51.100.9'],
+    ['a dash when neither is known', undefined, undefined, '–'],
+  ])('shows as public IP %s', (_case, publicAddress, publicIp, want) => {
+    renderList({ ...connected, publicIp }, { publicAddress });
+    expect(row('address')).toHaveTextContent(`Public IP: ${want}`);
+  });
+
+  it('ignores a detected public IP while the tunnel is down', () => {
+    renderList(makeStatus({ state: 'disconnected', publicIp: '198.51.100.9' }), {
+      publicAddress: '',
+    });
+    expect(row('address')).toHaveTextContent('Public IP: –');
+  });
+
   it('hides remote access when the build has none and the device count while unknown', () => {
     renderList(connected, { remoteAccess: null, deviceCount: undefined });
     expect(rowIds()).not.toContain('remote');

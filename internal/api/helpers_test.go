@@ -24,6 +24,7 @@ type testEnv struct {
 	devices       *fakeDevices
 	remote        *fakeRemoteAccess
 	listener      *fakeListener
+	publicIP      *fakePublicIPLookup
 	server        *Server
 }
 
@@ -42,6 +43,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		devices:       &fakeDevices{},
 		remote:        newFakeRemoteAccess(),
 		listener:      &fakeListener{},
+		publicIP:      &fakePublicIPLookup{settings: domain.DefaultPublicIPLookup()},
 	}
 	env.server = New(Deps{
 		Auth:          env.auth,
@@ -63,6 +65,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		},
 		RemoteAccess:         env.remote,
 		RemoteAccessListener: env.listener,
+		PublicIPLookup:       env.publicIP,
 	}, Options{Now: func() time.Time { return testNow }, Heartbeat: 20 * time.Millisecond})
 	return env
 }

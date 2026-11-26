@@ -48,6 +48,9 @@ type ManagerConfig struct {
 	Desired  DesiredStateStore
 	Firewall FirewallSource
 	Guard    NetGuard
+	// PublicIP detects the public IP after every connect; nil turns the
+	// detection off.
+	PublicIP PublicIPFinder
 	// UIPort is the web UI port, which a firewall rule never opens.
 	UIPort int
 	// Clock defaults to SystemClock. Daily reconnects use its time zone.
@@ -158,6 +161,13 @@ func (m *ConnectionManager) Reconnect(ctx context.Context) error {
 // clears the desired state and disconnects.
 func (m *ConnectionManager) ProfileChanged(id string) {
 	m.post(func(l *loop) { l.profileChanged(id) })
+}
+
+// PublicIPLookupChanged tells the manager that the setting of the public IP
+// detection changed: a connected tunnel detects its public IP again, or
+// forgets it when the detection was switched off.
+func (m *ConnectionManager) PublicIPLookupChanged() {
+	m.post((*loop).publicIPLookupChanged)
 }
 
 // Status returns a snapshot of the connection.

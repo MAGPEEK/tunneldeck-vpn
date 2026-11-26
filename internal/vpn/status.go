@@ -23,11 +23,15 @@ type Status struct {
 	Since          time.Time              `json:"since"`
 	DataCipher     string                 `json:"dataCipher,omitempty"`
 	ControlChannel string                 `json:"controlChannel,omitempty"`
-	BytesIn        uint64                 `json:"bytesIn"`
-	BytesOut       uint64                 `json:"bytesOut"`
-	RateIn         uint64                 `json:"rateIn"`
-	RateOut        uint64                 `json:"rateOut"`
-	LastError      *StatusError           `json:"lastError,omitempty"`
+	// PublicIP is the public IPv4 address the internet sees for traffic
+	// through the connected tunnel, detected after every connect while the
+	// detection is on; empty when unknown, cleared with the VPN IP.
+	PublicIP  string       `json:"publicIp,omitempty"`
+	BytesIn   uint64       `json:"bytesIn"`
+	BytesOut  uint64       `json:"bytesOut"`
+	RateIn    uint64       `json:"rateIn"`
+	RateOut   uint64       `json:"rateOut"`
+	LastError *StatusError `json:"lastError,omitempty"`
 	// RoutingWarning is set while a connected tunnel runs without its
 	// policy routing because applying it failed; the routing is retried
 	// with backoff and the tunnel stays up.

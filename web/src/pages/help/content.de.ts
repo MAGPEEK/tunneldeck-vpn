@@ -60,7 +60,7 @@ export const HELP_CONTENT_DE: HelpContent = {
         },
         {
           term: 'Öffentliche Adresse',
-          text: 'Abschnitt „Zugriff“: die Adresse, die Ihr Anbieter dieser Verbindung zuweist, zum Beispiel eine feste öffentliche IP. TunnelDeck-VPN kann sie nicht selbst ermitteln. Sie wird für die Fernzugriffs-URL und für Portweiterleitungen verwendet. Lassen Sie das Feld leer, wenn die VPN-Adresse selbst aus dem Internet erreichbar ist.',
+          text: 'Abschnitt „Zugriff“: die Adresse, die Ihr Anbieter dieser Verbindung zuweist, zum Beispiel eine feste öffentliche IP. Sie hat immer Vorrang vor der öffentlichen IP, die TunnelDeck-VPN nach jedem Verbindungsaufbau erkennt (System → Erkennung der öffentlichen IP). Sie wird für die Fernzugriffs-URL und für Portweiterleitungen verwendet. Lassen Sie das Feld leer, wenn die VPN-Adresse selbst aus dem Internet erreichbar ist.',
         },
       ],
     },
@@ -171,7 +171,7 @@ export const HELP_CONTENT_DE: HelpContent = {
     { type: 'subheading', text: 'Öffentliche Adresse, nicht die Adresse des VPN-Servers' },
     {
       type: 'paragraph',
-      text: 'Eine häufige Verwechslung: Die Serveradresse im Profil (zum Beispiel `vpn.example.net`) ist das Ziel, mit dem sich dieses Gerät verbindet. Sie führt nicht zu diesem Gerät zurück. Der Fernzugriff nutzt die Adresse dieses Tunnelendes: die öffentliche Adresse aus dem Profil oder, ohne sie, die VPN-Adresse aus der Übersicht. Übersicht und System-Seite zeigen die vollständige URL mit einer Schaltfläche zum Kopieren.',
+      text: 'Eine häufige Verwechslung: Die Serveradresse im Profil (zum Beispiel `vpn.example.net`) ist das Ziel, mit dem sich dieses Gerät verbindet. Sie führt nicht zu diesem Gerät zurück. Der Fernzugriff nutzt die Adresse dieses Tunnelendes: die öffentliche Adresse aus dem Profil; ohne sie die durch den Tunnel erkannte öffentliche IP; und ohne diese die VPN-Adresse aus der Übersicht. Die System-Seite zeigt die vollständige URL.',
     },
   ],
   'system-checks': [

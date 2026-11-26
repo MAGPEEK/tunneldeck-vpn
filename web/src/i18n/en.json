@@ -105,6 +105,7 @@
       "devices_one": "{{count}} device",
       "devices_other": "{{count}} devices",
       "vpnIp": "VPN IP:",
+      "publicIp": "Public IP:",
       "version": "TunnelDeck-VPN {{version}}",
       "openFirewall": "Open firewall",
       "summary": "{{state}}. VPN server {{host}}, this device, local LAN {{lan}}. {{rules}}, {{forwards}}.",
@@ -698,7 +699,18 @@
     "uploaded": "Certificate uploaded.",
     "vpnIpHint": "Set the public address in the profile if your provider uses a different one.",
     "editProfile": "Edit profile",
-    "url": "Address"
+    "url": "Address",
+    "detectedNote": "Public IP detected automatically."
+  },
+  "publicIpLookup": {
+    "title": "Public IP detection",
+    "description": "After every connect, TunnelDeck-VPN asks a service through the tunnel which public IPv4 address the internet sees. The dashboard and the remote access address show it unless the profile names a public address, which always takes precedence.",
+    "enable": "Detect the public IP automatically",
+    "url": "Service URL",
+    "urlHint": "An http or https address that answers with the IPv4 address as plain text.",
+    "privacy": "The service sees the public IP address of the tunnel and the name TunnelDeck-VPN as user agent; nothing else is sent.",
+    "save": "Save changes",
+    "saved": "Public IP detection saved."
   },
   "fieldError": {
     "required": "Required.",
@@ -791,7 +803,9 @@
     "openvpn_not_a_profile": "This is not an OpenVPN profile: it contains no OpenVPN directive.",
     "openvpn_tls_crypt_v2_key_invalid": "Must be an OpenVPN tls-crypt-v2 client key.",
     "openvpn_tls_crypt_v2_combined": "Cannot be combined with a tls-auth or tls-crypt key.",
-    "public_address_invalid": "Enter an IPv4 address or a host name, e.g. 203.0.113.10 or vpn.example.com."
+    "public_address_invalid": "Enter an IPv4 address or a host name, e.g. 203.0.113.10 or vpn.example.com.",
+    "public_ip_url_invalid": "Enter an absolute http or https URL, e.g. https://api.ipify.org.",
+    "url_credentials_not_allowed": "Must not contain a user name or password."
   },
   "uptime": {
     "months_one": "{{count}} month",

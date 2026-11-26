@@ -149,6 +149,11 @@
   text-align: center;
 }
 
+.addresses {
+  display: flex;
+  flex-direction: column;
+}
+
 .center {
   text-align: center;
 }

@@ -111,6 +111,8 @@ type Connection interface {
 	Disconnect(ctx context.Context) error
 	Reconnect(ctx context.Context) error
 	ProfileChanged(id string)
+	// PublicIPLookupChanged applies a changed public IP detection setting.
+	PublicIPLookupChanged()
 	Status() vpn.Status
 	Logs(tail int) []domain.LogEvent
 	Subscribe() (<-chan domain.Event, func())
@@ -151,6 +153,14 @@ type RemoteAccessSettings interface {
 	// RemoteAccessCertificate returns the PEM chain stored for source.
 	RemoteAccessCertificate(source domain.CertificateSource) (certificatePEM string, ok bool)
 	SetRemoteAccessKeyPair(source domain.CertificateSource, pair domain.KeyPair) error
+}
+
+// PublicIPLookupSettings persists the setting of the public IP detection;
+// *store.Store implements it. SetPublicIPLookup fails with a
+// *domain.ValidationError.
+type PublicIPLookupSettings interface {
+	PublicIPLookup() domain.PublicIPLookup
+	SetPublicIPLookup(settings domain.PublicIPLookup) error
 }
 
 // RemoteAccessListener runs the HTTPS listener; *remoteaccess.Manager

@@ -147,6 +147,18 @@ func migrateSettingsV3ToV4(doc map[string]json.RawMessage) error {
 	return nil
 }
 
+// publicIPLookupV5 is the publicIpLookup object of settings.json version 5.
+type publicIPLookupV5 struct {
+	Enabled bool   `json:"enabled"`
+	URL     string `json:"url"`
+}
+
+// migrateSettingsV4ToV5 adds the public IP detection (SPEC §6.1), on and
+// asking api.ipify.org, so existing installations detect it too.
+func migrateSettingsV4ToV5(doc map[string]json.RawMessage) error {
+	return setJSON(doc, "publicIpLookup", publicIPLookupV5{Enabled: true, URL: "https://api.ipify.org"})
+}
+
 func setJSON(object map[string]json.RawMessage, key string, value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {

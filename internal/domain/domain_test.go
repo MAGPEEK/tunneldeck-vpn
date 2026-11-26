@@ -286,6 +286,8 @@ func TestEventKinds(t *testing.T) {
 		{StateEvent{State: StateConnected}, EventKindState},
 		{TrafficEvent{BytesIn: 1}, EventKindTraffic},
 		{LogEvent{Level: LogLevelInfo, Text: "x"}, EventKindLog},
+		{ChannelEvent{DataCipher: "AES-256-GCM"}, EventKindChannel},
+		{PublicIPEvent{PublicIP: "203.0.113.9"}, EventKindPublicIP},
 	}
 	for _, tt := range tests {
 		if got := tt.event.Kind(); got != tt.want {

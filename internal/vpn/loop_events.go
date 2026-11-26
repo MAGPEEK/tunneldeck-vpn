@@ -65,8 +65,9 @@ func (l *loop) driverClosed(t *tunnel) {
 }
 
 // tunnelConnected routes replies and the remote networks through the
-// tunnel on every connected event, because the VPN IP can change. A
-// routing failure never takes a working tunnel down (applyRouting).
+// tunnel on every connected event, because the VPN IP can change, and
+// then, once routed, detects the public IP through it. A routing failure
+// never takes a working tunnel down (applyRouting).
 func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
 	t.vpnIP = e.VPNIP
 	l.resetRoutingRetry()
@@ -75,6 +76,9 @@ func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
 	l.status.LastError = nil
 	l.status.VPNIP, l.status.Remote = e.VPNIP, e.Remote
 	l.setState(domain.StateConnected, "")
+	if l.status.RoutingWarning == nil {
+		l.detectPublicIP(t)
+	}
 }
 
 // applyRouting routes through the connected tunnel t. When that fails, t
@@ -100,7 +104,9 @@ func (l *loop) applyRouting(t *tunnel) {
 
 // retryRouting applies the routing again while t is the connected tunnel;
 // otherwise the next connected event does. Success is announced with the
-// unchanged state, so subscribers fetch the status without the warning.
+// unchanged state, so subscribers fetch the status without the warning, and
+// the public IP is detected now that connections from the VPN IP use the
+// tunnel.
 func (l *loop) retryRouting(t *tunnel) {
 	if l.tunnel != t || t.stopping || l.status.State != domain.StateConnected {
 		return
@@ -108,6 +114,7 @@ func (l *loop) retryRouting(t *tunnel) {
 	l.applyRouting(t)
 	if l.status.RoutingWarning == nil {
 		l.broadcast(l.stateEvent())
+		l.detectPublicIP(t)
 	}
 }
 
@@ -212,13 +219,18 @@ func (l *loop) dailyReconnectDue() {
 	l.armDaily()
 }
 
-// setState changes the state; leaving the tunnel's states forgets what
-// the tunnel reported.
+// setState changes the state; leaving the connected state stops the public
+// IP detection, and leaving the tunnel's states forgets what the tunnel
+// reported.
 func (l *loop) setState(state domain.ConnectionState, message string) {
 	l.status.State, l.status.Message, l.status.Since = state, message, l.now()
+	if state != domain.StateConnected {
+		l.publicIP.stop()
+	}
 	if state != domain.StateConnected && state != domain.StateReconnecting {
 		l.status.VPNIP, l.status.Remote = "", ""
 		l.status.DataCipher, l.status.ControlChannel = "", ""
+		l.status.PublicIP = ""
 	}
 	l.broadcast(l.stateEvent())
 }

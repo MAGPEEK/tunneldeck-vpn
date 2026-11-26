@@ -342,6 +342,12 @@ func newManagerHarness(t *testing.T) *managerHarness {
 
 func newManagerHarnessAt(t *testing.T, start time.Time) *managerHarness {
 	t.Helper()
+	return newConfiguredHarness(t, start, nil)
+}
+
+// newConfiguredHarness lets configure adjust the manager's configuration.
+func newConfiguredHarness(t *testing.T, start time.Time, configure func(*ManagerConfig)) *managerHarness {
+	t.Helper()
 	h := &managerHarness{
 		t:       t,
 		clock:   vpntest.NewFakeClock(start),
@@ -353,10 +359,14 @@ func newManagerHarnessAt(t *testing.T, start time.Time) *managerHarness {
 	if err := registry.Register(fakeProtocol, h.newDriver); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	h.m = NewConnectionManager(ManagerConfig{
+	cfg := ManagerConfig{
 		Registry: registry, Profiles: h.store, Desired: h.store, Firewall: h.store, Guard: h.guard,
 		UIPort: testUIPort, Clock: h.clock, Random: func() float64 { return 0.5 },
-	})
+	}
+	if configure != nil {
+		configure(&cfg)
+	}
+	h.m = NewConnectionManager(cfg)
 	events, _ := h.m.Subscribe()
 	h.events = record(events)
 	t.Cleanup(h.cleanup)

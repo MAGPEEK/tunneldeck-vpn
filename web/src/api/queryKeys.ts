@@ -9,5 +9,6 @@ export const queryKeys = {
   firewallDevices: ['firewall', 'devices'] as const,
   system: ['system'] as const,
   remoteAccess: ['remote-access'] as const,
+  publicIpLookup: ['public-ip-lookup'] as const,
   importDraft: ['import-draft'] as const,
 };

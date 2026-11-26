@@ -87,6 +87,7 @@ export function ConnectionCard(props: ConnectionCardProps) {
             firewall={props.firewall}
             deviceCount={props.deviceCount}
             version={props.version}
+            publicAddress={profile?.publicAddress}
           />
         )}
         {!props.details && actions}

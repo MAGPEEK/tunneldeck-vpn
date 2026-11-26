@@ -127,6 +127,22 @@ describe('ConnectionCard', () => {
     expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['the detected public IP below the VPN IP', undefined, '46.16.217.194', '46.16.217.194'],
+    [
+      'the public address of the profile first',
+      'vpn.mdex.example',
+      '46.16.217.194',
+      'vpn.mdex.example',
+    ],
+    ['a dash while neither is known', undefined, undefined, '–'],
+  ])('shows %s in the connection line', (_case, publicAddress, publicIp, want) => {
+    renderCard({ ...connected, publicIp }, { profiles: [office, { ...mdex, publicAddress }] });
+    const publicLine = screen.getByText('Public IP:');
+    expect(publicLine).toHaveTextContent(`Public IP: ${want}`);
+    expect(screen.getByText('VPN IP:').nextElementSibling).toBe(publicLine);
+  });
+
   it('offers Disconnect while connecting and shows no VPN IP or rates yet', () => {
     const { onDisconnect } = renderCard({
       state: 'connecting',
@@ -136,6 +152,7 @@ describe('ConnectionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
     expect(onDisconnect).toHaveBeenCalled();
     expect(screen.getByText('VPN IP:').parentElement).toHaveTextContent('VPN IP: –');
+    expect(screen.getByText('Public IP:')).toHaveTextContent('Public IP: –');
     expect(screen.getByText('→ Received: –')).toBeInTheDocument();
     expect(screen.getByText('← Sent: –')).toBeInTheDocument();
   });

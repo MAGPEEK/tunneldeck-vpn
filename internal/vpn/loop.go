@@ -108,6 +108,8 @@ type loop struct {
 	// a failure; routingFailures counts the failures for its backoff.
 	routingRetry    timerSlot
 	routingFailures int
+	// publicIP is the detection of the connected tunnel's public IP.
+	publicIP publicIPDetection
 
 	status         Status
 	traffic        trafficSample
@@ -389,6 +391,7 @@ func forwardEvents(post func(func(*loop)) bool, t *tunnel) {
 // responsive; stopped continues once the driver is down.
 func (l *loop) beginStop(t *tunnel) {
 	t.stopping = true
+	l.publicIP.stop()
 	if t.failure == nil && !l.restart {
 		l.setState(domain.StateDisconnecting, "")
 	}

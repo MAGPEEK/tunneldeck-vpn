@@ -283,16 +283,17 @@ func (fakeImporter) Import(protocol domain.Protocol, text string) (ImportDraft, 
 // fakeConnection records commands and hands out one event channel per
 // subscriber.
 type fakeConnection struct {
-	mu          sync.Mutex
-	status      vpn.Status
-	commandErr  error
-	commands    []string
-	changed     []string
-	logs        []domain.LogEvent
-	logTail     int
-	subscribers []chan domain.Event
-	cancelled   int
-	disconnect  disconnectMode
+	mu            sync.Mutex
+	status        vpn.Status
+	commandErr    error
+	commands      []string
+	changed       []string
+	lookupChanges int
+	logs          []domain.LogEvent
+	logTail       int
+	subscribers   []chan domain.Event
+	cancelled     int
+	disconnect    disconnectMode
 }
 
 func (c *fakeConnection) record(command string) error {
@@ -340,6 +341,12 @@ func (c *fakeConnection) ProfileChanged(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.changed = append(c.changed, id)
+}
+
+func (c *fakeConnection) PublicIPLookupChanged() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lookupChanges++
 }
 
 func (c *fakeConnection) Status() vpn.Status {
@@ -614,3 +621,26 @@ func (l *fakeListener) calls() []domain.RemoteAccess {
 }
 
 var errBoom = errors.New("boom: internal detail")
+
+// fakePublicIPLookup is an in-memory public IP detection setting that
+// validates like the store.
+type fakePublicIPLookup struct {
+	mu       sync.Mutex
+	settings domain.PublicIPLookup
+}
+
+func (f *fakePublicIPLookup) PublicIPLookup() domain.PublicIPLookup {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.settings
+}
+
+func (f *fakePublicIPLookup) SetPublicIPLookup(settings domain.PublicIPLookup) error {
+	if err := settings.Validate(); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.settings = settings
+	return nil
+}

@@ -32,6 +32,8 @@ export interface ConnectionStatus {
   controlChannel?: string;
   /** Set while a connected tunnel runs without the routing of forwarded traffic; retried. */
   routingWarning?: StatusError;
+  /** Public IPv4 address the internet sees through the connected tunnel, when detected. */
+  publicIp?: string;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -64,6 +66,11 @@ export interface TrafficEvent {
 export interface ChannelEvent {
   dataCipher?: string;
   controlChannel?: string;
+}
+
+/** Data of the SSE "publicIp" event; an empty publicIp means unknown. */
+export interface PublicIpEvent {
+  publicIp: string;
 }
 
 /** The ring buffer on the server holds this many lines; the UI keeps the same. */

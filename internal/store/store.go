@@ -13,8 +13,8 @@ const (
 
 	// settingsSchemaVersion 2 replaced hostAccessRules by firewall, 3 made
 	// rule destinations plain addresses (SPEC §16.3), 4 added
-	// rememberedSessions (SPEC §8).
-	settingsSchemaVersion = 4
+	// rememberedSessions (SPEC §8), 5 added publicIpLookup (SPEC §6.1).
+	settingsSchemaVersion = 5
 	profilesSchemaVersion = 1
 )
 

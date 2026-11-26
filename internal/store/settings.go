@@ -20,6 +20,8 @@ type settingsDocument struct {
 	// RememberedSessions are the "stay signed in" sessions (schema 4);
 	// the auth package owns their rules.
 	RememberedSessions []domain.RememberedSession `json:"rememberedSessions"`
+	// PublicIPLookup is the public IP detection (schema 5).
+	PublicIPLookup domain.PublicIPLookup `json:"publicIpLookup"`
 }
 
 // firewallRecord is the firewall as settings.json stores it.
@@ -66,6 +68,7 @@ func defaultSettings() settingsDocument {
 		RemoteAccess:  remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
 
 		RememberedSessions: []domain.RememberedSession{},
+		PublicIPLookup:     domain.DefaultPublicIPLookup(),
 	}
 }
 
@@ -102,6 +105,9 @@ func (s *Store) loadSettings() error {
 	}
 	if err := s.checkRemoteAccess(&doc.RemoteAccess); err != nil {
 		return err
+	}
+	if err := doc.PublicIPLookup.Validate(); err != nil {
+		return fmt.Errorf("%s is corrupted: publicIpLookup: %w", SettingsFileName, err)
 	}
 	s.settings = doc.clone()
 	return nil

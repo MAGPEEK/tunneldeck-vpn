@@ -114,7 +114,7 @@ func TestMigrateSettingsV3File(t *testing.T) {
 		t.Fatal(err)
 	}
 	written := writtenSettings(t, dir)
-	if string(written[schemaVersionKey]) != "4" || string(written["rememberedSessions"]) != "[]" {
+	if string(written[schemaVersionKey]) != "5" || string(written["rememberedSessions"]) != "[]" {
 		t.Fatalf("written settings = %s", readFile(t, dir, SettingsFileName))
 	}
 	if admin, ok := s.AdminAccount(); !ok || admin.Username != "admin" {

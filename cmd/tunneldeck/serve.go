@@ -19,6 +19,7 @@ import (
 	"tunneldeck/internal/devices"
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/netguard"
+	"tunneldeck/internal/publicip"
 	"tunneldeck/internal/remoteaccess"
 	"tunneldeck/internal/secret"
 	"tunneldeck/internal/store"
@@ -196,6 +197,7 @@ func (a *app) startManager(ctx context.Context) error {
 	}
 	a.manager = vpn.NewConnectionManager(vpn.ManagerConfig{
 		Registry: registry, Profiles: a.store, Desired: a.store, Firewall: a.store, Guard: a.guard, UIPort: a.uiPort,
+		PublicIP: publicip.NewFinder(a.store),
 	})
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -226,6 +228,7 @@ func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 			StartedAt: a.startedAt,
 		},
 		RemoteAccess: a.store, RemoteAccessListener: a.remote,
+		PublicIPLookup: a.store,
 	}
 }
 

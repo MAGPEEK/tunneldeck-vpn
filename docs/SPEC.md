@@ -94,11 +94,20 @@ Container runs with `network_mode: host`, `cap_add: NET_ADMIN`, device `/dev/net
 - iptables backend: share the host firewall's backend. At start, count the host rules (filter and nat tables, without TunnelDeck-VPN's own chains and `ACCEPT` policies) that `iptables-nft` and `iptables-legacy` (or plain `iptables`, per `iptables -V`) list; use the backend that holds rules, the one with more if both do (with a warning), nf_tables if neither does, and the only working one on old kernels. The binary is kept for the process lifetime; the self-check and the start log name it and the reason. `TUNNELDECK_IPTABLES` can force one.
 - Startup self-check reports: `/dev/net/tun` present, `NET_ADMIN` effective, iptables usable. Failures are shown in the UI (System status), not just logged.
 
+### 6.1 Public IP detection
+
+Setting `publicIpLookup { enabled bool (default true), url string (default "https://api.ipify.org") }` in `settings.json` (schema 5; the migration from 4 adds the defaults). `url` must be an absolute `http` or `https` URL with a host and without user name or password (field codes `required`, `too_long` (2048), `public_ip_url_invalid`, `url_credentials_not_allowed`).
+
+- While enabled, the connection manager asks the service once whenever the tunnel reaches `connected` with its routing applied (after every connect and reconnect, after a routing retry that succeeds, and at once when the setting is saved while connected): one `GET` with `User-Agent: TunnelDeck-VPN`, from a TCP socket bound to the VPN IP over IPv4, without proxy. The policy rule `from <vpn-ip> lookup 7194` routes such host-originated traffic through `tdvpn0`, so the answer is the address the internet sees for the tunnel, not the host's own. Name resolution uses the host resolver as usual.
+- Each attempt is bounded by 10 s, at most three attempts with 2 s and 5 s pauses; leaving `connected` cancels it. Only a `200` answer of at most 64 bytes that is, trimmed, an IPv4 address is accepted.
+- The result is logged to the tunnel log (`info` with the address, `warn` on failure; errors name the service's host only, never the URL, which may carry a token) and exposed as `publicIp` of the status; it is cleared when the tunnel goes down, on a failed detection and when the detection is switched off.
+- Precedence in the UI: the profile's public address (`publicAddress`) always wins, then the detected `publicIp`, then (for the remote-access URL only) the VPN IP. UI: Dashboard "Connection details" ("Public IP") and connection line, System page remote-access URL (with the note "detected"), and the System page card "Public IP detection".
+
 ## 7. Persistence and secrets
 
 Data directory `/data` (volume):
 
-- `settings.json` — admin account (argon2id hash), language default, host-access rules, desired connection state, remembered sessions (token hashes only, §8).
+- `settings.json` — admin account (argon2id hash), language default, host-access rules, desired connection state, remembered sessions (token hashes only, §8), remote access (§8.1), public IP detection (§6.1).
 - `profiles.json` — profiles; secret fields stored as `enc:v1:<base64 nonce+ciphertext>`.
 - `secret.key` — 32 random bytes, mode 0600, created on first start. Overridden by env `TUNNELDECK_SECRET_KEY` (base64).
 
@@ -137,13 +146,14 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | GET/POST | `/api/profiles` | List / create |
 | GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete is always possible: an active profile in any state other than `disconnected` is disconnected first and deleted once the manager reports `disconnected`; if the tunnel does not stop within 15 s the profile is kept and `503 unavailable` is returned) |
 | POST | `/api/profiles/import` | Parse `.ovpn` text → draft profile + warnings (not saved). The draft echoes the secrets contained in the uploaded text back to the same client so the form can submit them with the create request — the only response that carries secret values, and never from storage |
-| GET | `/api/connection` | State, active profile, VPN IP, remote, since, bytes in/out, rates |
+| GET | `/api/connection` | State, active profile, VPN IP, remote, since, bytes in/out, rates, `dataCipher`, `controlChannel`, `routingWarning`, `publicIp` (§6.1, omitted when unknown) |
 | POST | `/api/connection/connect` `{profileId}`, `/disconnect`, `/reconnect` | Control |
 | GET | `/api/logs?tail=N` | Last N lines of the in-memory ring buffer (2000 lines) |
-| GET | `/api/events` | SSE: `state`, `traffic` (every 2 s), `log` |
+| GET | `/api/events` | SSE: `state`, `traffic` (every 2 s), `log`, `channel` (`dataCipher`/`controlChannel`; an empty field keeps the known value), `publicIp` (`{ "publicIp": "<ipv4>" }`, `""` when it became unknown) |
 | GET/PUT | `/api/firewall` | Firewall rules and settings (§16); `/api/host-access` answers 410 Gone |
 | POST | `/api/firewall/templates/ipsec` | Returns the rule set for an IPsec device (§16.2), not stored |
 | GET | `/api/system` | Version, self-check results, UI listen address |
+| GET/PUT | `/api/public-ip-lookup` | Public IP detection setting `{ enabled, url }` (§6.1); PUT validates (422 with `fieldCodes`) and applies to a connected tunnel at once |
 
 ## 10. Configuration (environment)
 

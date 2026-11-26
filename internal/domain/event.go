@@ -2,20 +2,21 @@ package domain
 
 import "time"
 
-// EventKind names the kind of a driver event; it doubles as the SSE event
+// EventKind names the kind of an event; it doubles as the SSE event
 // name.
 type EventKind string
 
 // Event kinds.
 const (
-	EventKindState   EventKind = "state"
-	EventKindTraffic EventKind = "traffic"
-	EventKindLog     EventKind = "log"
-	EventKindChannel EventKind = "channel"
+	EventKindState    EventKind = "state"
+	EventKindTraffic  EventKind = "traffic"
+	EventKindLog      EventKind = "log"
+	EventKindChannel  EventKind = "channel"
+	EventKindPublicIP EventKind = "publicIp"
 )
 
-// Event is one item of a driver's event stream: StateEvent, TrafficEvent,
-// LogEvent or ChannelEvent.
+// Event is one item of an event stream: StateEvent, TrafficEvent, LogEvent
+// or ChannelEvent from a driver, PublicIPEvent from the connection manager.
 type Event interface {
 	Kind() EventKind
 }
@@ -105,3 +106,13 @@ type ChannelEvent struct {
 
 // Kind returns EventKindChannel.
 func (ChannelEvent) Kind() EventKind { return EventKindChannel }
+
+// PublicIPEvent reports the public IPv4 address that the internet sees
+// for traffic through the tunnel, as the connection manager detected it;
+// an empty PublicIP means unknown.
+type PublicIPEvent struct {
+	PublicIP string `json:"publicIp"`
+}
+
+// Kind returns EventKindPublicIP.
+func (PublicIPEvent) Kind() EventKind { return EventKindPublicIP }

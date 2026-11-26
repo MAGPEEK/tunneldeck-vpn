@@ -105,6 +105,8 @@ func TestEventsDeliversStateTrafficAndLog(t *testing.T) {
 		domain.StateEvent{State: domain.StateConnected, VPNIP: "10.8.0.2", Since: testNow},
 		domain.TrafficEvent{BytesIn: 100, BytesOut: 50, RateIn: 10, RateOut: 5},
 		domain.LogEvent{Time: testNow, Level: domain.LogLevelInfo, Text: "hello"},
+		domain.PublicIPEvent{PublicIP: "46.16.217.194"},
+		domain.PublicIPEvent{},
 	}
 	for _, e := range sent {
 		events <- e

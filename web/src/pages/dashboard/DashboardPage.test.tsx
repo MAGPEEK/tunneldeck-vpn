@@ -355,6 +355,29 @@ describe('DashboardPage', () => {
     expect(within(details).getByText(/Data channel AES-256-GCM/)).toBeInTheDocument();
   });
 
+  it('applies publicIp events to the address row', async () => {
+    renderApp(
+      routes({
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', vpnIp: '172.21.31.170' }),
+        },
+      }),
+    );
+    const details = await screen.findByRole('region', { name: 'Connection details' });
+    const source = FakeEventSource.latest();
+    act(() => {
+      source.open();
+      source.emit('publicIp', { publicIp: '46.16.217.194' });
+    });
+    const address = () => within(details).getByText(/^Public IP/);
+    await waitFor(() => expect(address()).toHaveTextContent('Public IP: 46.16.217.194'));
+
+    act(() => {
+      source.emit('publicIp', { publicIp: '' });
+    });
+    await waitFor(() => expect(address()).toHaveTextContent('Public IP: –'));
+  });
+
   it('reconnects the stream with backoff after it ends', async () => {
     renderApp(routes());
     await screen.findByRole('region', { name: 'Connection details' });

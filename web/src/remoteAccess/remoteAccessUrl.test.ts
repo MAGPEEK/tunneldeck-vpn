@@ -3,15 +3,32 @@ import type { RemoteAccess } from '../api/remoteAccess';
 import { remoteAccessActive, remoteAccessTarget } from './remoteAccessUrl';
 
 describe('remoteAccessTarget', () => {
+  const vpn = '172.21.31.170';
+  const detected = '46.16.217.194';
   it.each([
-    ['vpn.example.com', '172.21.31.170', { url: 'https://vpn.example.com:8443', fromVpnIp: false }],
-    [' 203.0.113.10 ', '172.21.31.170', { url: 'https://203.0.113.10:8443', fromVpnIp: false }],
-    ['', '172.21.31.170', { url: 'https://172.21.31.170:8443', fromVpnIp: true }],
-    [undefined, '172.21.31.170', { url: 'https://172.21.31.170:8443', fromVpnIp: true }],
-    ['', undefined, undefined],
-  ])('uses public address %j and VPN IP %j', (publicAddress, vpnIp, want) => {
-    expect(remoteAccessTarget(8443, publicAddress, vpnIp)).toEqual(want);
-  });
+    [
+      'vpn.example.com',
+      detected,
+      vpn,
+      { url: 'https://vpn.example.com:8443', source: 'publicAddress' },
+    ],
+    [
+      ' 203.0.113.10 ',
+      undefined,
+      vpn,
+      { url: 'https://203.0.113.10:8443', source: 'publicAddress' },
+    ],
+    ['', detected, vpn, { url: 'https://46.16.217.194:8443', source: 'detected' }],
+    [undefined, detected, undefined, { url: 'https://46.16.217.194:8443', source: 'detected' }],
+    ['', undefined, vpn, { url: 'https://172.21.31.170:8443', source: 'vpnIp' }],
+    [undefined, '', vpn, { url: 'https://172.21.31.170:8443', source: 'vpnIp' }],
+    ['', undefined, undefined, undefined],
+  ])(
+    'uses public address %j, detected IP %j and VPN IP %j',
+    (publicAddress, detectedIp, vpnIp, want) => {
+      expect(remoteAccessTarget(8443, publicAddress, detectedIp, vpnIp)).toEqual(want);
+    },
+  );
 });
 
 describe('remoteAccessActive', () => {

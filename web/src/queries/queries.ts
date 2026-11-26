@@ -9,6 +9,7 @@ import {
 } from '../api/connection';
 import { getFirewall, getFirewallDevices } from '../api/firewall';
 import { getDrivers, getProfile, getProfiles } from '../api/profiles';
+import { getPublicIpLookup } from '../api/publicIpLookup';
 import { queryKeys } from '../api/queryKeys';
 import { getRemoteAccess } from '../api/remoteAccess';
 import { getSystem } from '../api/system';
@@ -51,6 +52,10 @@ export function useSystem() {
 
 export function useRemoteAccess() {
   return useQuery({ queryKey: queryKeys.remoteAccess, queryFn: getRemoteAccess });
+}
+
+export function usePublicIpLookup() {
+  return useQuery({ queryKey: queryKeys.publicIpLookup, queryFn: getPublicIpLookup });
 }
 
 /** Connect, disconnect and reconnect; each answer replaces the cached status. */

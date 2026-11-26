@@ -60,7 +60,7 @@ export const HELP_CONTENT_EN: HelpContent = {
         },
         {
           term: 'Public address',
-          text: 'Section "Access": the address your provider assigns to this connection, for example a fixed public IP. TunnelDeck-VPN cannot detect it. It is used for the remote-access URL and for port forwards. Leave it empty if the VPN address itself is reachable from the internet.',
+          text: 'Section "Access": the address your provider assigns to this connection, for example a fixed public IP. It always takes precedence over the public IP that TunnelDeck-VPN detects after every connect (System → Public IP detection). It is used for the remote-access URL and for port forwards. Leave it empty if the VPN address itself is reachable from the internet.',
         },
       ],
     },
@@ -171,7 +171,7 @@ export const HELP_CONTENT_EN: HelpContent = {
     { type: 'subheading', text: 'Public address, not the VPN server address' },
     {
       type: 'paragraph',
-      text: 'A common mix-up: the server address in the profile (for example `vpn.example.net`) is where this device connects to. It does not lead back to this device. Remote access uses the address of this end of the tunnel: the public address from the profile, or, without one, the VPN address shown on the Dashboard. The Dashboard and the System page show the complete URL with a Copy button.',
+      text: 'A common mix-up: the server address in the profile (for example `vpn.example.net`) is where this device connects to. It does not lead back to this device. Remote access uses the address of this end of the tunnel: the public address from the profile; without one, the public IP detected through the tunnel; and without that, the VPN address shown on the Dashboard. The System page shows the complete URL.',
     },
   ],
   'system-checks': [

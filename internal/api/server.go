@@ -28,6 +28,8 @@ type Deps struct {
 
 	RemoteAccess         RemoteAccessSettings
 	RemoteAccessListener RemoteAccessListener
+
+	PublicIPLookup PublicIPLookupSettings
 }
 
 // Options tune the API; zero values select the defaults.
@@ -130,6 +132,9 @@ func (s *Server) routes() {
 	s.private("GET /api/remote-access", s.getRemoteAccess)
 	s.private("PUT /api/remote-access", s.putRemoteAccess)
 	s.private("POST /api/remote-access/certificate", s.uploadCertificate)
+
+	s.private("GET /api/public-ip-lookup", s.getPublicIPLookup)
+	s.private("PUT /api/public-ip-lookup", s.putPublicIPLookup)
 
 	s.mux.HandleFunc("/api/", s.unmatched)
 }

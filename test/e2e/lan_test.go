@@ -168,8 +168,8 @@ func (sc *lanScenario) checkMigration(t *testing.T) {
 
 	sc.td.must(t, sc.td.setFirewallRules(state.Rules), "save the migrated rules")
 	version, keys := sc.settingsDocument(t)
-	if version != 3 || slices.Contains(keys, "hostAccessRules") || !slices.Contains(keys, "firewall") {
-		t.Errorf("settings.json after the first change: schemaVersion %d, keys %q; want 3 with firewall and without hostAccessRules", version, keys)
+	if version < 3 || slices.Contains(keys, "hostAccessRules") || !slices.Contains(keys, "firewall") {
+		t.Errorf("settings.json after the first change: schemaVersion %d, keys %q; want 3 or later with firewall and without hostAccessRules", version, keys)
 	}
 	if again := sc.firewall(t); !slices.Equal(again.Rules, want) {
 		t.Errorf("rules after saving them unchanged = %+v, want %+v", again.Rules, want)

@@ -34,13 +34,22 @@ const REMOTE = {
   listening: false,
 };
 
+const LOOKUP = { enabled: true, url: 'https://api.ipify.org' };
+
 function routes(overrides: MockRoutes = {}): MockRoutes {
   return {
     'GET /api/session': { body: SIGNED_IN },
     'GET /api/system': { body: SYSTEM },
     'GET /api/remote-access': { body: REMOTE },
+    'GET /api/public-ip-lookup': { body: LOOKUP },
     ...overrides,
   };
+}
+
+async function lookupCard(): Promise<HTMLElement> {
+  return (await screen.findByRole('heading', { name: 'Public IP detection' })).closest(
+    'section',
+  ) as HTMLElement;
 }
 
 async function remoteCard(): Promise<HTMLElement> {
@@ -220,6 +229,106 @@ describe('SystemPage', () => {
       'href',
       '/profiles/p1',
     );
+  });
+
+  it('uses the detected public IP when the profile names no public address', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': { body: { ...REMOTE, enabled: true, listening: true } },
+        'GET /api/connection': {
+          body: makeStatus({
+            state: 'connected',
+            profileId: 'p1',
+            vpnIp: '172.21.31.170',
+            publicIp: '46.16.217.194',
+          }),
+        },
+        'GET /api/profiles': { body: [makeProfile()] },
+      }),
+      '/system',
+    );
+    const card = await remoteCard();
+    expect(
+      await within(card).findByRole('link', { name: 'https://46.16.217.194:8443' }),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('Public IP detected automatically.')).toBeInTheDocument();
+    expect(within(card).queryByRole('link', { name: 'Edit profile' })).not.toBeInTheDocument();
+  });
+
+  it('prefers the public address of the profile to the detected public IP', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': { body: { ...REMOTE, enabled: true, listening: true } },
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', publicIp: '46.16.217.194' }),
+        },
+        'GET /api/profiles': { body: [makeProfile({ publicAddress: 'vpn.example.com' })] },
+      }),
+      '/system',
+    );
+    const card = await remoteCard();
+    expect(
+      await within(card).findByRole('link', { name: 'https://vpn.example.com:8443' }),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText('Public IP detected automatically.')).not.toBeInTheDocument();
+  });
+
+  describe('public IP detection', () => {
+    it('shows the setting with the privacy note', async () => {
+      renderApp(routes(), '/system');
+      const card = await lookupCard();
+      expect(
+        await within(card).findByRole('checkbox', { name: 'Detect the public IP automatically' }),
+      ).toBeChecked();
+      expect(within(card).getByLabelText('Service URL')).toHaveValue('https://api.ipify.org');
+      expect(within(card).getByText(/The service sees the public IP address/)).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    });
+
+    it('saves the switch and the URL', async () => {
+      const saved = { enabled: false, url: 'https://ifconfig.me/ip' };
+      const { fetchMock } = renderApp(
+        routes({ 'PUT /api/public-ip-lookup': { body: saved } }),
+        '/system',
+      );
+      const card = await lookupCard();
+      fireEvent.click(
+        await within(card).findByRole('checkbox', { name: 'Detect the public IP automatically' }),
+      );
+      fireEvent.change(within(card).getByLabelText('Service URL'), {
+        target: { value: saved.url },
+      });
+      fireEvent.click(within(card).getByRole('button', { name: 'Save changes' }));
+
+      expect(await within(card).findByText('Public IP detection saved.')).toBeInTheDocument();
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) => url === '/api/public-ip-lookup' && init?.method === 'PUT',
+      );
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual(saved);
+    });
+
+    it('shows the translated field error of a refused URL', async () => {
+      renderApp(
+        routes({
+          'PUT /api/public-ip-lookup': problem(422, 'validation_failed', 'invalid', {
+            fields: { url: 'must be an absolute http or https URL' },
+            fieldCodes: { url: { code: 'public_ip_url_invalid' } },
+          }),
+        }),
+        '/system',
+      );
+      const card = await lookupCard();
+      fireEvent.change(await within(card).findByLabelText('Service URL'), {
+        target: { value: 'api.ipify.org' },
+      });
+      fireEvent.click(within(card).getByRole('button', { name: 'Save changes' }));
+      expect(
+        await within(card).findByText(
+          'Enter an absolute http or https URL, e.g. https://api.ipify.org.',
+        ),
+      ).toBeInTheDocument();
+      expect(within(card).getByLabelText('Service URL')).toHaveAttribute('aria-invalid', 'true');
+    });
   });
 
   it('shows a neutral note when this build has no remote access', async () => {

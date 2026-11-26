@@ -17,6 +17,7 @@ type connectionJSON struct {
 	Since          time.Time              `json:"since"`
 	DataCipher     string                 `json:"dataCipher"`
 	ControlChannel string                 `json:"controlChannel"`
+	PublicIP       string                 `json:"publicIp"`
 	RoutingWarning *vpn.StatusError       `json:"routingWarning"`
 	Advisories     []vpn.Advisory         `json:"advisories"`
 }
@@ -26,7 +27,7 @@ func TestGetConnection(t *testing.T) {
 	assertStatus(t, env.do(t, http.MethodGet, "/api/connection", ""), http.StatusOK)
 	idle := decode[connectionJSON](t, env.do(t, http.MethodGet, "/api/connection", ""))
 	if idle.State != domain.StateDisconnected || idle.Advisories == nil || len(idle.Advisories) != 0 ||
-		idle.DataCipher != "" || idle.ControlChannel != "" || idle.RoutingWarning != nil {
+		idle.DataCipher != "" || idle.ControlChannel != "" || idle.PublicIP != "" || idle.RoutingWarning != nil {
 		t.Errorf("idle = %+v", idle)
 	}
 
@@ -34,14 +35,14 @@ func TestGetConnection(t *testing.T) {
 	since := time.Date(2026, 11, 25, 7, 0, 0, 0, time.UTC)
 	warning := &vpn.StatusError{Code: domain.ErrorCodeRoutingFailed, Message: "applying the tunnel routing failed", Time: since}
 	env.connection.setStatus(vpn.Status{State: domain.StateConnected, ProfileID: stored.ID, Since: since,
-		DataCipher: "CHACHA20-POLY1305", ControlChannel: "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256", RoutingWarning: warning})
+		DataCipher: "CHACHA20-POLY1305", ControlChannel: "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256", RoutingWarning: warning, PublicIP: "46.16.217.194"})
 	got := decode[connectionJSON](t, env.do(t, http.MethodGet, "/api/connection", ""))
 	if got.State != domain.StateConnected || !got.Since.Equal(since) || len(got.Advisories) != 1 {
 		t.Errorf("connected = %+v", got)
 	}
 	if got.DataCipher != "CHACHA20-POLY1305" || got.ControlChannel != "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256" ||
-		got.RoutingWarning == nil || *got.RoutingWarning != *warning {
-		t.Errorf("negotiated channel and routing warning = %+v", got)
+		got.RoutingWarning == nil || *got.RoutingWarning != *warning || got.PublicIP != "46.16.217.194" {
+		t.Errorf("negotiated channel, routing warning and public IP = %+v", got)
 	}
 
 	env.connection.setStatus(vpn.Status{State: domain.StateConnected, ProfileID: "deleted"})

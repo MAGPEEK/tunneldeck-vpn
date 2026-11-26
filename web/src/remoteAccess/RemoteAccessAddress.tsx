@@ -9,7 +9,10 @@ interface RemoteAccessAddressProps {
   profileId?: string;
 }
 
-/** The remote access URL as a link, and a hint when it falls back to the VPN IP. */
+/**
+ * The remote access URL as a link, with a note when its address was detected
+ * and a hint when it falls back to the VPN IP.
+ */
 export function RemoteAccessAddress({ target, profileId }: RemoteAccessAddressProps) {
   const { t } = useTranslation();
   return (
@@ -17,7 +20,10 @@ export function RemoteAccessAddress({ target, profileId }: RemoteAccessAddressPr
       <a href={target.url} className={styles.url} target="_blank" rel="noreferrer">
         {target.url}
       </a>
-      {target.fromVpnIp && (
+      {target.source === 'detected' && (
+        <span className={styles.hint}>{t('remoteAccess.detectedNote')}</span>
+      )}
+      {target.source === 'vpnIp' && (
         <span className={styles.hint}>
           {t('remoteAccess.vpnIpHint')}{' '}
           {profileId && <Link to={`/profiles/${profileId}`}>{t('remoteAccess.editProfile')}</Link>}

@@ -83,7 +83,7 @@ func TestMigrateSettingsV1Fixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	written := writtenSettings(t, dir)
-	if string(written[schemaVersionKey]) != "4" || written["hostAccessRules"] != nil ||
+	if string(written[schemaVersionKey]) != "5" || written["hostAccessRules"] != nil ||
 		!strings.Contains(string(written["firewall"]), `"legacyHost": true`) {
 		t.Fatalf("written settings keep an old shape: %s", readFile(t, dir, SettingsFileName))
 	}
@@ -128,7 +128,7 @@ func TestMigrateSettingsV2Fixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	written := writtenSettings(t, dir)
-	if string(written[schemaVersionKey]) != "4" || strings.Contains(string(written["firewall"]), "legacyHost") ||
+	if string(written[schemaVersionKey]) != "5" || strings.Contains(string(written["firewall"]), "legacyHost") ||
 		strings.Contains(string(written["firewall"]), "kind") {
 		t.Fatalf("written firewall keeps a legacy shape: %s", written["firewall"])
 	}
