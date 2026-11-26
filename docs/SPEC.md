@@ -369,3 +369,25 @@ Decisions from the owner interview. Counterparts: company and router gateways (L
 - **State (§4.2):** `connecting` until IKE_SA and the first CHILD_SA are up; `connected` then (since = CHILD_SA install time); DPD (`dpd_delay = 30s`) and charon's retries; IKE_SA down → `reconnecting`, re-initiate; authentication failure → `error` with code `auth_failed` (no retry storm, like OpenVPN AUTH_FAILED). Traffic counters from the CHILD_SA (VICI `list-sas` bytes). Encryption row: negotiated ESP algorithm, control channel = IKE proposal.
 - **Not in scope:** IKEv1, XAuth, L2TP, several simultaneous tunnels, import of vendor files.
 - **Tests:** unit tests for schema, validation, config rendering, VICI message handling with a fake, state machine; e2e: the existing strongSwan container is extended to a gateway with PSK, certificate and EAP, both modes, on both iptables backends.
+
+### 19.1 Standards compliance (RFC analysis, 2026-11-26)
+
+Binding for the IPsec driver. "Verify" marks points to confirm against strongSwan's behaviour in the e2e test.
+
+| Area | Standard | Requirement for TunnelDeck |
+|---|---|---|
+| Protocol | RFC 7296 (IKEv2), RFC 9395 (IKEv1 deprecated) | IKEv2 only; IKEv1 is never offered. |
+| IKE algorithms | RFC 8247 | Default IKE proposal must include the MUST/SHOULD set: AES-GCM-16 and AES-CBC, PRF HMAC-SHA2-256/384, DH groups 31 (Curve25519, RFC 8031), 19/20 (ECP, RFC 5903) **and 14 (MODP-2048, MUST implement)** for interoperability. Advisories: DES, MD5, MODP-768 (MUST NOT) → danger; 3DES, SHA-1 PRF/integrity, MODP-1024/1536, groups 22–24 → warning. |
+| ESP algorithms | RFC 8221, RFC 4303, RFC 4106, RFC 7634 | Default ESP: AES-GCM-16 (MUST), ChaCha20-Poly1305 (SHOULD), AES-CBC + HMAC-SHA2-256-128 as fallback; PFS group in the ESP proposal. NULL encryption and DES never allowed; 3DES → warning. |
+| Authentication | RFC 7296 §2.15/§2.16, RFC 7427, RFC 4945, RFC 5280 | With certificate or EAP the gateway is always authenticated by certificate (RFC 7296 §2.16): CA certificate and **remote identity are mandatory**, and the identity must match the gateway certificate (SAN). Signature authentication per RFC 7427 (RSA-PSS/ECDSA) allowed. PSK: warning below 20 characters (RFC 7296 §2.15: PSK must have high entropy). |
+| EAP | RFC 7296 §2.16, RFC 3748 | EAP-MSCHAPv2 is not an IETF standard and is cryptographically weak: offered for compatibility, with a warning advisory recommending certificates. |
+| NAT traversal | RFC 7296 §2.23, RFC 3948 | NAT detection and UDP encapsulation on; random local ports (§19) – verify that strongSwan uses the non-ESP marker correctly on the random NAT-T port and that NAT-D does not report a false NAT. |
+| Fragmentation | RFC 7383 | IKEv2 fragmentation on (certificate exchanges exceed path MTU). |
+| Liveness | RFC 7296 §2.4 | DPD 30 s; dead peer → `reconnecting`, re-initiate. |
+| Rekeying | RFC 7296 §2.8 | Rekey, not reauthenticate (no traffic gap): IKE SA ~4 h, CHILD SA ~1 h with jitter; reauthentication off by default. |
+| Traffic selectors | RFC 7296 §2.9, RFC 4301 | Accept narrowing by the gateway; `TS_UNACCEPTABLE` → error `ts_unacceptable` with a hint to compare subnets. |
+| Configuration payload | RFC 7296 §3.15 | Virtual IP from INTERNAL_IP4_ADDRESS; INTERNAL_IP4_DNS is ignored (host DNS unchanged, as §6); `INTERNAL_ADDRESS_FAILURE` → error `no_virtual_ip`. |
+| Error mapping | RFC 7296 §3.10.1 | AUTHENTICATION_FAILED → `auth_failed` (no retry storm); NO_PROPOSAL_CHOSEN → `proposal_mismatch`; others → generic with the notify name in the log. |
+| Mobility | RFC 4555 (MOBIKE) | Off: TunnelDeck is a fixed gateway; avoids address changes that bypass its routing. |
+| Revocation | RFC 5280, RFC 4806 | CRL/OCSP checks from strongSwan in relaxed mode (fail open only when unreachable). |
+| Not covered (later, optional) | RFC 8229 (IKE/ESP over TCP), RFC 9370 (multiple key exchanges, post-quantum ML-KEM hybrid), RFC 8784 (PPK) | Not in the first version; candidates once gateways support them. |
