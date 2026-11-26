@@ -18,7 +18,7 @@ docker compose -f test/e2e/compose.yml -p tunneldeck-e2e down -v --rmi all
 
 Without the `e2e` tag, `go test ./...` skips this package.
 
-Duration: about 14.5 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-26): about 11 minutes for the matrix on three backends, where each scenario takes 32–50 s (WireGuard 43–45 s), most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart, plus about 30 s once for `D-wireguard-no-handshake`. Each IPsec case takes about 14.5 s (failure cases 11–12 s), so variant E adds about 80 s on the first backend and 15 s on each other one. A cold build adds the image build time.
+Duration: about 16.5 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-26): about 12 minutes for the matrix on three backends, where each scenario takes 33–52 s (WireGuard 44–46 s), most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart, plus about 30 s once for `D-wireguard-no-handshake` and 18 s once for `D-wireguard-psk`. Each IPsec case takes about 14.5 s (failure cases 11–12 s, `-sa-lost` and `-restart` 14 s each), so variant E adds about 125 s on the first backend and 15 s on each other one. A cold build adds the image build time.
 
 ## Topology
 
@@ -115,6 +115,8 @@ Variant D (`D-wireguard`, on every backend) runs steps 3–9 with these differen
 
 `D-wireguard-no-handshake` (first backend only, as it waits about 30 s and does not depend on the iptables backend): a profile with a wrong server public key stays `connecting`, and the status gets `messageCode` `wireguard_no_handshake` no earlier than 25 s after the connect (30 s in the driver; Docker Desktop's VM clock runs a few percent fast against the host).
 
+`D-wireguard-psk` (first backend only): `peer.sh` gives the server's peer a pre-shared key as well. A profile with another pre-shared key stays `connecting` without an error for 8 s (two handshake initiations) and the server reports no handshake (`wg show wg0 latest-handshakes`); a profile with the same key shows it only as `hasValue`, connects, carries the pings of step 4 and the server reports the handshake.
+
 Variant E (`E-ipsec-*`) runs every sign-in method on the first backend and `E-ipsec-psk` on the others: the iptables backend matters only for the routing and the firewall, which all methods share. Each case:
 
 - creates the profile from form fields; `GET /api/profiles/{id}` and `GET /api/profiles` show every secret only as `hasValue: true`, never its value;
@@ -125,10 +127,13 @@ Variant E (`E-ipsec-*`) runs every sign-in method on the first backend and `E-ip
 - disconnects: `tdvpn0` is gone, the main table and the rules are exactly as before, no `charon` process is left and `10.99.0.1` is unreachable;
 - neither the connection log nor the container's output (log level debug) holds a secret of the profile.
 
-Two failure cases run on the first backend only:
+These cases depend on the gateway and the driver only and run on the first backend:
 
-- `E-ipsec-psk-wrong-key`: a wrong pre-shared key ends in state `error` with `auth_failed`; the gateway logged exactly one IKE_AUTH request, also 10 s later, and the state stays `error` (no retry storm). Deleting the profile leaves the connection `disconnected` without `charon`.
+- `E-ipsec-psk-wrong-key`: a wrong pre-shared key ends in state `error` with `auth_failed`; the gateway logged exactly one IKE_AUTH request (fragments of a fragmented request not counted), also 10 s later, and the state stays `error` (no retry storm). Deleting the profile leaves the connection `disconnected` without `charon`.
 - `E-ipsec-psk-proposal-mismatch`: only `aes128-sha256-modp2048` as IKE proposal ends in state `error` with `proposal_mismatch` and stays there.
+- `E-ipsec-certificate-wrong-ca`: the certificate profile with a CA the test generates, which did not issue the gateway's certificate, ends in state `error` with `auth_failed` and a message about the gateway's certificate (the driver's mapping of charon's certificate alert, here "has no trusted issuer"); the gateway logged exactly one IKE_AUTH request, also 10 s later, and the state stays `error`.
+- `E-ipsec-psk-sa-lost`: with the tunnel connected, TunnelDeck's UDP to the gateway is dropped (`OUTPUT`) and the gateway deletes the IKE SA (`swanctl --terminate --ike psk --force`); its DELETE still arrives, so the state becomes `reconnecting` within 30 s. After lifting the block the tunnel is `connected` again with a VPN IP of the pool, the routing of a connected tunnel, traffic through it, and the gateway lists exactly one established IKE SA; after the disconnect nothing is left.
+- `E-ipsec-psk-restart`: `docker compose restart` under a connected tunnel; the tunnel comes back by itself with the routing and the firewall, one `charon`, no `ip rule` or `INPUT` jump twice, and traffic; after the disconnect `tdvpn0`, the rules and `charon` are gone.
 
 ## Firewall topology
 
@@ -167,8 +172,9 @@ Each case is a subtest of `firewall-lan-nft` and `firewall-lan-legacy`:
 10. `kill-switch`: with lan-web's outbound rule and the port forward, the test gives the host its own route to 10.99.0.0/24 via server-a outside the tunnel (and server-a a route back), plus a counting rule in `mangle POSTROUTING` (a chain TunnelDeck never touches) for lan-web's packets to that network leaving by any interface but `tdvpn0`. Then the tunnel drops: OpenVPN's UDP is blocked in `OUTPUT` and the OpenVPN process is killed, so the state leaves `connected` and `tdvpn0` disappears while TunnelDeck keeps reconnecting. lan-web's pings get no answer and the counter stays at 0; the port forward does not answer. After lifting the block the tunnel comes back, lan-web reaches 10.99.0.1 and the forward answers again. After a disconnect the pings again get no answer with 0 leaked packets. Control: without the outbound rule the same pings take the host's route, get answers and are counted, which proves both the leak path and the counter work.
 11. `outbound-policy-routing-wireguard`: case 7 over WireGuard. After the kill switch the host connects a WireGuard profile to `server-wg` with the only allowed IP `0.0.0.0/0` (no remote network); with lan-web's outbound rule, lan-web pings 10.99.0.1 behind `server-wg`, lan-ipsec does not.
 12. `ipsec-net-to-net`: after the WireGuard case the host connects a net-to-net IPsec profile to `server-ipsec` (local subnet `10.95.0.0/24`, remote subnet `10.98.0.0/24`) with an outbound rule for lan-web to `10.98.0.0/24`. The status has no VPN IP, `ip rule` has `7099: from all to 10.98.0.0/24 lookup 7194` and no rule at 7194. The gateway's web server on `10.98.0.1` sees lan-web's own address `10.95.0.10` and, for a request from the host itself, the host's LAN address: nothing is masqueraded. After the disconnect `tdvpn0` and rule 7099 are gone.
+13. `kill-switch-wireguard` (`firewall-lan-nft` only: the kill switch depends on the firewall backend, which case 10 covers on both hosts): case 10 over a WireGuard tunnel to `server-wg` (allowed IP `0.0.0.0/0`), with the leak path via `server-wg`. The driver counts a tunnel as lost only after 180 s without a handshake and keeps `tdvpn0` meanwhile (SPEC §18), so the case simulates the loss instead of waiting: first `server-wg` takes its `wg0` down; the state stays `connected`, lan-web's pings get no answer, nothing leaks and the forward does not answer. Then the test deletes TunnelDeck's `tdvpn0`: the driver reports the device's end, the state leaves `connected` and the manager starts the tunnel again, which stays `connecting` without the server, so table 7194 has no route and only the kill switch keeps lan-web's traffic from the host's route; again no answer, no leak. After `wg0` is up again the tunnel connects, lan-web reaches 10.99.0.1 and the forward answers; the disconnect and the control run as in case 10.
 
-Duration of the firewall cases: 95–101 s per backend (Docker Desktop on Windows, 2026-11-26), about 10 s of it the WireGuard case, 3–4 s the IPsec net-to-net case, and most of it the kill switch (reconnect backoff) and the IPsec handshakes.
+Duration of the firewall cases: 99 s on `firewall-lan-legacy` and 145 s on `firewall-lan-nft` (Docker Desktop on Windows, 2026-11-26), about 10 s of each the WireGuard case, 4 s the IPsec net-to-net case, 34 s the kill switch (reconnect backoff), and on `firewall-lan-nft` 42 s the WireGuard kill switch (case 13: the probes against the dead tunnel, the manager's retry and the handshake); most of the rest are the IPsec handshakes.
 
 ## Not covered
 
@@ -178,6 +184,6 @@ Duration of the firewall cases: 95–101 s per backend (Docker Desktop on Window
 - A real `network_mode: host` deployment on a physical host, and interplay with ufw, firewalld or Docker's own chains (ufw was checked once by hand in a container lab; see `docs/linux.md`).
 - arm64 (the test runs on the build machine's architecture only).
 - Uploaded remote-access certificates, `.ovpn` import and the web UI itself.
-- Wrong CA, unreachable server and backoff timing.
-- WireGuard: the kill switch with a dropped WireGuard tunnel. The driver reports a lost tunnel only after 180 s without a handshake (SPEC §18), so the case would add over three minutes per backend; the kill switch itself depends only on `tdvpn0` and the outbound rules, which case 10 covers with OpenVPN. Also the 180 s reconnect, DynDNS re-resolution, a pre-shared key and real WireGuard providers.
-- IPsec (variant E): real gateways (LANCOM, FRITZ!Box, OPNsense, pfSense, Sophos), a wrong CA or gateway identity, `ts_unacceptable`, `no_virtual_ip`, the reconnect after a lost SA (DPD), rekeying, a container restart with an IPsec tunnel, PEM client certificate and key (PKCS#12 only), and host protection and remote access over an IPsec tunnel (they depend only on `tdvpn0`, which the other variants cover). The FRITZ!Box user access was tested by hand (`docs/ipsec.md`, section 4).
+- OpenVPN: a wrong CA, an unreachable server and the backoff timing.
+- WireGuard: the 180 s detection of a lost tunnel and the reconnect after it (case 13 simulates the loss by deleting `tdvpn0`), DynDNS re-resolution and real WireGuard providers.
+- IPsec (variant E): real gateways (LANCOM, FRITZ!Box, OPNsense, pfSense, Sophos), a wrong gateway identity, `ts_unacceptable`, `no_virtual_ip`, a gateway that vanishes without a DELETE (found by DPD after 30 s plus charon's retransmissions, about three minutes; `E-ipsec-psk-sa-lost` lets the gateway delete the SA instead), rekeying, PEM client certificate and key (PKCS#12 only), and host protection and remote access over an IPsec tunnel (they depend only on `tdvpn0`, which the other variants cover). The FRITZ!Box user access was tested by hand (`docs/ipsec.md`, section 4).

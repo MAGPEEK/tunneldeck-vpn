@@ -24,10 +24,12 @@ const (
 	ipsecUserPassword   = "e2e ipsec pass word;#1"
 	ipsecPKCS12Password = "e2e PKCS#12 password"
 	// ipsecGatewayLog is charon's log file on the gateway; ipsecAuthRequest
-	// starts the line charon writes for every IKE_AUTH request it parses,
-	// one per authentication attempt with a pre-shared key.
+	// starts the line charon writes for every IKE_AUTH request it parses:
+	// one per authentication attempt, plus one per fragment of a
+	// fragmented request (RFC 7383), which the count skips (ipsecFragment).
 	ipsecGatewayLog  = "/run/e2e/charon.log"
 	ipsecAuthRequest = "parsed IKE_AUTH request"
+	ipsecFragment    = "[ EF("
 	// noInternetNote is part of the log line that replaces the public IP
 	// detection for a tunnel without the internet (SPEC §6.1).
 	noInternetNote = "not the internet; the public IP is not detected"
@@ -105,21 +107,23 @@ var pskVariant = ipsecVariant{
 	},
 }
 
+// certificateVariant: the gateway narrows 0.0.0.0/0 to its address and
+// the network behind it.
+var certificateVariant = ipsecVariant{
+	variant:    newIPsecVariant("E-ipsec-certificate", "10.94.6.0/24", "10.94.6.1"),
+	ikeVersion: "IKEv2",
+	noInternet: true,
+	profile: func(c ipsecCredentials) profileRequest {
+		return ipsecProfile("E-ipsec-certificate", map[string]any{
+			"authMethod": "certificate", "localId": "client.ipsec.e2e", "remoteId": ipsecGatewayID,
+			"caCert": c.ca, "remoteSubnets": withInternet,
+		}, map[string]string{"pkcs12": c.pkcs12, "pkcs12Password": ipsecPKCS12Password})
+	},
+}
+
 var ipsecVariants = []ipsecVariant{
 	pskVariant,
-	{
-		// The gateway narrows 0.0.0.0/0 to its address and the network
-		// behind it.
-		variant:    newIPsecVariant("E-ipsec-certificate", "10.94.6.0/24", "10.94.6.1"),
-		ikeVersion: "IKEv2",
-		noInternet: true,
-		profile: func(c ipsecCredentials) profileRequest {
-			return ipsecProfile("E-ipsec-certificate", map[string]any{
-				"authMethod": "certificate", "localId": "client.ipsec.e2e", "remoteId": ipsecGatewayID,
-				"caCert": c.ca, "remoteSubnets": withInternet,
-			}, map[string]string{"pkcs12": c.pkcs12, "pkcs12Password": ipsecPKCS12Password})
-		},
-	},
+	certificateVariant,
 	{
 		variant:    newIPsecVariant("E-ipsec-eap-mschapv2", "10.94.7.0/24", "10.94.7.1"),
 		ikeVersion: "IKEv2",
@@ -155,8 +159,9 @@ func ipsecVariantsFor(b backend) []ipsecVariant {
 	return []ipsecVariant{pskVariant}
 }
 
-// runIPsecVariants runs the IPsec variants of td's backend; the failure
-// cases depend on the gateway only and run on the first backend.
+// runIPsecVariants runs the IPsec variants of td's backend; the failure,
+// reconnect and restart cases depend on the gateway and the driver only
+// and run on the first backend.
 func runIPsecVariants(t *testing.T, s stack, td *tunnelDeck) {
 	credentials := readIPsecCredentials(t, s)
 	for _, v := range ipsecVariantsFor(td.backend) {
@@ -165,6 +170,9 @@ func runIPsecVariants(t *testing.T, s stack, td *tunnelDeck) {
 	if td.backend.name == backends[0].name {
 		t.Run(pskVariant.name+"-wrong-key", newIPsecScenario(s, td, pskVariant, credentials).checkWrongPSK)
 		t.Run(pskVariant.name+"-proposal-mismatch", newIPsecScenario(s, td, pskVariant, credentials).checkProposalMismatch)
+		t.Run(certificateVariant.name+"-wrong-ca", newIPsecScenario(s, td, certificateVariant, credentials).checkWrongCA)
+		t.Run(pskVariant.name+"-sa-lost", newIPsecScenario(s, td, pskVariant, credentials).checkLostSA)
+		t.Run(pskVariant.name+"-restart", newIPsecScenario(s, td, pskVariant, credentials).checkRestart)
 	}
 }
 
@@ -208,7 +216,7 @@ func (sc *ipsecScenario) run(t *testing.T) {
 
 // checkStoredSecrets: the stored profile shows every secret only as
 // present, in the single profile and in the list.
-func (sc *ipsecScenario) checkStoredSecrets(t *testing.T, id string, secrets map[string]string) {
+func (sc *scenario) checkStoredSecrets(t *testing.T, id string, secrets map[string]string) {
 	t.Helper()
 	var raw json.RawMessage
 	sc.td.must(t, sc.td.api.get("/api/profiles/"+id, &raw), "read the profile")
@@ -344,7 +352,7 @@ func (sc *ipsecScenario) authAttempts(t *testing.T) int {
 	t.Helper()
 	count := 0
 	for _, line := range strings.Split(sc.stack.exec(t, ipsecGatewayService, "cat", ipsecGatewayLog), "\n") {
-		if strings.Contains(line, ipsecAuthRequest) {
+		if strings.Contains(line, ipsecAuthRequest) && !strings.Contains(line, ipsecFragment) {
 			count++
 		}
 	}

@@ -52,10 +52,12 @@ func TestEndToEnd(t *testing.T) {
 					sc.run(t)
 				})
 			}
-			// The 30 s wait for the missing handshake does not depend on
-			// the iptables backend, so it runs on the first one only.
+			// The 30 s wait for the missing handshake and the pre-shared
+			// key do not depend on the iptables backend, so they run on the
+			// first one only.
 			if b.name == backends[0].name {
 				t.Run(wireGuardVariant.name+"-no-handshake", newWireGuardScenario(s, td).checkNoHandshake)
+				t.Run(wireGuardVariant.name+"-psk", newWireGuardScenario(s, td).checkPresharedKey)
 			}
 			t.Run(wireGuardVariant.name, newWireGuardScenario(s, td).run)
 			runIPsecVariants(t, s, td)

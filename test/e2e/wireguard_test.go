@@ -3,10 +3,13 @@
 package e2e
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +30,12 @@ const (
 	// driver's 2 s checks and some slack.
 	minNoAnswerDelay   = 25 * time.Second
 	noHandshakeTimeout = 45 * time.Second
+	// wrongPSKWindow is how long a profile with a wrong pre-shared key must
+	// stay without a handshake: wireguard-go initiates at most every 5 s,
+	// so the window covers two attempts.
+	wrongPSKWindow = 8 * time.Second
+	// secretPresharedKey is the profile secret of the pre-shared key.
+	secretPresharedKey = "presharedKey"
 )
 
 // everything is the allowed IP that sends all traffic to the server; the
@@ -121,6 +130,92 @@ func (sc *wireGuardScenario) checkNoHandshake(t *testing.T) {
 	if elapsed := time.Since(connected); elapsed < minNoAnswerDelay {
 		t.Errorf("message code after %s, want it only after about 30 s\n%s", elapsed.Round(time.Second), sc.td.logTail())
 	}
+}
+
+// checkPresharedKey: the server's peer has a pre-shared key. A profile with
+// another one never completes a handshake (Noise_IKpsk2 mixes the key into
+// the server's response) and stays connecting; one with the same key
+// connects and carries traffic, and its profile shows the key only as
+// present.
+func (sc *wireGuardScenario) checkPresharedKey(t *testing.T) {
+	keys, psk := sc.keyPair(t), presharedKey(t)
+	sc.stack.exec(t, wireGuardService, "e2e-wgserver-peer", keys.PublicKey, psk)
+	serverKey := sc.serverPublicKey(t)
+
+	wrong := sc.formProfile(keys, serverKey, everything)
+	wrong.Name += " wrong pre-shared key"
+	wrong.Secrets[secretPresharedKey] = presharedKey(t)
+	wrongID := sc.td.createProfile(t, wrong)
+	t.Cleanup(func() { sc.cleanUp(t, wrongID) })
+	sc.td.connect(t, wrongID)
+	sc.expectNoHandshake(t, keys.PublicKey)
+	sc.td.disconnect(t)
+
+	right := sc.formProfile(keys, serverKey, everything)
+	right.Name += " pre-shared key"
+	right.Secrets[secretPresharedKey] = psk
+	id := sc.td.createProfile(t, right)
+	t.Cleanup(func() { sc.cleanUp(t, id) })
+	sc.checkStoredSecrets(t, id, map[string]string{secretPresharedKey: psk})
+	sc.connect(t, id)
+	sc.checkTraffic(t)
+	if sc.serverHandshake(t, keys.PublicKey).IsZero() {
+		t.Error("the server reports no handshake with the peer, want one with the pre-shared key")
+	}
+	sc.td.disconnect(t)
+}
+
+// presharedKey returns a fresh WireGuard pre-shared key (32 random bytes,
+// base64).
+func presharedKey(t *testing.T) string {
+	t.Helper()
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("generate a pre-shared key: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(key)
+}
+
+// expectNoHandshake: for wrongPSKWindow the tunnel never connects, then it
+// is still connecting without an error, and the server never completed a
+// handshake with peer.
+func (sc *wireGuardScenario) expectNoHandshake(t *testing.T, peer string) {
+	t.Helper()
+	deadline := time.Now().Add(wrongPSKWindow)
+	for time.Now().Before(deadline) {
+		if status := sc.td.status(t); status.State == "connected" {
+			t.Fatalf("connected with a wrong pre-shared key: %+v", status)
+		}
+		time.Sleep(pollInterval)
+	}
+	if status := sc.td.status(t); status.State != "connecting" || status.LastError != nil {
+		t.Errorf("status %+v after %s, want connecting without an error", status, wrongPSKWindow)
+	}
+	if at := sc.serverHandshake(t, peer); !at.IsZero() {
+		t.Errorf("the server completed a handshake at %s with a wrong pre-shared key", at)
+	}
+}
+
+// serverHandshake returns the server's latest handshake with peer, zero
+// for none.
+func (sc *wireGuardScenario) serverHandshake(t *testing.T, peer string) time.Time {
+	t.Helper()
+	for _, line := range lines(sc.stack.exec(t, wireGuardService, "wg", "show", "wg0", "latest-handshakes")) {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != peer {
+			continue
+		}
+		seconds, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			t.Fatalf("latest handshake %q: %v", line, err)
+		}
+		if seconds == 0 {
+			return time.Time{}
+		}
+		return time.Unix(seconds, 0)
+	}
+	t.Fatalf("the server has no peer %s", peer)
+	return time.Time{}
 }
 
 // keyPair asks TunnelDeck for a fresh key pair; nothing is stored.

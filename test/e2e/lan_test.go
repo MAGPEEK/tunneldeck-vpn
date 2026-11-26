@@ -97,6 +97,12 @@ func runLANScenario(t *testing.T, s stack, host lanHost) {
 	t.Run("kill-switch", sc.checkKillSwitch)
 	t.Run("outbound-policy-routing-wireguard", sc.checkOutboundRoutingOverWireGuard)
 	t.Run("ipsec-net-to-net", sc.checkIPsecNetToNet)
+	// The kill switch depends on the firewall backend, which case
+	// kill-switch covers on both hosts, not on the tunnel's protocol; over
+	// WireGuard it runs on the first LAN host only.
+	if host.backend.name == lanHosts[0].backend.name {
+		t.Run("kill-switch-wireguard", sc.checkKillSwitchOverWireGuard)
+	}
 }
 
 // profile is variant A without remote networks, so only the outbound
@@ -349,19 +355,25 @@ func (sc *lanScenario) ping(service string, target netip.Addr, options ...string
 // does take that route and is counted, which proves both the route and the
 // leak counter work.
 func (sc *lanScenario) checkKillSwitch(t *testing.T) {
+	sc.checkKillSwitchWith(t, sc.dropTunnel, sc.restoreTunnel)
+}
+
+// checkKillSwitchWith runs the kill-switch case on the connected tunnel:
+// drop takes the tunnel down, restore brings it back and waits for the
+// reconnect.
+func (sc *lanScenario) checkKillSwitchWith(t *testing.T, drop, restore func(t *testing.T)) {
+	t.Helper()
 	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{webOutbound(), webForward(false, "")}), "route lan-web and forward its port")
 	sc.addLeakPath(t)
 	if err := sc.ping(lanWebService, sc.variant.remoteHost); err != nil {
 		t.Fatalf("lan-web cannot reach %s while connected: %v", sc.variant.remoteHost, err)
 	}
 
-	sc.dropTunnel(t)
+	drop(t)
 	sc.expectKillSwitch(t, "while the tunnel is down")
-	if body, err := sc.fetchWebClient(); err == nil {
-		t.Errorf("port forward answered while the tunnel is down: %q", body)
-	}
+	sc.expectNoForward(t, "while the tunnel is down")
 
-	sc.restoreTunnel(t)
+	restore(t)
 	if err := sc.ping(lanWebService, sc.variant.remoteHost); err != nil {
 		t.Errorf("lan-web cannot reach %s after the tunnel came back: %v", sc.variant.remoteHost, err)
 	}
@@ -390,6 +402,14 @@ func (sc *lanScenario) expectKillSwitch(t *testing.T, when string) {
 	}
 	if leaked := sc.leakedPackets(t) - before; leaked != 0 {
 		t.Errorf("%s: %d of lan-web's packets to %s left the host outside the tunnel, want 0", when, leaked, remoteNetwork)
+	}
+}
+
+// expectNoForward: the port forward gives the probe no answer.
+func (sc *lanScenario) expectNoForward(t *testing.T, when string) {
+	t.Helper()
+	if body, err := sc.fetchWebClient(); err == nil {
+		t.Errorf("%s: the port forward answered: %q", when, body)
 	}
 }
 
