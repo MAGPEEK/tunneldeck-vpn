@@ -45,24 +45,29 @@ afterEach(() => {
 });
 
 describe('ConnectionCard', () => {
-  it.each<[ConnectionState, string, string]>([
-    ['disconnected', 'Disconnected', 'neutral'],
-    ['connecting', 'Connecting', 'warning'],
-    ['reconnecting', 'Reconnecting', 'warning'],
-    ['disconnecting', 'Disconnecting', 'warning'],
-    ['connected', 'Connected', 'success'],
-    ['error', 'Error', 'danger'],
-  ])('shows %s as "%s" in a %s pill inside a live region', (state, label, tone) => {
+  it.each<[ConnectionState, string]>([
+    ['disconnected', 'Disconnected'],
+    ['connecting', 'Connecting'],
+    ['reconnecting', 'Reconnecting'],
+    ['disconnecting', 'Disconnecting'],
+    ['connected', 'Connected'],
+    ['error', 'Error'],
+  ])('announces %s as "%s" in a hidden live region', (state, label) => {
     renderCard({ ...connected, state });
-    const pill = screen.getAllByText(label).at(0);
-    expect(pill?.closest('[data-tone]')).toHaveAttribute('data-tone', tone);
-    expect(pill?.closest('[aria-live]')).toHaveAttribute('aria-live', 'polite');
+    const live = document.querySelector('[aria-live="polite"]');
+    expect(live).toHaveClass('visually-hidden');
+    expect(live).toHaveTextContent(label);
+  });
+
+  it('shows no state pill, profile name or protocol badge in the header', () => {
+    renderCard(connected);
+    expect(screen.queryByRole('heading', { name: 'Office' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('OpenVPN')).toHaveLength(1);
   });
 
   it('offers a profile select and Connect when disconnected', () => {
     const { onConnect } = renderCard({ state: 'disconnected' });
     const select = screen.getByRole('combobox', { name: 'Profile' });
-    expect(screen.getByRole('heading', { name: 'Office' })).toBeInTheDocument();
 
     fireEvent.change(select, { target: { value: 'p2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
@@ -89,7 +94,7 @@ describe('ConnectionCard', () => {
     expect(screen.getByText('publicip20.mdex.de')).toBeInTheDocument();
     expect(screen.getByText('10.8.0.6')).toBeInTheDocument();
     expect(screen.getByText('3 h 12 min')).toBeInTheDocument();
-    expect(screen.getAllByText('OpenVPN')).toHaveLength(2);
+    expect(screen.getAllByText('OpenVPN')).toHaveLength(1);
 
     act(() => {
       vi.advanceTimersByTime(60_000);

@@ -136,7 +136,7 @@ describe('DashboardPage', () => {
   it('shows the connection line and details, and links to the log', async () => {
     renderApp(routes());
 
-    expect(await screen.findByRole('heading', { name: 'Office' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Connection details' })).toBeInTheDocument();
     expect(screen.getAllByText('Disconnected').length).toBeGreaterThan(0);
     expect(await screen.findByText('192.168.1.0/24 · 2 devices')).toBeInTheDocument();
     expect(
@@ -159,7 +159,7 @@ describe('DashboardPage', () => {
 
   it('hides the connection line when unchecked in Customize', async () => {
     renderApp(routes());
-    await screen.findByRole('heading', { name: 'Office' });
+    await screen.findByRole('region', { name: 'Connection details' });
     expect(screen.getByRole('link', { name: 'Open firewall' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
@@ -307,7 +307,7 @@ describe('DashboardPage', () => {
         ],
       }),
     );
-    await screen.findByRole('heading', { name: 'Office' });
+    await screen.findByRole('region', { name: 'Connection details' });
     const source = FakeEventSource.latest();
 
     act(() => {
@@ -341,7 +341,7 @@ describe('DashboardPage', () => {
         },
       }),
     );
-    await screen.findByRole('heading', { name: 'Office' });
+    await screen.findByRole('region', { name: 'Connection details' });
     const source = FakeEventSource.latest();
     act(() => {
       source.open();
@@ -361,7 +361,7 @@ describe('DashboardPage', () => {
 
   it('reconnects the stream with backoff after it ends', async () => {
     renderApp(routes());
-    await screen.findByRole('heading', { name: 'Office' });
+    await screen.findByRole('region', { name: 'Connection details' });
     vi.useFakeTimers();
     const first = FakeEventSource.latest();
 
@@ -381,7 +381,7 @@ describe('DashboardPage', () => {
         'GET /api/connection': [{ body: makeStatus() }, problem(401, 'unauthenticated', 'expired')],
       }),
     );
-    await screen.findByRole('heading', { name: 'Office' });
+    await screen.findByRole('region', { name: 'Connection details' });
 
     act(() => FakeEventSource.latest().fail());
 

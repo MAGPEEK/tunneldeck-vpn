@@ -15,11 +15,6 @@
   gap: var(--space-3);
 }
 
-.name {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;

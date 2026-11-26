@@ -14,7 +14,6 @@ import { remoteAccessActive } from '../../remoteAccess/remoteAccessUrl';
 import { protocolName } from '../profiles/profileText';
 import styles from './ConnectionCard.module.css';
 import { ConnectionLine } from './ConnectionLine';
-import { STATE_TONES } from './overview';
 
 export type ConnectionAction = 'connect' | 'disconnect' | 'reconnect';
 
@@ -57,20 +56,15 @@ export function ConnectionCard(props: ConnectionCardProps) {
   const idle = status.state === 'disconnected' || status.state === 'error';
   const shownId = idle ? selectedId : (status.profileId ?? selectedId);
   const profile = profiles.find((candidate) => candidate.id === shownId);
-  const name = idle ? profile?.name : (status.profileName ?? profile?.name);
   const protocol = protocolName(t, status.protocol ?? profile?.protocol ?? 'openvpn');
   const advisories = idle ? (profile?.advisories ?? []) : status.advisories;
 
   return (
     <section className={styles.card} aria-label={t('connection.label')}>
       <div className={styles.header}>
-        <span aria-live="polite" aria-atomic="true">
-          <StatePill tone={STATE_TONES[status.state]} dot>
-            {t(`connection.state.${status.state}`)}
-          </StatePill>
+        <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+          {t(`connection.state.${status.state}`)}
         </span>
-        {name !== undefined && <h2 className={styles.name}>{name}</h2>}
-        <StatePill>{protocol}</StatePill>
         {remoteAccessActive(props.remoteAccess) && (
           <StatePill tone="accent">{t('connection.remoteAccessOn')}</StatePill>
         )}
