@@ -7,6 +7,7 @@
     "dashboard": "Übersicht",
     "profiles": "Profile",
     "firewall": "Firewall",
+    "log": "Protokoll",
     "system": "System"
   },
   "pages": {
@@ -18,6 +19,9 @@
     },
     "firewall": {
       "title": "Firewall"
+    },
+    "log": {
+      "title": "Protokoll"
     },
     "system": {
       "title": "System"
@@ -81,7 +85,74 @@
   "dashboard": {
     "emptyTitle": "Legen Sie Ihr erstes VPN-Profil an",
     "emptyBody": "Ein Profil enthält Serveradresse, Anmeldedaten und Verschlüsselungseinstellungen einer VPN-Verbindung.",
-    "createProfile": "Manuell anlegen"
+    "createProfile": "Manuell anlegen",
+    "line": {
+      "vpn": "VPN",
+      "device": "Dieses Gerät",
+      "lan": "Lokales LAN",
+      "connectedFor": "Verbunden seit",
+      "received": "→ Empfangen: {{rate}}",
+      "sent": "← Gesendet: {{rate}}",
+      "rules_one": "Firewall: {{count}} Regel",
+      "rules_other": "Firewall: {{count}} Regeln",
+      "forwards_one": "{{count}} Weiterleitung aktiv",
+      "forwards_other": "{{count}} Weiterleitungen aktiv",
+      "devices_one": "{{count}} Gerät",
+      "devices_other": "{{count}} Geräte",
+      "vpnIp": "VPN-IP:",
+      "version": "TunnelDeck-VPN {{version}}",
+      "openFirewall": "Firewall öffnen",
+      "summary": "{{state}}. VPN-Server {{host}}, dieses Gerät, lokales LAN {{lan}}. {{rules}}, {{forwards}}.",
+      "showLog": "Protokoll anzeigen"
+    },
+    "details": {
+      "title": "Verbindungsdetails",
+      "tone": {
+        "success": "Status OK",
+        "warning": "Status Warnung",
+        "danger": "Status Problem",
+        "neutral": "inaktiv"
+      },
+      "tunnel": "VPN-Tunnel",
+      "rateIn": "↓ {{rate}}",
+      "rateOut": "↑ {{rate}}",
+      "address": "VPN-Adresse (IPv4)",
+      "connectedSince": "Verbunden seit {{time}}",
+      "notConnected": "Nicht verbunden",
+      "encryption": "Verschlüsselung",
+      "dataChannel": "Datenkanal {{cipher}}",
+      "dataChannelNone": "Datenkanal nicht verschlüsselt",
+      "controlChannel": "Steuerkanal {{value}}",
+      "lan": "Lokales LAN",
+      "firewall": "Firewall",
+      "rules_one": "{{count}} aktive Regel",
+      "rules_other": "{{count}} aktive Regeln",
+      "protectionsOk": "Alle Schutzfunktionen aktiv",
+      "protectionsLimited": "Einige Schutzfunktionen auf diesem System eingeschränkt",
+      "ipForwardOff": "Die IP-Weiterleitung ist auf dem Host aus: Weiterleitungen und ausgehende Regeln funktionieren nicht.",
+      "remoteAccess": "Fernzugriff",
+      "remoteOff": "Aus",
+      "remoteOn": "HTTPS auf Port {{port}}",
+      "traffic": "Datenverkehr gesamt",
+      "received": "Empfangen {{bytes}}",
+      "sent": "Gesendet {{bytes}}"
+    },
+    "customize": {
+      "open": "Anpassen",
+      "legend": "Auf dem Dashboard anzeigen",
+      "reset": "Zurücksetzen",
+      "hide": "{{item}} ausblenden",
+      "item": {
+        "line": "Verbindungslinie",
+        "tunnel": "VPN-Tunnel",
+        "address": "VPN-Adresse",
+        "encryption": "Verschlüsselung",
+        "lan": "Lokales LAN",
+        "firewall": "Firewall",
+        "remote": "Fernzugriff",
+        "traffic": "Datenverkehr gesamt"
+      }
+    }
   },
   "connection": {
     "label": "Verbindung",
@@ -93,9 +164,6 @@
       "disconnecting": "Trennt",
       "error": "Fehler"
     },
-    "server": "Server",
-    "vpnAddress": "VPN-Adresse",
-    "since": "Verbunden seit",
     "profile": "Profil",
     "connect": "Verbinden",
     "tryAgain": "Erneut versuchen",
@@ -112,24 +180,8 @@
       "start_failed": "Der VPN-Prozess konnte nicht gestartet werden"
     },
     "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
-    "profileMissing": "Dieses Profil existiert nicht mehr."
-  },
-  "metrics": {
-    "label": "Datenverkehr",
-    "received": "Empfangen",
-    "sent": "Gesendet",
-    "download": "Download",
-    "upload": "Upload"
-  },
-  "hostProtection": {
-    "title": "Dieses Gerät vom Tunnel abgeschirmt",
-    "inboundRules_one": "{{count}} eingehende Regel",
-    "inboundRules_other": "{{count}} eingehende Regeln",
-    "outboundRules_one": "{{count}} ausgehende Regel",
-    "outboundRules_other": "{{count}} ausgehende Regeln",
-    "ipForwardOff": "Die IP-Weiterleitung ist auf dem Host aus: Weiterleitungen und ausgehende Regeln funktionieren nicht.",
-    "manage": "Firewall verwalten",
-    "remoteAccess": "Weboberfläche per HTTPS auf Port {{port}} erreichbar"
+    "profileMissing": "Dieses Profil existiert nicht mehr.",
+    "openLog": "Protokoll mit Details öffnen"
   },
   "log": {
     "title": "Protokoll",

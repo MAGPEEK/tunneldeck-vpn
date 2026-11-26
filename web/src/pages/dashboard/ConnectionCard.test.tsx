@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionState, ConnectionStatus } from '../../api/connection';
-import { makeProfile, makeStatus } from '../../test/fixtures';
+import { makeFirewall, makeProfile, makeStatus } from '../../test/fixtures';
+import { renderWithProviders } from '../../test/renderWithProviders';
 import { ConnectionCard, type ConnectionCardProps } from './ConnectionCard';
 
 const office = makeProfile();
@@ -18,7 +19,7 @@ const mdex = makeProfile({
 
 function renderCard(status: Partial<ConnectionStatus>, props: Partial<ConnectionCardProps> = {}) {
   const handlers = { onConnect: vi.fn(), onDisconnect: vi.fn(), onReconnect: vi.fn() };
-  render(
+  renderWithProviders(
     <ConnectionCard
       status={makeStatus(status)}
       profiles={[office, mdex]}
@@ -53,9 +54,9 @@ describe('ConnectionCard', () => {
     ['error', 'Error', 'danger'],
   ])('shows %s as "%s" in a %s pill inside a live region', (state, label, tone) => {
     renderCard({ ...connected, state });
-    const pill = screen.getByText(label);
-    expect(pill.closest('[data-tone]')).toHaveAttribute('data-tone', tone);
-    expect(pill.closest('[aria-live]')).toHaveAttribute('aria-live', 'polite');
+    const pill = screen.getAllByText(label).at(0);
+    expect(pill?.closest('[data-tone]')).toHaveAttribute('data-tone', tone);
+    expect(pill?.closest('[aria-live]')).toHaveAttribute('aria-live', 'polite');
   });
 
   it('offers a profile select and Connect when disconnected', () => {
@@ -67,7 +68,7 @@ describe('ConnectionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(onConnect).toHaveBeenCalledWith('p2');
-    expect(screen.getByText('publicip20.mdex.de:1194')).toBeInTheDocument();
+    expect(screen.getByText('publicip20.mdex.de')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
   });
 
@@ -77,7 +78,7 @@ describe('ConnectionCard', () => {
     expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled();
   });
 
-  it('shows server, VPN address, live duration and offers Reconnect and Disconnect when connected', () => {
+  it('shows server, VPN IP, live duration and offers Reconnect and Disconnect when connected', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-11-25T13:12:00Z'));
     const { onReconnect, onDisconnect } = renderCard({
@@ -85,10 +86,10 @@ describe('ConnectionCard', () => {
       since: '2026-11-25T10:00:00Z',
     });
 
-    expect(screen.getByText('203.0.113.7:1194')).toBeInTheDocument();
+    expect(screen.getByText('publicip20.mdex.de')).toBeInTheDocument();
     expect(screen.getByText('10.8.0.6')).toBeInTheDocument();
     expect(screen.getByText('3 h 12 min')).toBeInTheDocument();
-    expect(screen.getByText('OpenVPN')).toBeInTheDocument();
+    expect(screen.getAllByText('OpenVPN')).toHaveLength(2);
 
     act(() => {
       vi.advanceTimersByTime(60_000);
@@ -102,7 +103,7 @@ describe('ConnectionCard', () => {
     expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
   });
 
-  it('offers Disconnect while connecting and shows dashes for missing values', () => {
+  it('offers Disconnect while connecting and shows no VPN IP or rates yet', () => {
     const { onDisconnect } = renderCard({
       state: 'connecting',
       profileId: 'p1',
@@ -110,7 +111,9 @@ describe('ConnectionCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
     expect(onDisconnect).toHaveBeenCalled();
-    expect(screen.getAllByText('–')).toHaveLength(2);
+    expect(screen.getByText('VPN IP:').parentElement).toHaveTextContent('VPN IP: –');
+    expect(screen.getByText('→ Received: –')).toBeInTheDocument();
+    expect(screen.getByText('← Sent: –')).toBeInTheDocument();
   });
 
   it('shows a busy Disconnect while disconnecting', () => {
@@ -131,7 +134,13 @@ describe('ConnectionCard', () => {
       profileId: 'p1',
       lastError: { code, message: 'AUTH_FAILED', time: '2026-11-25T10:00:00Z' },
     });
-    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText(text, { exact: false })).toHaveTextContent(
+      `${text} Open log for details`,
+    );
+    expect(screen.getByRole('link', { name: 'Open log for details' })).toHaveAttribute(
+      'href',
+      '/log',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onConnect).toHaveBeenCalledWith('p1');
   });
@@ -155,5 +164,56 @@ describe('ConnectionCard', () => {
   it('shows a failed action as an alert', () => {
     renderCard({ state: 'disconnected' }, { actionError: 'Something went wrong. Try again.' });
     expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
+  });
+
+  it('shows the LAN, firewall link, host address and version in the connection line', () => {
+    renderCard(connected, { firewall: makeFirewall(), deviceCount: 4, version: '0.2.0' });
+    const line = screen.getByRole('group');
+    expect(line).toHaveAccessibleName(
+      'Connected. VPN server publicip20.mdex.de, this device, local LAN 192.168.1.0/24 · 4 devices. Firewall: 1 rule, 0 forwards active.',
+    );
+    expect(screen.getByText('192.168.1.0/24 · 4 devices')).toBeInTheDocument();
+    expect(screen.getByText('Firewall: 1 rule')).toBeInTheDocument();
+    expect(screen.getByText('0 forwards active')).toBeInTheDocument();
+    expect(screen.getByText('192.168.1.10 · TunnelDeck-VPN 0.2.0')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open firewall' })).toHaveAttribute(
+      'href',
+      '/firewall',
+    );
+    expect(document.querySelector('[data-link="firewall"]')).toHaveAttribute(
+      'data-tone',
+      'success',
+    );
+  });
+
+  it.each<[ConnectionState, string, string]>([
+    ['disconnected', 'neutral', 'true'],
+    ['connecting', 'warning', 'false'],
+    ['connected', 'success', 'false'],
+    ['error', 'danger', 'false'],
+  ])('draws the tunnel link for %s as %s (dashed %s)', (state, tone, dashed) => {
+    renderCard({ ...connected, state });
+    const link = document.querySelector('[data-link="tunnel"]');
+    expect(link).toHaveAttribute('data-tone', tone);
+    expect(link).toHaveAttribute('data-dashed', dashed);
+  });
+
+  it('stacks the connection line vertically on narrow screens', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    renderCard(connected);
+    expect(screen.getByRole('group')).toHaveAttribute('data-layout', 'vertical');
+  });
+
+  it('keeps the connection line horizontal without a narrow match', () => {
+    renderCard(connected);
+    expect(screen.getByRole('group')).toHaveAttribute('data-layout', 'horizontal');
   });
 });

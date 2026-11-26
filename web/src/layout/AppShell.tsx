@@ -1,4 +1,12 @@
-import { BrickWall, LayoutDashboard, List, LogOut, Settings, ShieldCheck } from 'lucide-react';
+import {
+  BrickWall,
+  LayoutDashboard,
+  List,
+  LogOut,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 import { Button } from '../components/Button';
@@ -11,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'nav.dashboard', Icon: LayoutDashboard },
   { to: '/profiles', label: 'nav.profiles', Icon: List },
   { to: '/firewall', label: 'nav.firewall', Icon: BrickWall },
+  { to: '/log', label: 'nav.log', Icon: ScrollText },
   { to: '/system', label: 'nav.system', Icon: Settings },
 ] as const;
 

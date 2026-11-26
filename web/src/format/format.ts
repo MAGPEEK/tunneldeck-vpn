@@ -70,6 +70,11 @@ export function parseTime(value: string | undefined): Date | undefined {
   return Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1971 ? undefined : date;
 }
 
+/** Date and time in the browser's zone, e.g. "Nov 25, 2026, 11:00 AM". */
+export function formatDateTime(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
 /** Date and time in `timeZone`; an unknown zone name falls back to the browser's zone. */
 export function formatZonedTime(iso: string, locale: string, timeZone: string): string {
   const date = new Date(iso);

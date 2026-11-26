@@ -26,6 +26,10 @@ export interface ConnectionStatus {
   rateOut: number;
   lastError?: StatusError;
   advisories: Advisory[];
+  /** Negotiated data channel cipher, e.g. "CHACHA20-POLY1305"; "none" when unencrypted. */
+  dataCipher?: string;
+  /** Control channel TLS version and cipher suite, e.g. "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256". */
+  controlChannel?: string;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

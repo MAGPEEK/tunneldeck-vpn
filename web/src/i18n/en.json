@@ -7,6 +7,7 @@
     "dashboard": "Dashboard",
     "profiles": "Profiles",
     "firewall": "Firewall",
+    "log": "Log",
     "system": "System"
   },
   "pages": {
@@ -18,6 +19,9 @@
     },
     "firewall": {
       "title": "Firewall"
+    },
+    "log": {
+      "title": "Log"
     },
     "system": {
       "title": "System"
@@ -81,7 +85,74 @@
   "dashboard": {
     "emptyTitle": "Add your first VPN profile",
     "emptyBody": "A profile holds the server address, sign-in details and encryption settings of one VPN connection.",
-    "createProfile": "Create manually"
+    "createProfile": "Create manually",
+    "line": {
+      "vpn": "VPN",
+      "device": "This device",
+      "lan": "Local LAN",
+      "connectedFor": "Connected for",
+      "received": "→ Received: {{rate}}",
+      "sent": "← Sent: {{rate}}",
+      "rules_one": "Firewall: {{count}} rule",
+      "rules_other": "Firewall: {{count}} rules",
+      "forwards_one": "{{count}} forward active",
+      "forwards_other": "{{count}} forwards active",
+      "devices_one": "{{count}} device",
+      "devices_other": "{{count}} devices",
+      "vpnIp": "VPN IP:",
+      "version": "TunnelDeck-VPN {{version}}",
+      "openFirewall": "Open firewall",
+      "summary": "{{state}}. VPN server {{host}}, this device, local LAN {{lan}}. {{rules}}, {{forwards}}.",
+      "showLog": "Show log"
+    },
+    "details": {
+      "title": "Connection details",
+      "tone": {
+        "success": "status OK",
+        "warning": "status warning",
+        "danger": "status problem",
+        "neutral": "inactive"
+      },
+      "tunnel": "VPN tunnel",
+      "rateIn": "↓ {{rate}}",
+      "rateOut": "↑ {{rate}}",
+      "address": "VPN address (IPv4)",
+      "connectedSince": "Connected since {{time}}",
+      "notConnected": "Not connected",
+      "encryption": "Encryption",
+      "dataChannel": "Data channel {{cipher}}",
+      "dataChannelNone": "Data channel not encrypted",
+      "controlChannel": "Control channel {{value}}",
+      "lan": "Local LAN",
+      "firewall": "Firewall",
+      "rules_one": "{{count}} active rule",
+      "rules_other": "{{count}} active rules",
+      "protectionsOk": "All protections active",
+      "protectionsLimited": "Some protections limited on this system",
+      "ipForwardOff": "IP forwarding is off on the host: port forwards and outbound rules do not work.",
+      "remoteAccess": "Remote access",
+      "remoteOff": "Off",
+      "remoteOn": "HTTPS on port {{port}}",
+      "traffic": "Traffic total",
+      "received": "Received {{bytes}}",
+      "sent": "Sent {{bytes}}"
+    },
+    "customize": {
+      "open": "Customize",
+      "legend": "Show on the dashboard",
+      "reset": "Reset",
+      "hide": "Hide {{item}}",
+      "item": {
+        "line": "Connection line",
+        "tunnel": "VPN tunnel",
+        "address": "VPN address",
+        "encryption": "Encryption",
+        "lan": "Local LAN",
+        "firewall": "Firewall",
+        "remote": "Remote access",
+        "traffic": "Traffic total"
+      }
+    }
   },
   "connection": {
     "label": "Connection",
@@ -93,9 +164,6 @@
       "disconnecting": "Disconnecting",
       "error": "Error"
     },
-    "server": "Server",
-    "vpnAddress": "VPN address",
-    "since": "Connected since",
     "profile": "Profile",
     "connect": "Connect",
     "tryAgain": "Try again",
@@ -112,24 +180,8 @@
       "start_failed": "The VPN process could not be started"
     },
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
-    "profileMissing": "This profile no longer exists."
-  },
-  "metrics": {
-    "label": "Traffic",
-    "received": "Received",
-    "sent": "Sent",
-    "download": "Download",
-    "upload": "Upload"
-  },
-  "hostProtection": {
-    "title": "This device shielded from tunnel",
-    "inboundRules_one": "{{count}} inbound rule",
-    "inboundRules_other": "{{count}} inbound rules",
-    "outboundRules_one": "{{count}} outbound rule",
-    "outboundRules_other": "{{count}} outbound rules",
-    "ipForwardOff": "IP forwarding is off on the host: port forwards and outbound rules do not work.",
-    "manage": "Manage firewall",
-    "remoteAccess": "Web UI reachable over HTTPS on port {{port}}"
+    "profileMissing": "This profile no longer exists.",
+    "openLog": "Open log for details"
   },
   "log": {
     "title": "Log",

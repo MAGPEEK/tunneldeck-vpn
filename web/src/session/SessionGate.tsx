@@ -8,6 +8,7 @@ import { Page } from '../layout/Page';
 import styles from '../layout/AuthLayout.module.css';
 import { LiveEvents } from '../live/LiveEvents';
 import { DashboardPage } from '../pages/dashboard/DashboardPage';
+import { LogPage } from '../pages/log/LogPage';
 import { LoginPage } from '../pages/login/LoginPage';
 import { ProfileFormPage } from '../pages/profiles/form/ProfileFormPage';
 import { ProfilesPage } from '../pages/profiles/ProfilesPage';
@@ -47,6 +48,7 @@ function AppRoutes() {
             }
           />
           <Route path="host-access" element={<Navigate to="/firewall" replace />} />
+          <Route path="log" element={<LogPage />} />
           <Route path="system" element={<SystemPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

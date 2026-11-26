@@ -10,19 +10,20 @@ import {
   useConnection,
   useConnectionControl,
   useFirewall,
-  useLogs,
+  useFirewallDevices,
   useProfiles,
   useRemoteAccess,
+  useSystem,
 } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
 import { ImportFailureNotice } from '../profiles/import/ImportFailureNotice';
 import { LoadProfileFileButton } from '../profiles/import/LoadProfileFileButton';
 import { useProfileImport } from '../profiles/import/useProfileImport';
+import { profileServer } from '../profiles/profileText';
 import { ConnectionCard, type ConnectionAction } from './ConnectionCard';
 import styles from './DashboardPage.module.css';
-import { HostProtectionCard } from './HostProtectionCard';
-import { LogCard } from './LogCard';
-import { MetricRow } from './MetricRow';
+import { useDashboardItems } from './dashboardItems';
+import { StatusList } from './StatusList';
 
 function actionErrorMessage(t: TFunction, error: unknown): string {
   if (isApiError(error) && error.code === 'conflict') {
@@ -50,9 +51,11 @@ export function DashboardPage() {
   const connection = useConnection();
   const firewall = useFirewall();
   const remoteAccess = useRemoteAccess();
-  const logs = useLogs();
+  const devices = useFirewallDevices();
+  const system = useSystem();
   const { control, pending, failed, reset } = useControls();
   const profileImport = useProfileImport();
+  const items = useDashboardItems();
 
   if (profiles.isSuccess && profiles.data.length === 0) {
     return (
@@ -80,6 +83,10 @@ export function DashboardPage() {
   }
 
   const loadError = profiles.error ?? connection.error;
+  const deviceCount = devices.data?.filter((device) => device.onLan).length;
+  const activeProfile =
+    profiles.data?.find((candidate) => candidate.id === connection.data?.profileId) ??
+    profiles.data?.[0];
   return (
     <Page title={t('pages.dashboard.title')}>
       <div className={styles.stack}>
@@ -107,12 +114,21 @@ export function DashboardPage() {
                 reset();
                 control.reconnect.mutate();
               }}
+              firewall={firewall.data}
+              deviceCount={deviceCount}
+              version={system.data?.version}
+              showLine={items.isVisible('line')}
             />
-            <MetricRow status={connection.data} />
+            <StatusList
+              status={connection.data}
+              server={activeProfile ? profileServer(activeProfile) : ''}
+              firewall={firewall.data}
+              deviceCount={deviceCount}
+              remoteAccess={remoteAccess.data}
+              items={items}
+            />
           </>
         )}
-        <HostProtectionCard firewall={firewall.data} remoteAccess={remoteAccess.data} />
-        <LogCard lines={logs.data} />
       </div>
     </Page>
   );

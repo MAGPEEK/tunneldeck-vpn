@@ -40,6 +40,9 @@ function firewall(overrides: Record<string, unknown> = {}) {
     hostAddresses: ['192.168.1.10'],
     lanSubnets: ['192.168.1.0/24'],
     ipForward: true,
+    counters: null,
+    countersAvailable: false,
+    protectionsAvailable: { synFlood: 'full', ping: 'full', mssClamp: 'full', ruleCounters: true },
     ...overrides,
   };
 }
@@ -51,9 +54,22 @@ function routes(overrides: MockRoutes = {}): MockRoutes {
     'GET /api/connection': { body: makeStatus() },
     'GET /api/firewall': { body: firewall() },
     'GET /api/remote-access': problem(404, 'not_found', 'The resource does not exist.'),
-    'GET /api/logs?tail=2000': {
+    'GET /api/firewall/devices': {
       body: {
-        lines: [{ time: '2026-11-25T10:00:00Z', level: 'info', text: 'TunnelDeck started' }],
+        devices: [
+          { address: '192.168.1.2', mac: 'aa:bb:cc:00:00:02', state: 'REACHABLE', onLan: true },
+          { address: '192.168.1.3', mac: 'aa:bb:cc:00:00:03', state: 'STALE', onLan: true },
+          { address: '10.8.0.1', mac: '', state: 'REACHABLE', onLan: false },
+        ],
+      },
+    },
+    'GET /api/system': {
+      body: {
+        version: '0.2.0-alpha.6',
+        listenAddress: ':8080',
+        serverTime: '2026-11-25T10:00:00Z',
+        timeZone: 'UTC',
+        checks: [],
       },
     },
     ...overrides,
@@ -117,20 +133,40 @@ describe('DashboardPage', () => {
     expect(alert).toHaveTextContent('Only .ovpn or .conf files can be loaded.');
   });
 
-  it('shows the connection, metrics, host protection and log', async () => {
+  it('shows the connection line and details, and links to the log', async () => {
     renderApp(routes());
 
     expect(await screen.findByRole('heading', { name: 'Office' })).toBeInTheDocument();
-    expect(screen.getByText('Disconnected')).toBeInTheDocument();
-    expect(within(screen.getByLabelText('Traffic')).getAllByText('–')).toHaveLength(4);
-    expect(await screen.findByText('1 inbound rule, 0 outbound rules')).toBeInTheDocument();
+    expect(screen.getAllByText('Disconnected').length).toBeGreaterThan(0);
+    expect(await screen.findByText('192.168.1.0/24 · 2 devices')).toBeInTheDocument();
+    expect(
+      await screen.findByText('192.168.1.10 · TunnelDeck-VPN 0.2.0-alpha.6'),
+    ).toBeInTheDocument();
+    const details = screen.getByRole('region', { name: 'Connection details' });
+    expect(within(details).getByText('Received –')).toBeInTheDocument();
+    expect(within(details).getByText('1 active rule')).toBeInTheDocument();
+    expect(within(details).queryByText('Remote access')).not.toBeInTheDocument();
+    expect(within(details).queryByText('Encryption')).not.toBeInTheDocument();
     expect(screen.queryByText(/IP forwarding is off/)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage firewall' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open firewall' })).toHaveAttribute(
       'href',
       '/firewall',
     );
-    expect(await screen.findByText('TunnelDeck started')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Show log' })).toHaveAttribute('href', '/log');
+    expect(screen.queryByRole('heading', { name: 'Log' })).not.toBeInTheDocument();
     expect(FakeEventSource.latest().url).toBe('/api/events');
+  });
+
+  it('hides the connection line when unchecked in Customize', async () => {
+    renderApp(routes());
+    await screen.findByRole('heading', { name: 'Office' });
+    expect(screen.getByRole('link', { name: 'Open firewall' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Connection line' }));
+
+    expect(screen.queryByRole('link', { name: 'Open firewall' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
   });
 
   it('warns when IP forwarding is off and a rule needs it', async () => {
@@ -139,7 +175,7 @@ describe('DashboardPage', () => {
         'GET /api/firewall': { body: firewall({ rules: [adminUi, routerOut], ipForward: false }) },
       }),
     );
-    expect(await screen.findByText('1 inbound rule, 1 outbound rule')).toBeInTheDocument();
+    expect(await screen.findByText('2 active rules')).toBeInTheDocument();
     expect(
       screen.getByText(
         'IP forwarding is off on the host: port forwards and outbound rules do not work.',
@@ -149,8 +185,47 @@ describe('DashboardPage', () => {
 
   it('does not warn about IP forwarding when only rules to this device exist', async () => {
     renderApp(routes({ 'GET /api/firewall': { body: firewall({ ipForward: false }) } }));
-    expect(await screen.findByText('1 inbound rule, 0 outbound rules')).toBeInTheDocument();
+    expect(await screen.findByText('1 active rule')).toBeInTheDocument();
     expect(screen.queryByText(/IP forwarding is off/)).not.toBeInTheDocument();
+  });
+
+  it('shows remote access when the build has it', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': {
+          body: {
+            enabled: true,
+            port: 8443,
+            certificateSource: 'selfSigned',
+            certificate: null,
+            listening: true,
+          },
+        },
+      }),
+    );
+    expect(await screen.findByText('HTTPS on port 8443')).toBeInTheDocument();
+  });
+
+  it('links an error to the log page', async () => {
+    renderApp(
+      routes({
+        'GET /api/connection': {
+          body: makeStatus({
+            state: 'error',
+            profileId: 'p1',
+            lastError: {
+              code: 'auth_failed',
+              message: 'AUTH_FAILED',
+              time: '2026-11-25T10:00:00Z',
+            },
+          }),
+        },
+        'GET /api/logs?tail=2000': { body: { lines: [] } },
+      }),
+    );
+    fireEvent.click(await screen.findByRole('link', { name: 'Open log for details' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Log' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/log');
   });
 
   it('connects the chosen profile', async () => {
@@ -164,7 +239,7 @@ describe('DashboardPage', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
-    expect(await screen.findByText('Connecting')).toBeInTheDocument();
+    expect((await screen.findAllByText('Connecting')).length).toBeGreaterThan(0);
     const call = fetchMock.mock.calls.find(([url]) => url === '/api/connection/connect');
     expect(call?.[1]?.body).toBe(JSON.stringify({ profileId: 'p1' }));
   });
@@ -186,7 +261,7 @@ describe('DashboardPage', () => {
         ],
       }),
     );
-    await screen.findByText('Disconnected');
+    await screen.findByRole('heading', { name: 'Office' });
     const source = FakeEventSource.latest();
 
     act(() => {
@@ -198,24 +273,23 @@ describe('DashboardPage', () => {
         since: new Date().toISOString(),
       });
     });
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(await screen.findByText('10.8.0.6')).toBeInTheDocument();
+    expect((await screen.findAllByText('Connected')).length).toBeGreaterThan(0);
+    expect(await screen.findAllByText('10.8.0.6')).toHaveLength(2);
     // Let the refetch triggered by the state event settle first.
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     act(() => {
       source.emit('traffic', { bytesIn: 2_500_000, bytesOut: 1000, rateIn: 125_000, rateOut: 0 });
-      source.emit('log', { time: '2026-11-25T10:00:05Z', level: 'error', text: 'Something broke' });
     });
-    const traffic = screen.getByLabelText('Traffic');
-    expect(await within(traffic).findByText('2.5 MB')).toBeInTheDocument();
-    expect(within(traffic).getByText('1.0 Mbit/s')).toBeInTheDocument();
-    expect(await screen.findByText('Something broke')).toBeInTheDocument();
+    const details = screen.getByRole('region', { name: 'Connection details' });
+    expect(await within(details).findByText('Received 2.5 MB')).toBeInTheDocument();
+    expect(within(details).getByText('↓ 1.0 Mbit/s')).toBeInTheDocument();
+    expect(screen.getByText('→ Received: 1.0 Mbit/s')).toBeInTheDocument();
   });
 
   it('reconnects the stream with backoff after it ends', async () => {
     renderApp(routes());
-    await screen.findByText('Disconnected');
+    await screen.findByRole('heading', { name: 'Office' });
     vi.useFakeTimers();
     const first = FakeEventSource.latest();
 
@@ -235,7 +309,7 @@ describe('DashboardPage', () => {
         'GET /api/connection': [{ body: makeStatus() }, problem(401, 'unauthenticated', 'expired')],
       }),
     );
-    await screen.findByText('Disconnected');
+    await screen.findByRole('heading', { name: 'Office' });
 
     act(() => FakeEventSource.latest().fail());
 

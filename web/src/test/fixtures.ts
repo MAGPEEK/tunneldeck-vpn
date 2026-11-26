@@ -1,4 +1,5 @@
 import type { ConnectionStatus } from '../api/connection';
+import type { FirewallRule, FirewallState } from '../api/firewall';
 import type { Driver, FormSchema, Profile } from '../api/profiles';
 
 const passwordModes = ['password', 'certificate+password'];
@@ -204,6 +205,38 @@ export function makeStatus(overrides: Partial<ConnectionStatus> = {}): Connectio
     rateIn: 0,
     rateOut: 0,
     advisories: [],
+    ...overrides,
+  };
+}
+
+export function makeRule(overrides: Partial<FirewallRule> = {}): FirewallRule {
+  return {
+    id: 'r1',
+    name: 'Admin',
+    direction: 'inbound',
+    action: 'accept',
+    protocol: 'tcp',
+    source: '',
+    destination: '192.168.1.10',
+    destinationPort: { from: 5001 },
+    keepSourceAddress: false,
+    enabled: true,
+    comment: '',
+    ...overrides,
+  };
+}
+
+export function makeFirewall(overrides: Partial<FirewallState> = {}): FirewallState {
+  return {
+    rules: [makeRule()],
+    settings: { dropInvalid: true, mssClamp: true, synFloodProtection: true, pingLimit: true },
+    hostAddress: '192.168.1.10',
+    hostAddresses: ['192.168.1.10'],
+    lanSubnets: ['192.168.1.0/24'],
+    ipForward: true,
+    counters: null,
+    countersAvailable: false,
+    protectionsAvailable: { synFlood: 'full', ping: 'full', mssClamp: 'full', ruleCounters: true },
     ...overrides,
   };
 }

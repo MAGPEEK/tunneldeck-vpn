@@ -38,6 +38,28 @@ describe('session routing', () => {
     expect(window.location.pathname).toBe('/firewall');
   });
 
+  it('lists the log between firewall and system and opens the log page', async () => {
+    renderApp({
+      'GET /api/session': { body: SIGNED_IN },
+      'GET /api/logs?tail=2000': {
+        body: {
+          lines: [{ time: '2026-11-25T10:00:00Z', level: 'info', text: 'TunnelDeck started' }],
+        },
+      },
+    });
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+    const names = within(nav)
+      .getAllByRole('link')
+      .map((link) => link.textContent);
+    expect(names).toEqual(['Dashboard', 'Profiles', 'Firewall', 'Log', 'System']);
+
+    fireEvent.click(within(nav).getByRole('link', { name: 'Log' }));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Log' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/log');
+    expect(await screen.findByText('TunnelDeck started')).toBeInTheDocument();
+  });
+
   it('redirects the old host-access path to the firewall', async () => {
     renderApp({ 'GET /api/session': { body: SIGNED_IN } }, '/host-access');
     expect(await screen.findByRole('heading', { level: 1, name: 'Firewall' })).toBeInTheDocument();

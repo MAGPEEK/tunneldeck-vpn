@@ -1,23 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConnectionState, ConnectionStatus } from '../../api/connection';
+import { Link } from 'react-router';
+import type { ConnectionStatus } from '../../api/connection';
+import type { FirewallState } from '../../api/firewall';
 import type { Profile } from '../../api/profiles';
 import { AdvisoryList } from '../../advisories/AdvisoryList';
 import { Button } from '../../components/Button';
-import { StatePill, type StateTone } from '../../components/StatePill';
+import { StatePill } from '../../components/StatePill';
 import { translateDynamic } from '../../i18n/dynamic';
-import { profileServer, protocolName } from '../profiles/profileText';
-import { ConnectedSince } from './ConnectedSince';
+import { protocolName } from '../profiles/profileText';
 import styles from './ConnectionCard.module.css';
-
-const TONES: Record<ConnectionState, StateTone> = {
-  disconnected: 'neutral',
-  connecting: 'warning',
-  reconnecting: 'warning',
-  disconnecting: 'warning',
-  connected: 'success',
-  error: 'danger',
-};
+import { ConnectionLine } from './ConnectionLine';
+import { STATE_TONES } from './overview';
 
 export type ConnectionAction = 'connect' | 'disconnect' | 'reconnect';
 
@@ -29,6 +23,21 @@ export interface ConnectionCardProps {
   onConnect: (profileId: string) => void;
   onDisconnect: () => void;
   onReconnect: () => void;
+  firewall?: FirewallState;
+  /** Devices seen on the local LAN; undefined while unknown. */
+  deviceCount?: number;
+  version?: string;
+  /** Whether the connection line is shown; true unless the user hid it. */
+  showLine?: boolean;
+}
+
+/** The server's host name without port: from the profile, else from the live remote. */
+function serverHost(profile: Profile | undefined, remote: string | undefined): string {
+  const host = profile?.settings.remoteHost;
+  if (typeof host === 'string' && host !== '') {
+    return host;
+  }
+  return remote?.replace(/:d+$/, '') ?? '';
 }
 
 function initialProfileId(status: ConnectionStatus, profiles: Profile[]): string {
@@ -44,20 +53,19 @@ export function ConnectionCard(props: ConnectionCardProps) {
   const shownId = idle ? selectedId : (status.profileId ?? selectedId);
   const profile = profiles.find((candidate) => candidate.id === shownId);
   const name = idle ? profile?.name : (status.profileName ?? profile?.name);
-  const tunnelUp = status.state === 'connected' || status.state === 'reconnecting';
-  const server = (tunnelUp && status.remote) || (profile ? profileServer(profile) : '');
+  const protocol = protocolName(t, status.protocol ?? profile?.protocol ?? 'openvpn');
   const advisories = idle ? (profile?.advisories ?? []) : status.advisories;
 
   return (
     <section className={styles.card} aria-label={t('connection.label')}>
       <div className={styles.header}>
         <span aria-live="polite" aria-atomic="true">
-          <StatePill tone={TONES[status.state]} dot>
+          <StatePill tone={STATE_TONES[status.state]} dot>
             {t(`connection.state.${status.state}`)}
           </StatePill>
         </span>
         {name !== undefined && <h2 className={styles.name}>{name}</h2>}
-        <StatePill>{protocolName(t, status.protocol ?? profile?.protocol ?? 'openvpn')}</StatePill>
+        <StatePill>{protocol}</StatePill>
         <div className={styles.actions}>
           <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
@@ -68,20 +76,16 @@ export function ConnectionCard(props: ConnectionCardProps) {
           {actionError}
         </p>
       )}
-      <dl className={styles.values}>
-        <div>
-          <dt>{t('connection.server')}</dt>
-          <dd className={styles.mono}>{server || '–'}</dd>
-        </div>
-        <div>
-          <dt>{t('connection.vpnAddress')}</dt>
-          <dd className={styles.mono}>{(tunnelUp && status.vpnIp) || '–'}</dd>
-        </div>
-        <div>
-          <dt>{t('connection.since')}</dt>
-          <dd>{status.state === 'connected' ? <ConnectedSince since={status.since} /> : '–'}</dd>
-        </div>
-      </dl>
+      {props.showLine !== false && (
+        <ConnectionLine
+          status={status}
+          serverHost={serverHost(profile, status.remote)}
+          protocolLabel={protocol}
+          firewall={props.firewall}
+          deviceCount={props.deviceCount}
+          version={props.version}
+        />
+      )}
       <AdvisoryList advisories={advisories} />
     </section>
   );
@@ -93,7 +97,11 @@ function ErrorLine({ status }: { status: ConnectionStatus }) {
   const message = status.lastError?.message || status.message;
   const reason = code ? translateDynamic(t, `connection.errorCode.${code}`, '') : '';
   const text = [reason, message].filter(Boolean).join(' – ');
-  return <p className={styles.error}>{text || t('connection.errorUnknown')}</p>;
+  return (
+    <p className={styles.error}>
+      {text || t('connection.errorUnknown')} <Link to="/log">{t('connection.openLog')}</Link>
+    </p>
+  );
 }
 
 interface ActionsProps extends ConnectionCardProps {

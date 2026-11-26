@@ -40,24 +40,3 @@
   color: var(--state-danger-text);
   font-size: var(--font-size-sm);
 }
-
-.values {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--space-4);
-  margin: 0;
-}
-
-.values dt {
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.values dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}

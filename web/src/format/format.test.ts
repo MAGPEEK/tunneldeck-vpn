@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { durationText, formatBitRate, formatBytes, formatClock, parseTime } from './format';
+import {
+  durationText,
+  formatBitRate,
+  formatBytes,
+  formatClock,
+  formatDateTime,
+  parseTime,
+} from './format';
 
 describe('formatBytes', () => {
   it.each([
@@ -61,5 +68,13 @@ describe('parseTime', () => {
 
   it.each([undefined, '', 'nope', '0001-01-01T00:00:00Z'])('ignores %s', (value) => {
     expect(parseTime(value)).toBeUndefined();
+  });
+});
+
+describe('formatDateTime', () => {
+  it('shows local date and time in the locale', () => {
+    const date = new Date(2026, 10, 25, 11, 5);
+    expect(formatDateTime(date, 'en')).toBe('Nov 25, 2026, 11:05 AM');
+    expect(formatDateTime(date, 'de')).toBe('25.11.2026, 11:05');
   });
 });
