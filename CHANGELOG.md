@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0-alpha.5] - 2026-11-27
+
 ### Fixed
 
 - Profiles can always be deleted, also the active one while it connects, is connected or keeps retrying. `DELETE /api/profiles/{id}` disconnects the active profile first, waits up to 15 s for the tunnel to stop and then deletes it (`503 unavailable` if it does not stop in time) instead of answering `409`. The Delete button is no longer disabled; for the profile in use the confirmation reads "This profile is in use. It will be disconnected and deleted." with the button "Disconnect and delete".

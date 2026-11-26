@@ -2,7 +2,7 @@
 
 **A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC or a Raspberry Pi.
 
-[Deutsch](README.de.md) · License: MIT · Status: **pre-release 0.2.0-alpha.4**, not yet field-tested
+[Deutsch](README.de.md) · License: MIT · Status: **pre-release 0.2.0-alpha.5**, not yet field-tested
 
 ## What it does
 
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.2.0-alpha.4
+    image: magpeek/tunneldeck-vpn:0.2.0-alpha.5
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
