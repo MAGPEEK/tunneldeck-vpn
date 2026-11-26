@@ -93,3 +93,7 @@ SPEC §16.4 "Device picker" and "Hit counters": `GET /api/firewall/devices` (LAN
 ## [ ] 22. Firewall UI redesign — medium — after: 21
 
 SPEC §16.4 exactly: unified rule list with flow strips, filter chips, hit counters; intent cards; step editor with device picker, service presets, live summary, collapsible advanced and "What this rule creates"; IPsec card uses the template endpoint. i18n de/en, tests. Orchestrator reviews visually.
+
+## [ ] 23. Profile import like OpenVPN Connect — medium — after: 22
+
+Modelled on OpenVPN Connect's import (file upload, drag and drop, confirm dialog; https://openvpn.net/connect-docs/import-profile/): drop an `.ovpn` file anywhere on the Profiles page or the empty dashboard (drop zone overlay); a short confirm step shows profile name (prefilled from the file name / `remote`), the import warnings, and only the missing inputs (username/password when `auth-user-pass` is used without inline credentials, key passphrase when needed, CA when missing); "Save" or "Save and connect" (sets it active and connects). The full editor stays available via "Edit details". Import from a server URL (Access Server / CloudConnexa sign-in) is out of scope for now: it needs provider-specific sign-in and server-side fetching of user-supplied URLs. i18n de/en, tests.
