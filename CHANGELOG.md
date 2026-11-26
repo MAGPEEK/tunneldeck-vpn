@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-26
+
+WireGuard as the second VPN protocol (SPEC §18), built in with wireguard-go, so it also runs on hosts without the WireGuard kernel module such as the Synology DS723+.
+
 ### Added
 
 - WireGuard driver (backend): WireGuard profiles run on the embedded wireguard-go (no kernel module, no extra process) on the same tunnel device `tdvpn0`, so routing, firewall, kill switch, daily reconnect, remote access and public IP detection work as for OpenVPN. A profile holds the private key, the tunnel address, the MTU and one server (public key, optional pre-shared key, endpoint, allowed IPs, persistent keepalive); allowed IPs other than `0.0.0.0/0` are routed as remote networks. The tunnel address is put on `tdvpn0` as a single address, so the host's main routing table stays exactly as it was; a server name that resolves into one of the routed networks stops the attempt with the error "The server address lies in a network routed through the tunnel" instead of looping the tunnel's own packets into it. The state follows the handshakes: "connecting" until the first one (after 30 s the status says that the server does not answer), "connected" since the handshake, "reconnecting" after 3 minutes without one, when the endpoint's host name is resolved again. `POST /api/profiles/import` reads wg-quick `.conf` files for `"protocol": "wireguard"` (DNS, Table, FwMark, ListenPort, SaveConfig, IPv6 entries and further peers are dropped with a note, scripts are not imported), `POST /api/drivers/wireguard/keypair` generates a key pair without storing it, and profiles show the public key of their stored private key as `derived.publicKey`. The polished WireGuard form follows.
