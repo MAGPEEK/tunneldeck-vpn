@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0-alpha.3] - 2026-11-26
+
+Includes the changes released as 0.2.0-alpha.2 (empty ports mean any, translated field errors, LAN detection fix).
+
 ### Added
 
 - Firewall rules with an empty port match any port: for TCP, UDP and TCP+UDP an empty source or destination port means every port, inbound and outbound, for allow, drop and reject. An inbound rule to the host with an empty destination port opens that protocol on all ports; `TUNNELDECK-INPUT` now drops TCP to the web UI port before any rule, so no rule can open it to the tunnel. A port forward with an empty destination port forwards every port of its protocol to the device (the port on the VPN address must be empty too); its DNAT skips the web UI port and, while remote access is on, the remote-access port, and it conflicts with every other enabled forward of an overlapping protocol (reported on both rules).
