@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
 ```
 
-Open `http://<host-ip>:8194` and create the admin account. If you forget the password, run `docker exec tunneldeck tunneldeck reset-admin`.
+Open `http://<host-ip>:8194` and create the admin account. If you forget the password, run `docker exec tunneldeck tunneldeck reset-admin` (see [Lost admin password](docs/reset-admin.md)).
 
 ## Ports
 
@@ -54,6 +54,7 @@ All other traffic between the VPN and the LAN is blocked unless you allow it on 
 - [Linux Docker host setup](docs/linux.md): TUN device, firewall tools (ufw, firewalld), HTTPS, backup, update
 - [Synology setup](docs/synology.md): TUN module, Container Manager, firewall, HTTPS, backup, update
 - [System page checks explained](docs/system-checks.md): what each self-check entry means and how to fix it on Linux and DSM
+- [Lost admin password](docs/reset-admin.md): reset the admin account by command or environment variable, what is kept
 - [Moving from a Teltonika RUT240](docs/migrate-from-rut240.md): field mapping and extra options, mdex example
 - [Releasing](docs/RELEASING.md): version tags, image build and publishing
 - [Specification](docs/SPEC.md) and [OpenVPN notes](docs/openvpn-notes.md)

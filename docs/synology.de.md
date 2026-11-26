@@ -111,6 +111,8 @@ sudo docker exec tunneldeck tunneldeck reset-admin
 
 Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleiben. Danach die Oberfläche öffnen und das Konto neu anlegen. Alternativ `TUNNELDECK_RESET_ADMIN: "1"` setzen, neu starten, Konto anlegen und die Variable wieder entfernen; solange sie gesetzt ist, wird bei jedem Start zurückgesetzt.
 
+Details, erwartete Ausgabe und die Schritte im Synology-Terminal: [Admin-Passwort verloren](reset-admin.de.md).
+
 ## 10. Firewall-Regeln und IPsec
 
 Die Seite **Firewall** regelt, was den Tunnel in beide Richtungen passiert, zu diesem Gerät selbst und zu anderen Geräten im lokalen LAN; was keine Regel erlaubt, wird verworfen, Antworten kommen immer durch, die Regeln gelten von oben nach unten. Die Begriffe (eingehende und ausgehende Regeln, die Zieladresse, Portweiterleitungen, Quelladresse behalten, Gateway-Voraussetzung, Kill-Switch) erklärt [`linux.de.md`, Abschnitt 10](linux.de.md#10-firewall-regeln); auf DSM gelten sie genauso. Kurz:

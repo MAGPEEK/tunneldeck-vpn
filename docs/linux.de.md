@@ -192,6 +192,8 @@ docker exec tunneldeck tunneldeck reset-admin
 
 Das entfernt das Admin-Konto und alle Sitzungen; Profile und Einstellungen bleiben. Die Oberfläche öffnen und das Konto neu anlegen. Alternativ `TUNNELDECK_RESET_ADMIN: "1"` setzen, neu starten, das Konto neu anlegen und die Variable wieder entfernen; solange sie gesetzt ist, setzt sie bei jedem Start zurück.
 
+Details und erwartete Ausgabe: [Admin-Passwort verloren](reset-admin.de.md).
+
 ## 10. Firewall-Regeln
 
 Die Seite **Firewall** regelt, was den Tunnel passiert, in beide Richtungen, zu diesem Gerät und zu jedem anderen Gerät im lokalen LAN (SPEC §16). Was keine Regel erlaubt, wird in beide Richtungen verworfen; Antworten auf erlaubte Verbindungen kommen immer durch. Die Regeln gelten in der Reihenfolge der Liste, von oben nach unten.

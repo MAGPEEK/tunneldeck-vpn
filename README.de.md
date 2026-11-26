@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
 ```
 
-`http://<host-ip>:8194` öffnen und das Admin-Konto anlegen. Passwort vergessen: `docker exec tunneldeck tunneldeck reset-admin`.
+`http://<host-ip>:8194` öffnen und das Admin-Konto anlegen. Passwort vergessen: `docker exec tunneldeck tunneldeck reset-admin` (siehe [Admin-Passwort verloren](docs/reset-admin.de.md)).
 
 ## Ports
 
@@ -54,6 +54,7 @@ Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer Sie erlauben ihn 
 - [Einrichtung auf einem Linux-Docker-Host](docs/linux.de.md): TUN-Gerät, Firewall-Werkzeuge (ufw, firewalld), HTTPS, Sicherung, Aktualisierung
 - [Einrichtung auf einer Synology](docs/synology.de.md): TUN-Modul, Container Manager, Firewall, HTTPS, Sicherung, Aktualisierung
 - [Systemprüfungen erklärt](docs/system-checks.de.md): was jeder Eintrag des Selbsttests bedeutet und wie Sie ihn unter Linux und DSM beheben
+- [Admin-Passwort verloren](docs/reset-admin.de.md): Admin-Konto per Befehl oder Umgebungsvariable zurücksetzen, was erhalten bleibt
 - [Umzug vom Teltonika RUT240](docs/migrate-from-rut240.de.md): Felder und zusätzliche Optionen, Beispiel mdex
 - [Releases](docs/RELEASING.md) (englisch): Versions-Tags, Image bauen und veröffentlichen
 - [Spezifikation](docs/SPEC.md) und [OpenVPN-Notizen](docs/openvpn-notes.md) (englisch)

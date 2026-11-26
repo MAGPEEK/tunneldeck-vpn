@@ -14,6 +14,7 @@
 - `scripts/build-image.sh` — builds `magpeek/tunneldeck-vpn:<tag>` with version build args; no push
 - `scripts/export-image.sh` — `docker save` to `tunneldeck-<tag>.tar` for Synology import
 - `docs/synology.md`, `docs/synology.de.md` — DS723+ / DSM 7.2 guide: TUN module, project, first sign-in, firewall, reverse proxy, remote access, backup, update, reset-admin, firewall rules (IP forwarding on DSM, LANCOM IPsec example)
+- `docs/reset-admin.md`, `docs/reset-admin.de.md` — lost admin password: what a reset keeps, `reset-admin` command (Docker, Synology SSH/Container Manager), `TUNNELDECK_RESET_ADMIN` and why to remove it, security note
 - `docs/linux.md`, `docs/linux.de.md` — generic Linux Docker host guide: requirements, compose, first sign-in, iptables backends next to Docker/ufw/firewalld, reverse proxy, remote access, backup, update, reset-admin, firewall rules (concepts, `#ip-forwarding` / `#ip-weiterleitung` linked from the UI, IPsec router example with what was lab-tested)
 - `docs/system-checks.md` — System page self-check entries: meaning of OK/warning/failure, kernel module, fix on Linux and DSM
 - `docs/system-checks.de.md` — German version of the System page checks explanation
