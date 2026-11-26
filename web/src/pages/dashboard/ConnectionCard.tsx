@@ -44,7 +44,7 @@ function serverHost(profile: Profile | undefined, remote: string | undefined): s
   if (host !== '') {
     return host;
   }
-  return remote?.replace(/:d+$/, '') ?? '';
+  return remote?.replace(/:\d+$/, '') ?? '';
 }
 
 function initialProfileId(status: ConnectionStatus, profiles: Profile[]): string {
