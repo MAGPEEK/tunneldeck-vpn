@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -42,12 +43,15 @@ func (e *RateLimitError) Is(target error) bool {
 	return target == ErrRateLimited
 }
 
-// AccountStore persists the single admin account. *store.Store satisfies it.
+// AccountStore persists the single admin account and the remembered
+// sessions. *store.Store satisfies it.
 type AccountStore interface {
+	RememberedSessionStore
 	AdminAccount() (domain.AdminAccount, bool)
 	// CreateAdminAccount fails with domain.ErrSetupAlreadyDone when an
-	// account exists.
+	// account exists. It also drops every remembered session.
 	CreateAdminAccount(account domain.AdminAccount) error
+	// RemoveAdminAccount also drops every remembered session.
 	RemoveAdminAccount() error
 }
 
@@ -75,18 +79,20 @@ func WithHashParams(params HashParams) Option {
 	return func(s *Service) { s.hasher.params = params }
 }
 
-// NewService returns a Service backed by store.
+// NewService returns a Service backed by store and restores the remembered
+// sessions it holds.
 func NewService(store AccountStore, opts ...Option) *Service {
 	s := &Service{
 		store:    store,
 		now:      time.Now,
 		hasher:   newPasswordHasher(),
-		sessions: newSessionStore(),
+		sessions: newSessionStore(store),
 		limiter:  newLoginLimiter(),
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.sessions.load(s.now())
 	return s
 }
 
@@ -113,15 +119,17 @@ func (s *Service) Setup(username, password string) error {
 	if err := s.store.CreateAdminAccount(domain.AdminAccount{Username: username, PasswordHash: encoded}); err != nil {
 		return fmt.Errorf("auth: setup: %w", err)
 	}
+	s.sessions.dropAll()
 	return nil
 }
 
 // Login checks the credentials and returns a new session token. limit
-// selects how many failures lock clientIP out. It fails with
+// selects how many failures lock clientIP out; remember starts a "stay
+// signed in" session (longer timeouts, kept across restarts). It fails with
 // *RateLimitError while clientIP is locked out and with
 // ErrInvalidCredentials for a wrong username or password; both cases cost
 // the same password hash computation.
-func (s *Service) Login(username, password, clientIP string, limit LoginLimit) (string, error) {
+func (s *Service) Login(username, password, clientIP string, limit LoginLimit, remember bool) (string, error) {
 	if retryAfter, allowed := s.limiter.begin(clientIP, limit, s.now()); !allowed {
 		return "", &RateLimitError{RetryAfter: retryAfter}
 	}
@@ -133,7 +141,7 @@ func (s *Service) Login(username, password, clientIP string, limit LoginLimit) (
 		return "", ErrInvalidCredentials
 	}
 	s.limiter.succeeded(clientIP)
-	token, err := s.sessions.create(username, s.now())
+	token, err := s.sessions.create(username, clientIP, remember, s.now())
 	if err != nil {
 		return "", fmt.Errorf("auth: login: %w", err)
 	}
@@ -150,21 +158,37 @@ func (s *Service) Authenticate(token string) (string, bool) {
 	}
 	account, exists := s.store.AdminAccount()
 	if !exists || account.Username != username {
-		s.sessions.revoke(token)
+		if err := s.sessions.revoke(token); err != nil {
+			slog.Warn("auth: end session of a replaced account", "error", err)
+		}
 		return "", false
 	}
 	return username, true
 }
 
-// Logout ends the session behind token. Unknown tokens are ignored.
-func (s *Service) Logout(token string) {
-	s.sessions.revoke(token)
+// Logout ends the session behind token, also in the store. Unknown tokens
+// are ignored. On an error the session has ended in memory but may come
+// back after a restart.
+func (s *Service) Logout(token string) error {
+	if err := s.sessions.revoke(token); err != nil {
+		return fmt.Errorf("auth: logout: %w", err)
+	}
+	return nil
 }
 
-// ResetAdmin ends all sessions and removes the admin account, so the UI
-// offers setup again. Profiles and settings are kept.
+// LogoutEverywhere ends every session, remembered ones included.
+func (s *Service) LogoutEverywhere() error {
+	if err := s.sessions.revokeAll(); err != nil {
+		return fmt.Errorf("auth: logout everywhere: %w", err)
+	}
+	return nil
+}
+
+// ResetAdmin ends all sessions and removes the admin account together with
+// the remembered sessions, so the UI offers setup again. Profiles and
+// settings are kept.
 func (s *Service) ResetAdmin() error {
-	s.sessions.revokeAll()
+	s.sessions.dropAll()
 	if err := s.store.RemoveAdminAccount(); err != nil {
 		return fmt.Errorf("auth: reset admin: %w", err)
 	}

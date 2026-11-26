@@ -214,11 +214,26 @@ func (r *renderer) conflict(option extraOption) (Warning, bool) {
 	return Warning{}, false
 }
 
+// ignoredPushes are the starts of the pushed options OpenVPN drops without
+// a word (docs/openvpn-notes.md (d)): routes and gateway redirects, which
+// route-noexec would not apply anyway, DNS settings, the route delay,
+// which would only hold back the connected state, and IPv6. pull-filter
+// compares prefixes, so "route " keeps route-gateway and the ifconfig of
+// the tunnel address applies.
+var ignoredPushes = []string{
+	"route ", "route-ipv6", "redirect-gateway", "redirect-private",
+	"dhcp-option", "dns ", "block-outside-dns", "route-delay", "ifconfig-ipv6",
+}
+
+// routing keeps OpenVPN away from every routing table: route-noexec stops
+// routes of any origin, the pull filters drop the pushed options quietly,
+// where route-nopull logged an "Options error" line for each.
 func (r *renderer) routing() {
 	r.section("routing is owned by TunnelDeck-VPN")
 	r.line("route-noexec")
-	r.line("route-nopull")
-	r.line(`pull-filter ignore "ifconfig-ipv6"`)
+	for _, prefix := range ignoredPushes {
+		r.line(`pull-filter ignore "` + prefix + `"`)
+	}
 }
 
 func (r *renderer) management() {

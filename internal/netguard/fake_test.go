@@ -119,6 +119,11 @@ const (
 	probeLimit  = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -m limit --limit 25/sec --limit-burst 50 -j RETURN"
 	probeTCPMSS = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
 	probeReject = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -p tcp -j REJECT --reject-with tcp-reset"
+	// The mangle table's probe chain and its CONNMARK lines.
+	probeMangleChain  = "iptables-legacy -w -t mangle -N TUNNELDECK-EXT-PROBE"
+	probeReplyMark    = "iptables-legacy -w -t mangle -A TUNNELDECK-EXT-PROBE -i tdvpn0 -j CONNMARK --set-mark 0x7194/0xffff"
+	probeReplyRestore = "iptables-legacy -w -t mangle -A TUNNELDECK-EXT-PROBE ! -i tdvpn0 -m connmark --mark 0x7194/0xffff " +
+		"-j CONNMARK --restore-mark --nfmask 0xffff --ctmask 0xffff"
 )
 
 // probeCalls is the probe of the optional extensions, which all pass.
@@ -127,6 +132,9 @@ var probeCalls = []string{
 	probeComment, probeHashlimit, probeLimit, probeTCPMSS, probeReject,
 	"iptables-legacy -w -F TUNNELDECK-EXT-PROBE",
 	"iptables-legacy -w -X TUNNELDECK-EXT-PROBE",
+	probeMangleChain, probeReplyMark, probeReplyRestore,
+	"iptables-legacy -w -t mangle -F TUNNELDECK-EXT-PROBE",
+	"iptables-legacy -w -t mangle -X TUNNELDECK-EXT-PROBE",
 }
 
 // detectInstall is the detection of the first installation by

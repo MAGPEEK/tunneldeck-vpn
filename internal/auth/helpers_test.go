@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,10 +26,42 @@ const (
 var errStoreFailed = errors.New("store failed")
 
 type fakeStore struct {
-	mu        sync.Mutex
-	account   *domain.AdminAccount
-	createErr error
-	removeErr error
+	mu         sync.Mutex
+	account    *domain.AdminAccount
+	createErr  error
+	removeErr  error
+	remembered []domain.RememberedSession
+	setErr     error
+	writes     int
+}
+
+func (f *fakeStore) RememberedSessions() []domain.RememberedSession {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.remembered)
+}
+
+func (f *fakeStore) SetRememberedSessions(sessions []domain.RememberedSession) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.setErr != nil {
+		return f.setErr
+	}
+	f.writes++
+	f.remembered = slices.Clone(sessions)
+	return nil
+}
+
+func (f *fakeStore) writeCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.writes
+}
+
+func (f *fakeStore) failWrites(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setErr = err
 }
 
 func (f *fakeStore) AdminAccount() (domain.AdminAccount, bool) {
@@ -50,6 +83,7 @@ func (f *fakeStore) CreateAdminAccount(account domain.AdminAccount) error {
 		return domain.ErrSetupAlreadyDone
 	}
 	f.account = &account
+	f.remembered = nil
 	return nil
 }
 
@@ -60,6 +94,7 @@ func (f *fakeStore) RemoveAdminAccount() error {
 		return f.removeErr
 	}
 	f.account = nil
+	f.remembered = nil
 	return nil
 }
 
@@ -123,9 +158,26 @@ func newSetUpService(t *testing.T) *testService {
 
 func (ts *testService) mustLogin(t *testing.T) string {
 	t.Helper()
-	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard)
+	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, false)
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
 	return token
+}
+
+func (ts *testService) mustRemember(t *testing.T) string {
+	t.Helper()
+	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, true)
+	if err != nil {
+		t.Fatalf("Login with remember: %v", err)
+	}
+	return token
+}
+
+// restart returns a new service on the same store and clock, as after a
+// container restart.
+func (ts *testService) restart() *testService {
+	next := &testService{store: ts.store, clock: ts.clock, deriver: ts.deriver}
+	next.Service = NewService(ts.store, WithClock(ts.clock.Now), WithHashParams(cheapParams))
+	return next
 }

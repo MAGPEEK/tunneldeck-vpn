@@ -17,6 +17,9 @@ type settingsDocument struct {
 	// RemoteAccess was added within schema version 1; files without it get
 	// the defaults.
 	RemoteAccess remoteAccessRecord `json:"remoteAccess"`
+	// RememberedSessions are the "stay signed in" sessions (schema 4);
+	// the auth package owns their rules.
+	RememberedSessions []domain.RememberedSession `json:"rememberedSessions"`
 }
 
 // firewallRecord is the firewall as settings.json stores it.
@@ -61,6 +64,8 @@ func defaultSettings() settingsDocument {
 		Language:      domain.DefaultLanguage,
 		Firewall:      firewallRecord{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []firewallRuleRecord{}},
 		RemoteAccess:  remoteAccessRecord{RemoteAccess: domain.DefaultRemoteAccess()},
+
+		RememberedSessions: []domain.RememberedSession{},
 	}
 }
 
@@ -71,6 +76,7 @@ func (d settingsDocument) clone() settingsDocument {
 		c.Admin = &admin
 	}
 	c.Firewall.Rules = slices.Clone(d.Firewall.Rules)
+	c.RememberedSessions = cloneRememberedSessions(d.RememberedSessions)
 	return c
 }
 
@@ -122,7 +128,8 @@ func (s *Store) AdminAccount() (domain.AdminAccount, bool) {
 	return *s.settings.Admin, true
 }
 
-// CreateAdminAccount stores the first admin account. It fails with
+// CreateAdminAccount stores the first admin account and drops any
+// remembered session of an earlier account. It fails with
 // domain.ErrSetupAlreadyDone when an account exists, so concurrent setup
 // requests cannot both succeed.
 func (s *Store) CreateAdminAccount(account domain.AdminAccount) error {
@@ -136,20 +143,47 @@ func (s *Store) CreateAdminAccount(account domain.AdminAccount) error {
 	}
 	next := s.settings.clone()
 	next.Admin = &account
+	next.RememberedSessions = []domain.RememberedSession{}
 	return s.commitSettings(next)
 }
 
-// RemoveAdminAccount deletes the admin account (admin reset). Removing a
-// missing account is not an error.
+// RemoveAdminAccount deletes the admin account (admin reset) and every
+// remembered session. Removing a missing account is not an error.
 func (s *Store) RemoveAdminAccount() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.settings.Admin == nil {
+	if s.settings.Admin == nil && len(s.settings.RememberedSessions) == 0 {
 		return nil
 	}
 	next := s.settings.clone()
 	next.Admin = nil
+	next.RememberedSessions = []domain.RememberedSession{}
 	return s.commitSettings(next)
+}
+
+// RememberedSessions returns a copy of the persisted "stay signed in"
+// sessions.
+func (s *Store) RememberedSessions() []domain.RememberedSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneRememberedSessions(s.settings.RememberedSessions)
+}
+
+// SetRememberedSessions replaces the persisted "stay signed in" sessions.
+func (s *Store) SetRememberedSessions(sessions []domain.RememberedSession) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.settings.clone()
+	next.RememberedSessions = cloneRememberedSessions(sessions)
+	return s.commitSettings(next)
+}
+
+// cloneRememberedSessions copies the list; a nil list becomes empty.
+func cloneRememberedSessions(sessions []domain.RememberedSession) []domain.RememberedSession {
+	if sessions == nil {
+		return []domain.RememberedSession{}
+	}
+	return slices.Clone(sessions)
 }
 
 // Language returns the default UI language.

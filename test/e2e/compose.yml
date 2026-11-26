@@ -39,6 +39,10 @@ x-tunneldeck-lan: &tunneldeck-lan
   configs:
     - source: settings-v1
       target: /e2e/settings-v1.json
+    - source: linux44-ip
+      target: /e2e/linux44-ip.sh
+    - source: no-connmark-iptables
+      target: /e2e/no-connmark-iptables.sh
 
 services:
   server-a:
@@ -86,7 +90,10 @@ services:
   # second interface on the LAN network, one per iptables backend; the LAN
   # devices use the one under test as their gateway. Each starts with a
   # settings.json of schema version 1, copied only on the first start, so
-  # the migration to version 2 runs against a real file.
+  # the migration to version 2 runs against a real file. Both refuse the
+  # ip rule selectors Linux 4.4 lacks (linux44-ip.sh); the nft one also
+  # lacks CONNMARK (no-connmark-iptables.sh), so its port forwards route
+  # their replies by source address.
   tunneldeck-lan-nft:
     <<: *tunneldeck-lan
     networks:
@@ -98,6 +105,8 @@ services:
       - -c
       - >-
         rm -f /usr/sbin/xtables-legacy-multi &&
+        mkdir -p /usr/local/sbin && install -m 0755 /e2e/linux44-ip.sh /usr/local/sbin/ip &&
+        install -m 0755 /e2e/no-connmark-iptables.sh /usr/local/sbin/iptables-nft &&
         { [ -e /data/settings.json ] || cp /e2e/settings-v1.json /data/settings.json; } &&
         exec /usr/local/bin/tunneldeck
 
@@ -112,6 +121,7 @@ services:
       - -c
       - >-
         rm -f /usr/sbin/xtables-nft-multi &&
+        mkdir -p /usr/local/sbin && install -m 0755 /e2e/linux44-ip.sh /usr/local/sbin/ip &&
         { [ -e /data/settings.json ] || cp /e2e/settings-v1.json /data/settings.json; } &&
         exec /usr/local/bin/tunneldeck
 
@@ -154,6 +164,10 @@ services:
 configs:
   settings-v1:
     file: testdata/settings-v1.json
+  linux44-ip:
+    file: testdata/linux44-ip.sh
+  no-connmark-iptables:
+    file: testdata/no-connmark-iptables.sh
 
 networks:
   e2e: {}

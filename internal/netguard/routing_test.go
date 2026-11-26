@@ -212,3 +212,17 @@ func TestRoutingFailures(t *testing.T) {
 		})
 	}
 }
+
+// TestRoutingErrorNamesTheCommand: the manager logs the routing error as it
+// is, so it must name the failing ip command line and its error output.
+func TestRoutingErrorNamesTheCommand(t *testing.T) {
+	const stderr = `Error: argument "ipproto" is wrong: Failed to parse rule type`
+	f := newFakeRunner()
+	f.on(ruleShow, ok(defaultRules)).on("ip rule add from 10.8.0.2 lookup 7194 priority 7194", fail(stderr))
+	err := routeThroughTunnel(New(f))
+	for _, want := range []string{"route through tunnel: ip rule add from 10.8.0.2 lookup 7194 priority 7194", stderr} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to contain %q", err, want)
+		}
+	}
+}

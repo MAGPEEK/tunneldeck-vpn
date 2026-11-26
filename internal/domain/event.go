@@ -11,10 +11,11 @@ const (
 	EventKindState   EventKind = "state"
 	EventKindTraffic EventKind = "traffic"
 	EventKindLog     EventKind = "log"
+	EventKindChannel EventKind = "channel"
 )
 
-// Event is one item of a driver's event stream: StateEvent, TrafficEvent or
-// LogEvent.
+// Event is one item of a driver's event stream: StateEvent, TrafficEvent,
+// LogEvent or ChannelEvent.
 type Event interface {
 	Kind() EventKind
 }
@@ -35,7 +36,8 @@ const (
 	// ErrorCodeFirewallFailed: the host protection could not be installed,
 	// so no tunnel was started.
 	ErrorCodeFirewallFailed ErrorCode = "firewall_failed"
-	// ErrorCodeRoutingFailed: the tunnel routing could not be applied.
+	// ErrorCodeRoutingFailed: the tunnel routing could not be applied. It
+	// marks a warning of a tunnel that stays up, not a failed tunnel.
 	ErrorCodeRoutingFailed ErrorCode = "routing_failed"
 	// ErrorCodeProfileInvalid: the profile cannot be used by its driver.
 	ErrorCodeProfileInvalid ErrorCode = "profile_invalid"
@@ -90,3 +92,16 @@ type LogEvent struct {
 
 // Kind returns EventKindLog.
 func (LogEvent) Kind() EventKind { return EventKindLog }
+
+// ChannelEvent reports what the tunnel negotiated: the data-channel cipher
+// ("none" when unencrypted) and the control channel's TLS version and
+// cipher suite (e.g. "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256"). A driver
+// reports each as soon as it learns it; an empty field leaves the known
+// value unchanged.
+type ChannelEvent struct {
+	DataCipher     string `json:"dataCipher,omitempty"`
+	ControlChannel string `json:"controlChannel,omitempty"`
+}
+
+// Kind returns EventKindChannel.
+func (ChannelEvent) Kind() EventKind { return EventKindChannel }

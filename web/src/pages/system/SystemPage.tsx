@@ -5,6 +5,7 @@ import { useSystem } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
 import { RemoteAccessCard } from './RemoteAccessCard';
 import { SelfCheckCard } from './SelfCheckCard';
+import { SessionsCard } from './SessionsCard';
 import styles from './SystemPage.module.css';
 import { VersionCard } from './VersionCard';
 
@@ -26,6 +27,7 @@ export function SystemPage() {
           </>
         )}
         <RemoteAccessCard />
+        <SessionsCard />
       </div>
     </Page>
   );

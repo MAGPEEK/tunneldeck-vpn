@@ -222,4 +222,52 @@ describe('SystemPage', () => {
     const card = await remoteCard();
     expect(await within(card).findByText('Last error: address in use')).toBeInTheDocument();
   });
+
+  describe('sign out everywhere', () => {
+    async function sessionsCard(): Promise<HTMLElement> {
+      return (await screen.findByRole('heading', { name: 'Sign-in sessions' })).closest(
+        'section',
+      ) as HTMLElement;
+    }
+
+    it('asks inline and can be cancelled', async () => {
+      const { fetchMock } = renderApp(routes(), '/system');
+      const card = await sessionsCard();
+      fireEvent.click(within(card).getByRole('button', { name: 'Sign out everywhere' }));
+      const confirm = within(card).getByRole('group', { name: 'Confirm sign out everywhere' });
+      expect(confirm).toHaveTextContent('Sign out every browser now?');
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+      expect(within(card).queryByRole('group')).not.toBeInTheDocument();
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/sessions')).toBe(false);
+    });
+
+    it('ends every session and shows the sign-in page', async () => {
+      const { fetchMock } = renderApp(
+        routes({ 'DELETE /api/sessions': { status: 204 } }),
+        '/system',
+      );
+      const card = await sessionsCard();
+      fireEvent.click(within(card).getByRole('button', { name: 'Sign out everywhere' }));
+      const confirm = within(card).getByRole('group', { name: 'Confirm sign out everywhere' });
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Sign out everywhere' }));
+      expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) => url === '/api/sessions' && init?.method === 'DELETE',
+        ),
+      ).toBe(true);
+    });
+
+    it('shows an error when the server fails', async () => {
+      renderApp(
+        routes({ 'DELETE /api/sessions': problem(500, 'internal', 'An internal error occurred.') }),
+        '/system',
+      );
+      const card = await sessionsCard();
+      fireEvent.click(within(card).getByRole('button', { name: 'Sign out everywhere' }));
+      const confirm = within(card).getByRole('group', { name: 'Confirm sign out everywhere' });
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Sign out everywhere' }));
+      expect(await within(card).findByRole('alert')).toBeInTheDocument();
+    });
+  });
 });

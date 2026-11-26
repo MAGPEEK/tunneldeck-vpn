@@ -33,14 +33,25 @@ func (p *problem) Error() string {
 
 // connectionStatus is the part of GET /api/connection the test checks.
 type connectionStatus struct {
-	State     string `json:"state"`
-	VPNIP     string `json:"vpnIp"`
-	BytesIn   uint64 `json:"bytesIn"`
-	BytesOut  uint64 `json:"bytesOut"`
-	LastError *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"lastError"`
+	State          string       `json:"state"`
+	VPNIP          string       `json:"vpnIp"`
+	BytesIn        uint64       `json:"bytesIn"`
+	BytesOut       uint64       `json:"bytesOut"`
+	DataCipher     string       `json:"dataCipher"`
+	ControlChannel string       `json:"controlChannel"`
+	LastError      *statusError `json:"lastError"`
+	RoutingWarning *statusError `json:"routingWarning"`
+}
+
+type statusError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// logLine is one line of GET /api/logs.
+type logLine struct {
+	Level string `json:"level"`
+	Text  string `json:"text"`
 }
 
 type profileRequest struct {

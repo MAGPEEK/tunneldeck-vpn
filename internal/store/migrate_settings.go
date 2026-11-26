@@ -140,6 +140,13 @@ func migrateDestinationV2ToV3(rule map[string]json.RawMessage) error {
 	return setJSON(rule, "destination", plain)
 }
 
+// migrateSettingsV3ToV4 adds an empty rememberedSessions list (SPEC §8):
+// version 3 kept every session in memory only.
+func migrateSettingsV3ToV4(doc map[string]json.RawMessage) error {
+	doc["rememberedSessions"] = json.RawMessage("[]")
+	return nil
+}
+
 func setJSON(object map[string]json.RawMessage, key string, value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {

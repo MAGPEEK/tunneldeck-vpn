@@ -65,7 +65,8 @@
     "invalidCredentials": "Username or password is incorrect.",
     "rateLimited_one": "Too many failed attempts. Try again in {{count}} second.",
     "rateLimited_other": "Too many failed attempts. Try again in {{count}} seconds.",
-    "rateLimitedLater": "Too many failed attempts. Try again later."
+    "rateLimitedLater": "Too many failed attempts. Try again later.",
+    "remember": "Stay signed in"
   },
   "errors": {
     "network": "Can't reach the server. Check your connection and try again.",
@@ -574,6 +575,14 @@
     }
   },
   "system": {
+    "sessions": {
+      "title": "Sign-in sessions",
+      "description": "Signs out every browser that is signed in, this one included. Sessions with \"Stay signed in\" end as well.",
+      "signOutEverywhere": "Sign out everywhere",
+      "confirmLabel": "Confirm sign out everywhere",
+      "confirm": "Sign out every browser now? You will have to sign in again.",
+      "cancel": "Cancel"
+    },
     "versionTitle": "Version",
     "version": "Version",
     "listenAddress": "Listen address",
@@ -594,7 +603,8 @@
       "syn-flood-protection": "SYN flood protection",
       "ping-limit": "Ping limit",
       "mss-clamp": "TCP MSS clamping",
-      "reject-target": "REJECT target"
+      "reject-target": "REJECT target",
+      "reply-routing": "Reply routing of port forwards"
     },
     "hint": {
       "tun-device": "Pass the TUN device into the container (devices: /dev/net/tun).",
@@ -607,7 +617,8 @@
       "syn-flood-protection": "Load the hashlimit match on the host (modprobe xt_hashlimit; the limit match, xt_limit, allows a global limit), then restart the container. Some NAS kernels do not ship these modules; the firewall works without them.",
       "ping-limit": "Load the hashlimit match on the host (modprobe xt_hashlimit; the limit match, xt_limit, allows a global limit), then restart the container. Some NAS kernels do not ship these modules; the firewall works without them.",
       "mss-clamp": "Load the TCPMSS target on the host (modprobe xt_TCPMSS), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but large transfers through the tunnel may stall.",
-      "reject-target": "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently."
+      "reject-target": "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently.",
+      "reply-routing": "Load the connmark module and the mangle table on the host (modprobe xt_connmark iptable_mangle), then restart the container. Port forwards work without them, but a device that receives a port forward and uses this device as its gateway sends all its traffic through the tunnel while it is up."
     }
   },
   "remoteAccess": {

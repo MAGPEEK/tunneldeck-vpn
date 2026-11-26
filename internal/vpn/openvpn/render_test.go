@@ -306,3 +306,39 @@ func TestRenderSkipsUnknownExtraOptions(t *testing.T) {
 		t.Errorf("skipped lines = %v, want [2 3]", skipped)
 	}
 }
+
+// TestIgnoredPushes applies the prefix match of pull-filter (OpenVPN 2.7
+// man page, --pull-filter) to the options of a PUSH_REPLY like mdex's:
+// routes, DNS, the route delay and IPv6 are dropped, while the tunnel
+// address, the gateway, the MTU and the negotiated cipher stay.
+func TestIgnoredPushes(t *testing.T) {
+	dropped := []string{
+		"route 10.0.0.0 255.0.0.0", "route-ipv6 2000::/3", "redirect-gateway def1", "redirect-private local",
+		"dhcp-option DNS 10.10.10.10", "dns server 0 address 10.10.10.10", "block-outside-dns", "route-delay 6 6",
+		"ifconfig-ipv6 fd00::2/64 fd00::1",
+	}
+	kept := []string{
+		"ifconfig 172.21.31.170 172.21.31.169", "route-gateway 172.21.31.169", "topology net30", "tun-mtu 1500",
+		"cipher CHACHA20-POLY1305", "peer-id 0", "ping 10", "ping-restart 60", "protocol-flags cc-exit tls-ekm",
+	}
+	matched := func(option string) bool {
+		return slices.ContainsFunc(ignoredPushes, func(prefix string) bool { return strings.HasPrefix(option, prefix) })
+	}
+	for _, option := range dropped {
+		if !matched(option) {
+			t.Errorf("pushed %q is not ignored", option)
+		}
+	}
+	for _, option := range kept {
+		if matched(option) {
+			t.Errorf("pushed %q is ignored, want it applied", option)
+		}
+	}
+	config, _, err := Render(newProfile(t, mdexSettings(), nil), mdexSecrets(), testOptions)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(config, "route-nopull") || !strings.Contains(config, "route-noexec\n") {
+		t.Errorf("routing section:\n%s", config)
+	}
+}

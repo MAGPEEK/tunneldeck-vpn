@@ -9,16 +9,18 @@ import (
 
 func TestSetSessionCookie(t *testing.T) {
 	tests := []struct {
-		name   string
-		secure bool
+		name     string
+		secure   bool
+		remember bool
 	}{
-		{"plain HTTP", false},
-		{"behind HTTPS", true},
+		{"plain HTTP", false, false},
+		{"behind HTTPS", true, false},
+		{"remembered", false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			SetSessionCookie(rec, "token-value", tt.secure)
+			SetSessionCookie(rec, "token-value", tt.secure, tt.remember)
 			header := rec.Header().Get("Set-Cookie")
 			for _, part := range []string{"tunneldeck_session=token-value", "Path=/", "HttpOnly", "SameSite=Strict"} {
 				if !strings.Contains(header, part) {
@@ -28,10 +30,13 @@ func TestSetSessionCookie(t *testing.T) {
 			if got := strings.Contains(header, "Secure"); got != tt.secure {
 				t.Fatalf("Set-Cookie %q: Secure = %v, want %v", header, got, tt.secure)
 			}
-			for _, absent := range []string{"Max-Age", "Expires"} {
-				if strings.Contains(header, absent) {
-					t.Fatalf("Set-Cookie %q has %s, want a session cookie", header, absent)
-				}
+			if strings.Contains(header, "Expires") {
+				t.Fatalf("Set-Cookie %q has Expires, want Max-Age only", header)
+			}
+			wantMaxAge := "Max-Age=7776000" // 90 days
+			if got := strings.Contains(header, "Max-Age"); got != tt.remember ||
+				(tt.remember && !strings.Contains(header, wantMaxAge)) {
+				t.Fatalf("Set-Cookie %q: want Max-Age only when remembered (%s)", header, wantMaxAge)
 			}
 		})
 	}

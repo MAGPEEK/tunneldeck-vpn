@@ -183,8 +183,8 @@ VERIFIED: lab; `push.c` `receive_auth_failed()`; `manage.c` `management_auth_fai
 ## (d) `route-noexec`, pushed `redirect-gateway`, and `ifconfig`
 
 - **`route-noexec` alone guarantees that OpenVPN installs no routes.** In `init.c` `do_route()`, `add_routes()` is skipped when `route_noexec` is set. `add_routes()` (`route.c`) is the only place that applies `redirect-gateway` (`redirect_default_route_to_vpn()`), `route` and `route-ipv6`. This covers both pushed and locally configured directives. `route-noexec` itself cannot be pushed: it carries the `OPT_P_SCRIPT` permission, which is not in `pull_permission_mask()`. VERIFIED: source; lab with local `redirect-gateway def1` + local `route` and pushed `redirect-gateway def1` + `route` + `dhcp-option`: main table unchanged apart from the kernel route below.
-- **`route-nopull`** additionally drops all pushed `OPT_P_ROUTE` and `OPT_P_DHCPDNS` options (`route*`, `redirect-*`, `dhcp-option`, `dns`) and keeps `ifconfig`, `topology`, `tun-mtu`, `ping*` and `cipher`. Each dropped option is logged as `>LOG:...,N,Options error: option 'redirect-gateway' cannot be used in this context ([PUSH-OPTIONS])`. These lines are **harmless** and must not be treated as fatal. VERIFIED: `init.c` `pull_permission_mask()`; lab.
-- **Recommended combination: `route-noexec` + `route-nopull`.** `route-noexec` stops local and pushed routes; `route-nopull` also stops pushed DNS options. `pull-filter ignore "redirect-gateway"` is not needed, and the man page warns that `pull-filter` "cannot be relied upon as a security measure". VERIFIED: lab, man.
+- **`route-nopull`** (rendered until task 25) additionally drops all pushed `OPT_P_ROUTE` and `OPT_P_DHCPDNS` options (`route*`, `redirect-*`, `dhcp-option`, `dns`) and keeps `ifconfig`, `topology`, `tun-mtu`, `ping*` and `cipher`. Each dropped option is logged as `>LOG:...,N,Options error: option 'redirect-gateway' cannot be used in this context ([PUSH-OPTIONS])`. These lines are **harmless** and must not be treated as fatal. VERIFIED: `init.c` `pull_permission_mask()`; lab.
+- **Rendered combination (since task 25): `route-noexec` + `pull-filter ignore` instead of `route-nopull`.** In the field (mdex, OpenVPN 2.7 client) `route-nopull` filled the log with one `Options error ... ([PUSH-OPTIONS])` line per pushed `route` and `dhcp-option`. The renderer therefore drops the pushed options it does not want with `pull-filter ignore "route "`, `"route-ipv6"`, `"redirect-gateway"`, `"redirect-private"`, `"dhcp-option"`, `"dns "`, `"block-outside-dns"`, `"route-delay"` and `"ifconfig-ipv6"`, and keeps `route-noexec` as the safety net that stops routes of any origin (the man page warns that `pull-filter` "cannot be relied upon as a security measure"). `pull-filter` compares the start of each pushed option with its text (prefix match, man `--pull-filter`, which shows exactly this `"route "` example); the first matching filter wins, unmatched options are accepted. Hence `"route "` with its trailing space drops `route 10.0.0.0 255.0.0.0` but not `route-gateway`, `route-delay` or `route-ipv6` (which have their own filters, `route-gateway` none), and no filter matches `ifconfig <ip> <peer/mask>`, `topology`, `tun-mtu`, `ping*`, `peer-id` or `cipher`, so the tunnel address still applies. `"dns "` keeps the `dns` options of 2.6+ out, as `route-nopull` did. Ignored options are logged as `Pushed option removed by filter: '...'` at the push debug level, not as errors (source `options.c` `apply_pull_filter()`; UNVERIFIED in the lab). A pushed `route-delay` (mdex pushes `route-delay 6 6`) would only hold back `Initialization Sequence Completed` and the CONNECTED state, as no route is added (UNVERIFIED: inferred from man `--route-delay`). Extra options cannot add filters of their own: `pull-filter` and `route-nopull` are dropped from them (`routing_handled`). VERIFIED: man page; e2e (servers A and B push `redirect-gateway def1`, a `route` and a `dhcp-option`: no `Options error` line, main table unchanged apart from the kernel route); the prefix list is unit-tested (`TestIgnoredPushes`).
 - **`ifconfig` still applies.** OpenVPN opens `tdvpn0`, sets the MTU, brings it up and adds the pushed address (`net_addr_v4_add: 10.66.0.2/24 dev tdvpn0`). VERIFIED: lab.
 - **Caveat for "the main table is never modified".** Because the address is added with its prefix (`topology subnet`), **the kernel** adds a connected route to the main table: `10.66.0.0/24 dev tdvpn0 proto kernel scope link src 10.66.0.2`. It is removed when the address or device goes away. OpenVPN does not add it, and `route-noexec` cannot prevent it. With `topology net30`/`p2p` the kernel would add a host route to the peer instead (UNVERIFIED for net30; the lab used `subnet`). VERIFIED for `subnet`: lab `ip route` before, during and after. If even that route is unacceptable, the alternative is `ifconfig-noexec`: OpenVPN then leaves `tdvpn0` **DOWN and without an address**, `>STATE:...,CONNECTED,SUCCESS,<ip>,...` still reports the IP, and the app configures the interface itself:
 
@@ -203,7 +203,7 @@ VERIFIED: lab; `push.c` `receive_auth_failed()`; `manage.c` `management_auth_fai
 
   VERIFIED: management-notes, man "Environmental Variables", `errlevel.h` (`D_PUSH` = verb 3), lab.
 - `--route-table <id>` (new in 2.7) would let OpenVPN install `route`s into a user table. It does not cover `redirect-gateway`'s bypass route logic, and the app's policy routing is simpler with `route-noexec`. VERIFIED: man `--route-table`. Not recommended; noted for completeness.
-- **IPv6:** a pushed `ifconfig-ipv6` is an `OPT_P_UP` option. `route-nopull` does not drop it, and OpenVPN would configure it on `tdvpn0`. Stage 1 has only IPv4 iptables host protection, so add `pull-filter ignore "ifconfig-ipv6"`. VERIFIED (source): permission classes. Whether mdex pushes IPv6 is UNVERIFIED.
+- **IPv6:** a pushed `ifconfig-ipv6` is an `OPT_P_UP` option. Without a filter OpenVPN would configure it on `tdvpn0` (`route-nopull` never dropped it). Stage 1 has only IPv4 iptables host protection, so the renderer emits `pull-filter ignore "ifconfig-ipv6"`. VERIFIED (source): permission classes. Whether mdex pushes IPv6 is UNVERIFIED.
 
 ---
 
@@ -234,11 +234,11 @@ All of section (c). Additions for the supervisor:
 
 - Answer **every** `>PASSWORD:Need 'Auth' username/password` at any time, not only the first. With `auth-retry interact`, or after `forget-passwords`, it comes again. VERIFIED: lab with `interact`.
 - Answer every `>HOLD:` with `hold release` (optionally after the app's own backoff delay). Otherwise OpenVPN never reconnects after an internal restart. VERIFIED: lab.
-- Ignore `>LOG:` lines whose text starts with `MANAGEMENT: ` (they echo commands and states) and the `N`-flagged `Options error: ... ([PUSH-OPTIONS])` lines caused by `route-nopull`. VERIFIED: lab.
+- Ignore `>LOG:` lines whose text starts with `MANAGEMENT: ` (they echo commands and states) Treat `N`-flagged `Options error: ... ([PUSH-OPTIONS])` lines as warnings: the pull filters keep the usual ones away, but a server may push other options a client does not accept. VERIFIED: lab.
 
 ## 3. Routing guarantee
 
-See (d). Render `route-noexec` and `route-nopull` (and `pull-filter ignore "ifconfig-ipv6"`) on every profile. Drop `redirect-gateway`, `redirect-private`, `route`, `route-ipv6` and `route-gateway` from imported or extra options with a warning; with `route-noexec` they would be inert anyway. VERIFIED: lab.
+See (d). Render `route-noexec` and the `pull-filter ignore` lines of (d) on every profile. Drop `redirect-gateway`, `redirect-private`, `route`, `route-ipv6` and `route-gateway` from imported or extra options with a warning; with `route-noexec` they would be inert anyway. VERIFIED: lab.
 
 ## 4. `script-security`, external binaries, sitnl
 
@@ -340,6 +340,8 @@ VERIFIED: this exact block was run in the lab, with `<HOST>` = the emulated 2.7.
 
 It is UNVERIFIED against the real mdex server.
 
+Since task 25 the routing block holds the `pull-filter ignore` lines of (d) instead of `route-nopull`; that change was verified by the e2e test (see (d)), not in this lab run. The first real mdex connection (DS723+ on Linux 4.4) pushed `route` options, `dhcp-option DNS`, `route-delay 6 6`, a point-to-point `ifconfig` (VPN IP and peer), `cipher CHACHA20-POLY1305` and `tun-mtu 1500`, and negotiated `CHACHA20-POLY1305`, although the profile allowed `none`.
+
 ```
 # rendered by TunnelDeck - do not edit
 client
@@ -377,7 +379,14 @@ auth-retry none
 
 # routing is owned by TunnelDeck
 route-noexec
-route-nopull
+pull-filter ignore "route "
+pull-filter ignore "route-ipv6"
+pull-filter ignore "redirect-gateway"
+pull-filter ignore "redirect-private"
+pull-filter ignore "dhcp-option"
+pull-filter ignore "dns "
+pull-filter ignore "block-outside-dns"
+pull-filter ignore "route-delay"
 pull-filter ignore "ifconfig-ipv6"
 
 # management
@@ -404,7 +413,7 @@ Everything else is the same. Not lab-tested against the real server: UNVERIFIED.
 5. `persist-tun`
 6. `disable-dco`
 7. `route-noexec`
-8. `route-nopull`
+8. `pull-filter ignore` for `"route "`, `"route-ipv6"`, `"redirect-gateway"`, `"redirect-private"`, `"dhcp-option"`, `"dns "`, `"block-outside-dns"`, `"route-delay"`
 9. `pull-filter ignore "ifconfig-ipv6"` (until IPv6 host protection exists)
 10. `management /run/tunneldeck/mgmt.sock unix`
 11. `management-hold`
@@ -444,7 +453,7 @@ Everything else is the same. Not lab-tested against the real server: UNVERIFIED.
    - small block size / reneg-bytes 64 MB;
    - "may cache passwords in memory".
 
-   Plus the `N`-flagged `Options error ... ([PUSH-OPTIONS])` lines from `route-nopull`. The UI should not show these as failures.
+   The UI should not show these as failures. The log level of "may cache passwords in memory" is info (the credentials stay cached on purpose for renegotiation), and after the first warning about cipher `none` the driver logs a note that it comes from the profile setting; whether the data channel is really unencrypted is the `Data Channel: cipher '...'` line, which the driver reports as `dataCipher` (`none` for `[null-cipher]`). Against a server that does not permit `none` (field: the first mdex connection negotiated `CHACHA20-POLY1305`), the same warnings appear although the tunnel is encrypted.
 8. **SPEC/CLAUDE.md conflict to resolve:** `clientKey`, `tlsAuthKey` and `tlsCryptKey` can only reach OpenVPN through the rendered file, which is tmpfs, 0600 and deleted on stop. CLAUDE.md says secrets never appear in files outside `/data`. Only the password and a private-key passphrase can avoid the file (management). The mdex profile has no file secrets.
 
 **Management client / supervisor**

@@ -34,7 +34,14 @@ explicit-exit-notify 2
 
 # routing is owned by TunnelDeck-VPN
 route-noexec
-route-nopull
+pull-filter ignore "route "
+pull-filter ignore "route-ipv6"
+pull-filter ignore "redirect-gateway"
+pull-filter ignore "redirect-private"
+pull-filter ignore "dhcp-option"
+pull-filter ignore "dns "
+pull-filter ignore "block-outside-dns"
+pull-filter ignore "route-delay"
 pull-filter ignore "ifconfig-ipv6"
 
 # management

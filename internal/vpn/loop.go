@@ -49,8 +49,10 @@ type tunnel struct {
 	// remoteNetworks are routed through the tunnel while it is connected;
 	// they are read once per attempt, like every other profile setting.
 	remoteNetworks []netip.Prefix
-	quit           chan struct{} // closed when the tunnel is discarded
-	stopping       bool
+	// vpnIP is the address of the last connected event.
+	vpnIP    string
+	quit     chan struct{} // closed when the tunnel is discarded
+	stopping bool
 	// failure is set when the tunnel failed and must be stopped.
 	failure *failure
 }
@@ -102,6 +104,10 @@ type loop struct {
 	retry    timerSlot
 	failures int // consecutive failed attempts, for the backoff
 	daily    dailyPlan
+	// routingRetry applies the routing of the connected tunnel again after
+	// a failure; routingFailures counts the failures for its backoff.
+	routingRetry    timerSlot
+	routingFailures int
 
 	status         Status
 	traffic        trafficSample
@@ -333,6 +339,7 @@ func (l *loop) startAttempt() {
 func (l *loop) beginAttempt(p domain.Profile) {
 	l.status.ProfileID, l.status.ProfileName, l.status.Protocol = p.ID, p.Name, p.Protocol
 	l.status.BytesIn, l.status.BytesOut, l.status.RateIn, l.status.RateOut = 0, 0, 0, 0
+	l.status.DataCipher, l.status.ControlChannel = "", ""
 	l.traffic = trafficSample{}
 	if l.status.State != domain.StateReconnecting {
 		l.setState(domain.StateConnecting, "")
@@ -400,6 +407,8 @@ func (l *loop) stopped(t *tunnel, err error) {
 	if err != nil {
 		l.logf(domain.LogLevelWarn, "stopping the tunnel: %v", err)
 	}
+	l.resetRoutingRetry()
+	l.status.RoutingWarning = nil
 	l.clearRouting()
 	switch {
 	case !l.want:
@@ -436,6 +445,11 @@ func (l *loop) scheduleRetry() time.Duration {
 func (l *loop) resetRetry() {
 	l.retry.cancel()
 	l.failures = 0
+}
+
+func (l *loop) resetRoutingRetry() {
+	l.routingRetry.cancel()
+	l.routingFailures = 0
 }
 
 // arm replaces the timer in slot with one that runs fire in the loop

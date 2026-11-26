@@ -136,16 +136,23 @@ func TestManagerRoutesOnEveryConnectedEvent(t *testing.T) {
 	}
 }
 
-func TestManagerRoutingFailureRestartsTheTunnel(t *testing.T) {
+// failingRuleAdd is how a failing ip command reaches the manager: the
+// command line, its exit status and its standard error (netguard's
+// CommandError).
+const failingRuleAdd = `route through tunnel: ip rule add fwmark 0x7194/0xffff lookup 7194 priority 7191: exit status 2: ` +
+	`RTNETLINK answers: Operation not permitted`
+
+func TestManagerRoutingFailureKeepsTheTunnelUp(t *testing.T) {
 	tests := []struct {
-		name  string
-		ip    string
-		setup func(h *managerHarness)
+		name    string
+		ip      string
+		setup   func(h *managerHarness)
+		message string
 	}{
-		{name: "netguard fails", ip: "10.66.0.2", setup: func(h *managerHarness) {
-			h.guard.set(func(g *fakeGuard) { g.routeErr = errors.New("ip: operation not permitted") })
+		{name: "netguard fails", ip: "10.66.0.2", message: failingRuleAdd, setup: func(h *managerHarness) {
+			h.guard.set(func(g *fakeGuard) { g.routeErr = errors.New(failingRuleAdd) })
 		}},
-		{name: "no VPN IP", ip: "", setup: func(*managerHarness) {}},
+		{name: "no VPN IP", ip: "", message: `the driver reported no valid VPN IP ("")`, setup: func(*managerHarness) {}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,14 +161,123 @@ func TestManagerRoutingFailureRestartsTheTunnel(t *testing.T) {
 			h.connect("a")
 			d := h.nextDriver()
 			d.emit(connectedEvent(tt.ip))
-			d.awaitStop(t)
-			if e := h.waitState(domain.StateError); e.Code != domain.ErrorCodeRoutingFailed {
-				t.Errorf("error event = %+v", e)
+			h.waitLog("applying the tunnel routing failed: " + tt.message + "; the tunnel stays up, retrying the routing in 2s")
+			if e := h.waitState(domain.StateConnected); e.VPNIP != tt.ip {
+				t.Errorf("connected event = %+v", e)
+			}
+			s := h.m.Status()
+			if w := s.RoutingWarning; s.State != domain.StateConnected || s.LastError != nil || w == nil ||
+				w.Code != domain.ErrorCodeRoutingFailed || !strings.Contains(w.Message, tt.message) || !w.Time.Equal(defaultStart) {
+				t.Errorf("status = %+v, routing warning %+v", s, s.RoutingWarning)
 			}
 			if pending := h.pending(); !slices.Equal(pending, []time.Duration{2 * time.Second}) {
-				t.Errorf("pending = %v, want a retry", pending)
+				t.Errorf("pending = %v, want the routing retry", pending)
+			}
+			select {
+			case <-d.stopped:
+				t.Error("a routing failure stopped the tunnel")
+			default:
 			}
 		})
+	}
+}
+
+func TestManagerRetriesTheRoutingWithBackoff(t *testing.T) {
+	h := newManagerHarness(t)
+	h.guard.set(func(g *fakeGuard) { g.routeErr = errors.New(failingRuleAdd) })
+	d := h.connectUp("a", "10.66.0.2")
+	since := h.m.Status().Since
+	for _, delay := range []time.Duration{2 * time.Second, 4 * time.Second} {
+		if pending := h.pending(); !slices.Equal(pending, []time.Duration{delay}) {
+			t.Fatalf("pending = %v, want %v", pending, delay)
+		}
+		h.advance(delay)
+	}
+	h.waitLog("retrying the routing in 8s")
+
+	h.guard.set(func(g *fakeGuard) { g.routeErr = nil })
+	h.advance(8 * time.Second)
+	h.waitLog("the tunnel routing is applied")
+	if e := h.waitState(domain.StateConnected); !e.Since.Equal(since) {
+		t.Errorf("the announcement changed the state's time: %+v, want %v", e, since)
+	}
+	if s := h.m.Status(); s.RoutingWarning != nil || s.State != domain.StateConnected || !s.Since.Equal(since) {
+		t.Errorf("status after the routing applied = %+v", s)
+	}
+	if pending := h.pending(); len(pending) != 0 {
+		t.Errorf("pending = %v, want no retry", pending)
+	}
+	want := []string{"install", "route 10.66.0.2", "route 10.66.0.2", "route 10.66.0.2", "route 10.66.0.2"}
+	if calls := h.guard.recorded(); !slices.Equal(calls, want) {
+		t.Errorf("netguard calls = %v, want %v", calls, want)
+	}
+
+	// A new connected event starts the backoff afresh.
+	h.guard.set(func(g *fakeGuard) { g.routeErr = errors.New(failingRuleAdd) })
+	d.emit(connectedEvent("10.66.0.9"))
+	h.waitLog("retrying the routing in 2s")
+	if pending := h.pending(); !slices.Equal(pending, []time.Duration{2 * time.Second}) {
+		t.Errorf("pending = %v, want the first retry delay", pending)
+	}
+}
+
+func TestManagerRoutingRetryWaitsForTheConnectedTunnel(t *testing.T) {
+	h := newManagerHarness(t)
+	h.guard.set(func(g *fakeGuard) { g.routeErr = errors.New(failingRuleAdd) })
+	d := h.connectUp("a", "10.66.0.2")
+	d.emit(domain.StateEvent{State: domain.StateReconnecting, Message: "ping-restart"})
+	h.waitState(domain.StateReconnecting)
+	h.advance(2 * time.Second)
+	if calls := h.guard.recorded(); !slices.Equal(calls, []string{"install", "route 10.66.0.2"}) {
+		t.Errorf("netguard calls while reconnecting = %v, want no retry", calls)
+	}
+	if pending := h.pending(); len(pending) != 0 {
+		t.Errorf("pending = %v, want the retry dropped", pending)
+	}
+
+	d.emit(connectedEvent("10.66.0.2"))
+	h.waitState(domain.StateConnected)
+	if err := h.m.Disconnect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	h.waitState(domain.StateDisconnected)
+	if s := h.m.Status(); s.RoutingWarning != nil {
+		t.Errorf("routing warning after disconnect = %+v", s.RoutingWarning)
+	}
+	if pending := h.pending(); len(pending) != 0 {
+		t.Errorf("pending = %v, want the routing retry cancelled with the tunnel", pending)
+	}
+}
+
+func TestManagerRecordsTheNegotiatedChannel(t *testing.T) {
+	h := newManagerHarness(t)
+	h.connect("a")
+	d := h.nextDriver()
+	d.emit(domain.ChannelEvent{ControlChannel: "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256"},
+		domain.ChannelEvent{DataCipher: "CHACHA20-POLY1305"},
+		connectedEvent("10.66.0.2"))
+	e := h.events.next(t, "channel event", func(e domain.Event) bool { _, ok := e.(domain.ChannelEvent); return ok })
+	if e.Kind() != domain.EventKindChannel {
+		t.Errorf("kind = %s", e.Kind())
+	}
+	h.waitState(domain.StateConnected)
+	if s := h.m.Status(); s.DataCipher != "CHACHA20-POLY1305" || s.ControlChannel != "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256" {
+		t.Errorf("status = %+v", s)
+	}
+
+	// Reconnecting keeps them; a renegotiation updates one of them.
+	d.emit(domain.StateEvent{State: domain.StateReconnecting}, domain.ChannelEvent{DataCipher: "none"})
+	h.waitState(domain.StateReconnecting)
+	if s := h.m.Status(); s.DataCipher != "none" || s.ControlChannel == "" {
+		t.Errorf("status while reconnecting = %+v", s)
+	}
+
+	if err := h.m.Disconnect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	h.waitState(domain.StateDisconnected)
+	if s := h.m.Status(); s.DataCipher != "" || s.ControlChannel != "" {
+		t.Errorf("status after disconnect = %+v", s)
 	}
 }
 

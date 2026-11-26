@@ -40,17 +40,21 @@ type Auth interface {
 	// Setup fails with domain.ErrSetupAlreadyDone or a
 	// *domain.ValidationError.
 	Setup(username, password string) error
-	// Login returns a session token. It fails with ErrInvalidCredentials or
-	// *RateLimitError.
-	Login(username, password string, client LoginClient) (token string, err error)
+	// Login returns a session token; remember starts a "stay signed in"
+	// session. It fails with ErrInvalidCredentials or *RateLimitError.
+	Login(username, password string, client LoginClient, remember bool) (token string, err error)
 	Authenticate(token string) (username string, ok bool)
-	Logout(token string)
+	// Logout ends the session behind token; unknown tokens are ignored.
+	Logout(token string) error
+	// LogoutEverywhere ends every session.
+	LogoutEverywhere() error
 }
 
 // SessionCookies carries the session token between client and server.
-// secure is true on the HTTPS listener.
+// secure is true on the HTTPS listener; remember makes the cookie
+// persistent.
 type SessionCookies interface {
-	Set(w http.ResponseWriter, token string, secure bool)
+	Set(w http.ResponseWriter, token string, secure, remember bool)
 	Clear(w http.ResponseWriter, secure bool)
 	Token(r *http.Request) string
 }

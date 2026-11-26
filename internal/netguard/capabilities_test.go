@@ -173,14 +173,14 @@ func TestExtensionsAreProbedOncePerBackend(t *testing.T) {
 	if support, err := g.ProtectionSupport(ctx); err != nil || support.SYNFlood != domain.ProtectionGlobal {
 		t.Fatalf("ProtectionSupport = %+v, %v", support, err)
 	}
-	if n := countOfCall(f.calls, "-N TUNNELDECK-EXT-PROBE"); n != 1 {
+	if n := countOfCall(f.calls, " -w -N TUNNELDECK-EXT-PROBE"); n != 1 {
 		t.Errorf("probed %d times, want once", n)
 	}
 	g.backend = &Backend{Binary: plainBinary}
 	if _, err := g.ProtectionSupport(ctx); err != nil {
 		t.Fatalf("ProtectionSupport: %v", err)
 	}
-	if n := countOfCall(f.calls, "-N TUNNELDECK-EXT-PROBE"); n != 2 || !slices.Contains(f.calls, "iptables -w -N TUNNELDECK-EXT-PROBE") {
+	if n := countOfCall(f.calls, " -w -N TUNNELDECK-EXT-PROBE"); n != 2 || !slices.Contains(f.calls, "iptables -w -N TUNNELDECK-EXT-PROBE") {
 		t.Errorf("probed %d times, want again with the new backend", n)
 	}
 }
@@ -196,6 +196,7 @@ func countOfCall(calls []string, suffix string) int {
 }
 
 func TestSelfCheckReportsMissingExtensions(t *testing.T) {
+	everyCheckPasses := map[string]string{CheckCounters: "", CheckSYNFlood: "", CheckPingLimit: "", CheckMSSClamp: "", CheckReject: "", CheckReplyRouting: ""}
 	tests := []struct {
 		name    string
 		missing []string
@@ -203,15 +204,12 @@ func TestSelfCheckReportsMissingExtensions(t *testing.T) {
 		// "" for a passing check.
 		want map[string]string
 	}{
-		{
-			name: "every extension",
-			want: map[string]string{CheckCounters: "", CheckSYNFlood: "", CheckPingLimit: "", CheckMSSClamp: "", CheckReject: ""},
-		},
+		{name: "every extension", want: everyCheckPasses},
 		{
 			name:    "no hashlimit: only the SYN flood protection is reduced",
 			missing: []string{probeHashlimit},
 			want: map[string]string{
-				CheckCounters: "", CheckMSSClamp: "", CheckPingLimit: "", CheckReject: "",
+				CheckCounters: "", CheckMSSClamp: "", CheckPingLimit: "", CheckReject: "", CheckReplyRouting: "",
 				CheckSYNFlood: "falls back to the limit match: one global rate",
 			},
 		},
@@ -219,15 +217,33 @@ func TestSelfCheckReportsMissingExtensions(t *testing.T) {
 			name:    "no rate limit, no TCPMSS, no REJECT",
 			missing: []string{probeHashlimit, probeLimit, probeTCPMSS, probeReject},
 			want: map[string]string{
-				CheckCounters:  "",
-				CheckSYNFlood:  "SYN flood protection is left out",
-				CheckPingLimit: "the ping limit is left out",
-				CheckMSSClamp:  "xt_TCPMSS",
-				CheckReject:    "the action reject drop instead",
+				CheckCounters:     "",
+				CheckSYNFlood:     "SYN flood protection is left out",
+				CheckPingLimit:    "the ping limit is left out",
+				CheckMSSClamp:     "xt_TCPMSS",
+				CheckReject:       "the action reject drop instead",
+				CheckReplyRouting: "",
+			},
+		},
+		{
+			name:    "no mangle table: replies by address",
+			missing: []string{probeMangleChain},
+			want: map[string]string{
+				CheckCounters: "", CheckSYNFlood: "", CheckPingLimit: "", CheckMSSClamp: "", CheckReject: "",
+				CheckReplyRouting: "routed by the target's address",
+			},
+		},
+		{
+			name:    "no connmark match: replies by address",
+			missing: []string{probeReplyRestore},
+			want: map[string]string{
+				CheckCounters: "", CheckSYNFlood: "", CheckPingLimit: "", CheckMSSClamp: "", CheckReject: "",
+				CheckReplyRouting: "routed by the target's address",
 			},
 		},
 	}
-	hints := map[string]string{CheckCounters: hintCounters, CheckSYNFlood: hintRateLimit, CheckPingLimit: hintRateLimit, CheckMSSClamp: hintMSSClamp, CheckReject: hintReject}
+	hints := map[string]string{CheckCounters: hintCounters, CheckSYNFlood: hintRateLimit, CheckPingLimit: hintRateLimit,
+		CheckMSSClamp: hintMSSClamp, CheckReject: hintReject, CheckReplyRouting: hintReplyRouting}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRunner()
@@ -259,7 +275,105 @@ func TestSelfCheckReportsMissingExtensions(t *testing.T) {
 
 // extensionChecks are the self-checks of optional extensions, which only
 // warn.
-var extensionChecks = []string{CheckCounters, CheckSYNFlood, CheckPingLimit, CheckMSSClamp, CheckReject}
+var extensionChecks = []string{CheckCounters, CheckSYNFlood, CheckPingLimit, CheckMSSClamp, CheckReject, CheckReplyRouting}
+
+// mangleMissing is how iptables-legacy fails on a kernel without the
+// mangle table.
+const mangleMissing = "iptables v1.8.13 (legacy): can't initialize iptables table `mangle': Table does not exist (do you need to insmod?)"
+
+// TestProbeWithoutCONNMARK: a kernel without the mangle table or without
+// the connmark module routes replies by source and never gets a mangle
+// chain; a failing probe line still has its probe chain removed.
+func TestProbeWithoutCONNMARK(t *testing.T) {
+	filterProbe := probeCalls[:8]
+	tests := []struct {
+		name   string
+		script func(*fakeRunner)
+		probes []string
+	}{
+		{
+			name:   "no mangle table: nothing more is tried in it",
+			script: func(f *fakeRunner) { f.on(probeMangleChain, fail(mangleMissing)) },
+			probes: slices.Concat(filterProbe, []string{probeMangleChain}),
+		},
+		{
+			name:   "no CONNMARK target",
+			script: func(f *fakeRunner) { f.on(probeReplyMark, fail(extensionMissing)) },
+			probes: probeCalls,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRunner()
+			tt.script(f)
+			scriptFresh(f)
+			g := newLegacyGuard(f)
+			ike := rulesOnly(portForward(domain.ProtocolUDP, "192.168.2.2", domain.SinglePort(500)))
+			if err := g.InstallFirewall(context.Background(), ike, uiPort); err != nil {
+				t.Fatalf("InstallFirewall: %v", err)
+			}
+			calls := f.takeCalls()
+			assertCalls(t, calls[:len(detectLegacy)+len(tt.probes)], slices.Concat(detectLegacy, tt.probes))
+			for _, call := range calls[len(detectLegacy)+len(tt.probes):] {
+				if strings.Contains(call, "mangle") {
+					t.Errorf("installation without CONNMARK ran %q", call)
+				}
+			}
+			if g.replyRouting() != replyBySource {
+				t.Errorf("reply routing = %v, want by source", g.replyRouting())
+			}
+
+			f.on(ruleShow, ok(defaultRules))
+			if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+				t.Fatalf("RouteThroughTunnel: %v", err)
+			}
+			assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, "ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow,
+				"ip rule add from 192.168.2.2/32 to 192.168.2.0/24 lookup main priority 7100",
+				"ip rule add from 192.168.2.2/32 lookup 7194 priority 7191"})
+
+			if err := g.RemoveFirewall(context.Background()); err != nil {
+				t.Fatalf("RemoveFirewall: %v", err)
+			}
+			for _, call := range f.takeCalls() {
+				if strings.Contains(call, "mangle") {
+					t.Errorf("removal without CONNMARK ran %q", call)
+				}
+			}
+		})
+	}
+}
+
+// TestRepliesByConnectionMark: with CONNMARK a port forward fills
+// TUNNELDECK-MANGLE-PRE, the tunnel routes its replies by the mark, and the
+// removal deletes the chain and its jump.
+func TestRepliesByConnectionMark(t *testing.T) {
+	f := newFakeRunner()
+	scriptFresh(f)
+	g := newLegacyGuard(f)
+	ike := rulesOnly(portForward(domain.ProtocolUDP, "192.168.2.2", domain.SinglePort(500)))
+	if err := g.InstallFirewall(context.Background(), ike, uiPort); err != nil {
+		t.Fatalf("InstallFirewall: %v", err)
+	}
+	calls := f.takeCalls()
+	if want := freshMangleCalls([]string{replyMarkLine, replyRestoreLine}); !slices.Equal(calls[len(calls)-len(want):], want) {
+		t.Errorf("installation ends with\n%s\nwant\n%s", strings.Join(calls[len(calls)-len(want):], "\n"), strings.Join(want, "\n"))
+	}
+
+	f.on(ruleShow, ok(defaultRules))
+	if err := g.RouteThroughTunnel(context.Background(), vpnIP, nil); err != nil {
+		t.Fatalf("RouteThroughTunnel: %v", err)
+	}
+	assertCalls(t, f.takeCalls(), []string{routeReplace, ruleShow, "ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow,
+		addMarkedReply})
+
+	f.on(manglePrefix+"-S PREROUTING", ok("-P PREROUTING ACCEPT\n-A PREROUTING -j TUNNELDECK-MANGLE-PRE\n"))
+	if err := g.RemoveFirewall(context.Background()); err != nil {
+		t.Fatalf("RemoveFirewall: %v", err)
+	}
+	calls = f.takeCalls()
+	assertCalls(t, calls[len(calls)-4:], prefixed(manglePrefix,
+		"-S PREROUTING", "-D PREROUTING -j TUNNELDECK-MANGLE-PRE", "-F TUNNELDECK-MANGLE-PRE", "-X TUNNELDECK-MANGLE-PRE"))
+}
 
 // TestRejectRulesWithoutTheRejectTarget installs reject rules as DROP when
 // the kernel lacks the REJECT target.

@@ -30,6 +30,7 @@ func scriptCurrent(f *fakeRunner, input, forward, prerouting, postrouting []stri
 	f.scripts[legacy+"-S TUNNELDECK-FORWARD"] = []fakeResult{ok(listingOf(forwardChain, forward))}
 	f.scripts[natPrefix+"-S TUNNELDECK-PREROUTING"] = []fakeResult{ok(listingOf(preroutingChain, prerouting))}
 	f.scripts[natPrefix+"-S TUNNELDECK-POSTROUTING"] = []fakeResult{ok(listingOf(postroutingChain, postrouting))}
+	f.scripts[manglePrefix+"-S TUNNELDECK-MANGLE-PRE"] = []fakeResult{ok(listingOf(mangleChain, mangleFor(prerouting)))}
 }
 
 // checks are the iptables -C calls that confirm content in chain.
@@ -74,7 +75,8 @@ func TestUnchangedChainsAreLeftAlone(t *testing.T) {
 					keptCalls(legacy, inputChain, "INPUT", tt.input),
 					keptCalls(legacy, forwardChain, "FORWARD", tt.forward),
 					keptCalls(natPrefix, preroutingChain, "PREROUTING", tt.prerouting),
-					keptCalls(natPrefix, postroutingChain, "POSTROUTING", tt.postrouting))
+					keptCalls(natPrefix, postroutingChain, "POSTROUTING", tt.postrouting),
+					keptCalls(manglePrefix, mangleChain, "PREROUTING", mangleFor(tt.prerouting)))
 				if run == 0 {
 					want = slices.Concat(detectInstall, want)
 				}
@@ -157,7 +159,8 @@ func TestChangedChainIsRebuiltAlone(t *testing.T) {
 			assertCalls(t, f.calls, slices.Concat(detectInstall, []string{addrShow}, refill,
 				keptCalls(legacy, forwardChain, "FORWARD", testForward),
 				keptCalls(natPrefix, preroutingChain, "PREROUTING", nil),
-				keptCalls(natPrefix, postroutingChain, "POSTROUTING", nil)))
+				keptCalls(natPrefix, postroutingChain, "POSTROUTING", nil),
+				keptCalls(manglePrefix, mangleChain, "PREROUTING", nil)))
 		})
 	}
 }
@@ -275,7 +278,8 @@ func TestWithoutTheCommentMatchEveryChainIsRefilledUntagged(t *testing.T) {
 			refillCalls(legacy, inputChain, "INPUT", len(input), input),
 			refillCalls(legacy, forwardChain, "FORWARD", len(forward), forward),
 			refillCalls(natPrefix, preroutingChain, "PREROUTING", 0, nil),
-			refillCalls(natPrefix, postroutingChain, "POSTROUTING", 0, nil))
+			refillCalls(natPrefix, postroutingChain, "POSTROUTING", 0, nil),
+			refillCalls(manglePrefix, mangleChain, "PREROUTING", 0, nil))
 		if run == 0 {
 			want = slices.Concat(detectInstall, want)
 		}

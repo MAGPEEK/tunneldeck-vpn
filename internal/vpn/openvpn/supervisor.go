@@ -58,6 +58,8 @@ type run struct {
 	// forwardOutput is true until the management log takes over; from then
 	// on stdout repeats the >LOG: lines and only feeds the tail.
 	forwardOutput atomic.Bool
+	// notedCipherNone is set once cipherNoneNote was logged.
+	notedCipherNone atomic.Bool
 
 	// Owned by the supervise goroutine.
 	managementUp bool
@@ -140,7 +142,20 @@ func (r *run) outputLine(text string) {
 		r.tail = r.tail[1:]
 	}
 	if r.forwardOutput.Load() {
-		r.log(outputLogLevel(text), text)
+		r.report(domain.LogEvent{Time: r.now(), Level: outputLogLevel(text), Text: text})
+	}
+}
+
+// report emits a line of openvpn's log, followed by what it tells about
+// the tunnel: the negotiated ciphers, and after the first warning about
+// cipher "none" of the process a note where it comes from.
+func (r *run) report(line domain.LogEvent) {
+	r.driver.emit(line)
+	if e, ok := channelEvent(line.Text); ok {
+		r.driver.emit(e)
+	}
+	if isCipherNoneWarning(line.Text) && r.notedCipherNone.CompareAndSwap(false, true) {
+		r.log(domain.LogLevelInfo, cipherNoneNote)
 	}
 }
 

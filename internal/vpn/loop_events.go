@@ -22,6 +22,8 @@ func (l *loop) driverEvent(t *tunnel, e domain.Event) {
 		l.appendLog(e)
 	case domain.TrafficEvent:
 		l.updateTraffic(e)
+	case domain.ChannelEvent:
+		l.updateChannel(e)
 	case domain.StateEvent:
 		if !t.stopping {
 			l.driverState(t, e)
@@ -63,17 +65,61 @@ func (l *loop) driverClosed(t *tunnel) {
 }
 
 // tunnelConnected routes replies and the remote networks through the
-// tunnel on every connected event, because the VPN IP can change.
+// tunnel on every connected event, because the VPN IP can change. A
+// routing failure never takes a working tunnel down (applyRouting).
 func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
-	if err := l.routeThroughTunnel(e.VPNIP, t.remoteNetworks); err != nil {
-		t.failure = &failure{code: domain.ErrorCodeRoutingFailed, message: "routing through the tunnel failed: " + err.Error()}
-		l.reconcile()
-		return
-	}
+	t.vpnIP = e.VPNIP
+	l.resetRoutingRetry()
+	l.applyRouting(t)
 	l.failures = 0
 	l.status.LastError = nil
 	l.status.VPNIP, l.status.Remote = e.VPNIP, e.Remote
 	l.setState(domain.StateConnected, "")
+}
+
+// applyRouting routes through the connected tunnel t. When that fails, t
+// stays up: the status carries a routing warning whose message names the
+// failing command and its output, the log line too, and the routing is
+// retried with the backoff of SPEC §4.2 for as long as t stays connected.
+func (l *loop) applyRouting(t *tunnel) {
+	err := l.routeThroughTunnel(t.vpnIP, t.remoteNetworks)
+	if err == nil {
+		if l.status.RoutingWarning != nil {
+			l.status.RoutingWarning = nil
+			l.logf(domain.LogLevelInfo, "the tunnel routing is applied")
+		}
+		return
+	}
+	message := "applying the tunnel routing failed: " + err.Error()
+	l.status.RoutingWarning = &StatusError{Code: domain.ErrorCodeRoutingFailed, Message: message, Time: l.now()}
+	delay := backoffDelay(l.routingFailures, l.cfg.Random)
+	l.routingFailures++
+	l.arm(&l.routingRetry, delay, func(l *loop) { l.retryRouting(t) })
+	l.logf(domain.LogLevelError, "%s; the tunnel stays up, retrying the routing in %s", message, delay)
+}
+
+// retryRouting applies the routing again while t is the connected tunnel;
+// otherwise the next connected event does. Success is announced with the
+// unchanged state, so subscribers fetch the status without the warning.
+func (l *loop) retryRouting(t *tunnel) {
+	if l.tunnel != t || t.stopping || l.status.State != domain.StateConnected {
+		return
+	}
+	l.applyRouting(t)
+	if l.status.RoutingWarning == nil {
+		l.broadcast(l.stateEvent())
+	}
+}
+
+// updateChannel records what the tunnel negotiated.
+func (l *loop) updateChannel(e domain.ChannelEvent) {
+	if e.DataCipher != "" {
+		l.status.DataCipher = e.DataCipher
+	}
+	if e.ControlChannel != "" {
+		l.status.ControlChannel = e.ControlChannel
+	}
+	l.broadcast(e)
 }
 
 func (l *loop) installFirewall() error {
@@ -166,18 +212,26 @@ func (l *loop) dailyReconnectDue() {
 	l.armDaily()
 }
 
+// setState changes the state; leaving the tunnel's states forgets what
+// the tunnel reported.
 func (l *loop) setState(state domain.ConnectionState, message string) {
 	l.status.State, l.status.Message, l.status.Since = state, message, l.now()
 	if state != domain.StateConnected && state != domain.StateReconnecting {
 		l.status.VPNIP, l.status.Remote = "", ""
+		l.status.DataCipher, l.status.ControlChannel = "", ""
 	}
+	l.broadcast(l.stateEvent())
+}
+
+// stateEvent describes the current state.
+func (l *loop) stateEvent() domain.StateEvent {
 	event := domain.StateEvent{
-		State: state, Message: message, VPNIP: l.status.VPNIP, Remote: l.status.Remote, Since: l.status.Since,
+		State: l.status.State, Message: l.status.Message, VPNIP: l.status.VPNIP, Remote: l.status.Remote, Since: l.status.Since,
 	}
-	if state == domain.StateError && l.status.LastError != nil {
+	if l.status.State == domain.StateError && l.status.LastError != nil {
 		event.Code = l.status.LastError.Code
 	}
-	l.broadcast(event)
+	return event
 }
 
 func (l *loop) logf(level domain.LogLevel, format string, args ...any) {

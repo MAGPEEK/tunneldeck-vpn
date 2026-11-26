@@ -18,12 +18,18 @@ import (
 // TUNNELDECK-PREROUTING (nat PREROUTING, -i tdvpn0) translates port
 // forwards, except uiPort and the remote-access port when a forward covers
 // every TCP port; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
-// forwards on the LAN side and outbound traffic on the tunnel. The global
+// forwards on the LAN side and outbound traffic on the tunnel. While the
+// kernel has the CONNMARK target, TUNNELDECK-MANGLE-PRE (mangle
+// PREROUTING, every packet) marks the connections from the tunnel and
+// restores that mark on their replies, as long as a port forward exists;
+// the policy rule at 7191 routes those replies (replyByMark). The global
 // settings add their rules at the top of the filter chains (buildRuleset).
 // A protection whose kernel module is missing never fails the
 // installation (capabilities.go): the rate limits fall back from hashlimit
 // to one global limit in TUNNELDECK-LIMIT, which the filter chains' SYN
-// and ping lines jump to, or are left out like MSS clamping.
+// and ping lines jump to, or are left out like MSS clamping; without
+// CONNMARK the mangle table is never touched and replies are routed by
+// source address (replyBySource).
 // Rules are installed in list order. Every content line carries a comment
 // tag (tags.go). Calling it again with the same configuration yields the
 // same state and leaves every chain whose content is unchanged untouched,
@@ -150,7 +156,7 @@ func (g *Guard) installRuleset(ctx context.Context, rs ruleset, caps capabilitie
 // syncInstalledPolicy brings the policy rules of a routed tunnel in line
 // with the newly installed firewall; the remote networks stay.
 func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error {
-	want, err := policyRulesFor(g.installed.firewall, g.remoteNetworks, lan)
+	want, err := policyRulesFor(g.installed.firewall, g.remoteNetworks, lan, g.replyRouting())
 	if err != nil {
 		return err
 	}
@@ -162,13 +168,18 @@ func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error
 }
 
 // RemoveFirewall deletes every jump to the four chains, then the chains,
-// and last TUNNELDECK-LIMIT, which their lines may reach. Objects that are
-// already absent are skipped.
+// TUNNELDECK-LIMIT, which their lines may reach, and, while the kernel can
+// mark replies, TUNNELDECK-MANGLE-PRE. Objects that are already absent are
+// skipped.
 func (g *Guard) RemoveFirewall(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.installed = nil
-	for _, spec := range append(allChainSpecs(nil), limitSpec) {
+	specs := append(allChainSpecs(nil), limitSpec)
+	if g.replyRouting() == replyByMark {
+		specs = append(specs, mangleSpec)
+	}
+	for _, spec := range specs {
 		if err := g.removeChainAndJumps(ctx, spec); err != nil {
 			return fmt.Errorf("remove firewall: %w", err)
 		}

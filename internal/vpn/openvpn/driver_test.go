@@ -44,6 +44,7 @@ func TestDriverHappyPath(t *testing.T) {
 
 	h.process.print(t, "2026-11-25 18:52:23 WARNING: cipher 'none' specified for --data-ciphers.")
 	h.events.waitLog(t, domain.LogLevelWarn, "WARNING: cipher 'none' specified for --data-ciphers.")
+	h.events.waitLog(t, domain.LogLevelInfo, "come from the profile setting Cipher = none")
 
 	server := acceptManagement(t, h.dialer)
 	if got := h.dialer.dialedPath(); got != testSocketPath {
@@ -53,10 +54,17 @@ func TestDriverHappyPath(t *testing.T) {
 	server.login(usernameLine, trickyPasswordLine)
 	server.send(
 		">LOG:1795632744,W,WARNING: this configuration may cache passwords in memory",
+		">LOG:1795632744,,Control Channel: TLSv1.3, cipher TLSv1.3 TLS_CHACHA20_POLY1305_SHA256, peer certificate: 384 bits ECsecp384r1, signature: ecdsa-with-SHA384",
+		">LOG:1795632744,W,******* WARNING *******: '--cipher none' was specified.",
+		">LOG:1795632744,,Data Channel: cipher '[null-cipher]', auth '[null-digest]', peer-id: 0",
 		">STATE:1795632744,CONNECTED,SUCCESS,10.66.0.2,172.20.0.2,1194,,",
 		">BYTECOUNT:4172,2327",
 	)
-	h.events.waitLog(t, domain.LogLevelWarn, "may cache passwords in memory")
+	h.events.waitLog(t, domain.LogLevelInfo, "may cache passwords in memory")
+	h.events.waitFor(t, "control channel", func(e domain.Event) bool {
+		return e == domain.ChannelEvent{ControlChannel: "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256"}
+	})
+	h.events.waitFor(t, "data cipher", func(e domain.Event) bool { return e == domain.ChannelEvent{DataCipher: "none"} })
 	connected := h.events.waitState(t, domain.StateConnected)
 	if connected.VPNIP != "10.66.0.2" || connected.Remote != "172.20.0.2:1194" {
 		t.Errorf("connected event = %+v", connected)
@@ -83,7 +91,20 @@ func TestDriverHappyPath(t *testing.T) {
 		t.Errorf("last state = %+v, want disconnected", last)
 	}
 	assertNoEventContains(t, events, "tduser", "w#rd", "Initialization Sequence Completed")
+	if notes := countLogs(events, cipherNoneNote); notes != 1 {
+		t.Errorf("the cipher note was logged %d times, want once per process", notes)
+	}
 	h.assertFilesRemoved()
+}
+
+func countLogs(events []domain.Event, text string) int {
+	n := 0
+	for _, e := range events {
+		if line, ok := e.(domain.LogEvent); ok && line.Text == text {
+			n++
+		}
+	}
+	return n
 }
 
 func TestDriverRejections(t *testing.T) {

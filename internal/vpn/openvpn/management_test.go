@@ -169,7 +169,7 @@ func TestManagementLogLevel(t *testing.T) {
 	}{
 		{"W", "WARNING: cipher 'none' specified for --data-ciphers.", domain.LogLevelWarn},
 		{"W", "******* WARNING *******: '--auth none' was specified.", domain.LogLevelWarn},
-		{"W", "WARNING: this configuration may cache passwords in memory", domain.LogLevelWarn},
+		{"W", "WARNING: this configuration may cache passwords in memory -- use the auth-nocache option to prevent this", domain.LogLevelInfo},
 		{"N", "Options error: option 'redirect-gateway' cannot be used in this context ([PUSH-OPTIONS])", domain.LogLevelWarn},
 		{"N", "VERIFY ERROR: depth=1, error=self-signed certificate in certificate chain", domain.LogLevelError},
 		{"F", "Exiting due to fatal error", domain.LogLevelError},
@@ -196,6 +196,7 @@ func TestOutputLogLevel(t *testing.T) {
 		{"2026-11-25 18:52:23 Options error: You must define CA file (--ca)", domain.LogLevelError},
 		{"Options error: option 'route' cannot be used in this context ([PUSH-OPTIONS])", domain.LogLevelWarn},
 		{"2026-11-25 18:52:23 Exiting due to fatal error", domain.LogLevelError},
+		{"2026-11-25 18:52:23 WARNING: this configuration may cache passwords in memory -- use the auth-nocache option to prevent this", domain.LogLevelInfo},
 		{"2026-11-25 18:52:23 OpenVPN 2.7.9 x86_64-alpine-linux-musl", domain.LogLevelInfo},
 	}
 	for _, tt := range tests {

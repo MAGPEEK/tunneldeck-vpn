@@ -65,7 +65,8 @@
     "invalidCredentials": "Benutzername oder Passwort ist falsch.",
     "rateLimited_one": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunde erneut.",
     "rateLimited_other": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunden erneut.",
-    "rateLimitedLater": "Zu viele Fehlversuche. Versuchen Sie es später erneut."
+    "rateLimitedLater": "Zu viele Fehlversuche. Versuchen Sie es später erneut.",
+    "remember": "Angemeldet bleiben"
   },
   "errors": {
     "network": "Server nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
@@ -574,6 +575,14 @@
     }
   },
   "system": {
+    "sessions": {
+      "title": "Anmeldesitzungen",
+      "description": "Meldet alle angemeldeten Browser ab, auch diesen. Sitzungen mit „Angemeldet bleiben“ enden ebenfalls.",
+      "signOutEverywhere": "Überall abmelden",
+      "confirmLabel": "Überall abmelden bestätigen",
+      "confirm": "Jetzt alle Browser abmelden? Sie müssen sich danach neu anmelden.",
+      "cancel": "Abbrechen"
+    },
     "versionTitle": "Version",
     "version": "Version",
     "listenAddress": "Adresse der Weboberfläche",
@@ -594,7 +603,8 @@
       "syn-flood-protection": "Schutz vor SYN-Flut",
       "ping-limit": "Ping-Begrenzung",
       "mss-clamp": "TCP-MSS-Anpassung",
-      "reject-target": "REJECT-Ziel"
+      "reject-target": "REJECT-Ziel",
+      "reply-routing": "Antwort-Routing von Portweiterleitungen"
     },
     "hint": {
       "tun-device": "Reichen Sie das TUN-Gerät in den Container durch (devices: /dev/net/tun).",
@@ -607,7 +617,8 @@
       "syn-flood-protection": "Das Hashlimit-Match auf dem Host laden (modprobe xt_hashlimit; mit dem Limit-Match, xt_limit, ist ein globales Limit möglich) und den Container neu starten. Manche NAS-Kernel enthalten diese Module nicht; die Firewall funktioniert auch ohne.",
       "ping-limit": "Das Hashlimit-Match auf dem Host laden (modprobe xt_hashlimit; mit dem Limit-Match, xt_limit, ist ein globales Limit möglich) und den Container neu starten. Manche NAS-Kernel enthalten diese Module nicht; die Firewall funktioniert auch ohne.",
       "mss-clamp": "Das TCPMSS-Ziel auf dem Host laden (modprobe xt_TCPMSS) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, große Übertragungen durch den Tunnel können dann aber hängen.",
-      "reject-target": "Das REJECT-Ziel auf dem Host laden (modprobe ipt_REJECT) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, Ablehnen-Regeln verwerfen dann aber stillschweigend."
+      "reject-target": "Das REJECT-Ziel auf dem Host laden (modprobe ipt_REJECT) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, Ablehnen-Regeln verwerfen dann aber stillschweigend.",
+      "reply-routing": "Das connmark-Modul und die mangle-Tabelle auf dem Host laden (modprobe xt_connmark iptable_mangle) und den Container neu starten. Portweiterleitungen funktionieren auch ohne; ein Gerät, das eine Portweiterleitung empfängt und dieses Gerät als Gateway nutzt, schickt dann aber seinen gesamten Verkehr durch den Tunnel, solange er besteht."
     }
   },
   "remoteAccess": {

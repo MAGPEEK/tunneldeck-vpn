@@ -12,7 +12,9 @@ import (
 
 // Policy rule priorities. TunnelDeck owns 7100–7194; lower numbers are
 // evaluated first. All rules at one priority lead to the same table, so
-// their order among each other does not matter.
+// their order among each other does not matter. Every rule uses only
+// selectors that Linux 4.4 knows (from, to, fwmark): ipproto, sport and
+// dport exist since Linux 4.17.
 const (
 	// lanExclusionPriority keeps traffic of policy-routed sources to the
 	// LAN, and traffic from the host's own addresses, in the main table.
@@ -25,8 +27,10 @@ const (
 	// outboundPriority routes outbound rules: "from <source> to
 	// <destination> lookup 7194".
 	outboundPriority = 7190
-	// replyPriority routes replies of port-forward targets into the tunnel:
-	// "from <target> ipproto <p> [sport <destination port>] lookup 7194".
+	// replyPriority routes the replies of port-forward targets into the
+	// tunnel: "fwmark 0x7194/0xffff lookup 7194" while the connections from
+	// the tunnel are marked (replyRouting), otherwise "from <target> lookup
+	// 7194" per target.
 	replyPriority = 7191
 	// vpnReplyPriority routes replies from the VPN address: "from <vpn-ip>
 	// lookup 7194".
@@ -38,18 +42,27 @@ const mainTable = "main"
 // ownedPriorities are the priorities whose rules syncPolicyRules manages.
 var ownedPriorities = []int{lanExclusionPriority, remoteNetworkPriority, outboundPriority, replyPriority}
 
-// ipProtocolNames maps the names ip rule show may print to numbers.
-var ipProtocolNames = map[string]int{"tcp": 6, "udp": 17, "icmp": 1, "esp": 50, "gre": 47}
-
 var anyAddress = netip.MustParsePrefix("0.0.0.0/0")
 
-// policyRule is one "ip rule". It is comparable; sport is normalised so
-// that equal rules compare equal.
+// replyRouting tells how the replies of port-forward targets find the
+// tunnel.
+type replyRouting int
+
+const (
+	// replyBySource routes everything the host forwards from a target into
+	// the tunnel, for kernels without the CONNMARK target.
+	replyBySource replyRouting = iota
+	// replyByMark routes only the packets of connections that came in
+	// through the tunnel, marked in TUNNELDECK-MANGLE-PRE.
+	replyByMark
+)
+
+// policyRule is one "ip rule". It is comparable: equal rules compare
+// equal.
 type policyRule struct {
 	priority int
 	from, to netip.Prefix
-	ipproto  int // 0 matches every protocol
-	sport    domain.PortRange
+	fwmark   string // "" matches every packet mark
 	table    string
 }
 
@@ -57,13 +70,18 @@ func newPolicyRule(priority int, from, to netip.Prefix, table string) policyRule
 	return policyRule{priority: priority, from: from, to: to, table: table}
 }
 
+// addArgs leaves out an address selector that matches everything, as ip
+// rule show does.
 func (r policyRule) addArgs() []string {
-	args := []string{"rule", "add", "from", r.from.String(), "to", r.to.String()}
-	if r.ipproto != 0 {
-		args = append(args, "ipproto", strconv.Itoa(r.ipproto))
+	args := []string{"rule", "add"}
+	if r.from.Bits() != 0 {
+		args = append(args, "from", r.from.String())
 	}
-	if !r.sport.IsZero() {
-		args = append(args, "sport", r.sport.String())
+	if r.to.Bits() != 0 {
+		args = append(args, "to", r.to.String())
+	}
+	if r.fwmark != "" {
+		args = append(args, "fwmark", r.fwmark)
 	}
 	return append(args, "lookup", r.table, "priority", strconv.Itoa(r.priority))
 }
@@ -110,57 +128,50 @@ func parsePolicyListing(out string) policyListing {
 }
 
 // parse reads the selectors netguard writes; ok is false for anything
-// else, which then never matches a wanted rule and is deleted.
+// else, such as the ipproto selector of older versions, which then never
+// matches a wanted rule and is deleted. "proto <origin>" is ignored.
 func (l listedRule) parse() (policyRule, bool) {
-	from, okFrom := parseRuleAddress(valueAfter(l.tokens, "from"))
-	to, okTo := parseRuleAddress(valueAfter(l.tokens, "to"))
-	table := valueAfter(l.tokens, "lookup")
-	if table == "254" {
-		table = mainTable
+	rule := policyRule{priority: l.priority, from: anyAddress, to: anyAddress}
+	tokens := l.tokens
+	for len(tokens) >= 2 {
+		key, value := tokens[0], tokens[1]
+		tokens = tokens[2:]
+		ok := true
+		switch key {
+		case "from":
+			rule.from, ok = parseRuleAddress(value)
+		case "to":
+			rule.to, ok = parseRuleAddress(value)
+		case "fwmark":
+			rule.fwmark = value
+		case "lookup":
+			rule.table = tableName(value)
+		case "proto":
+		default:
+			ok = false
+		}
+		if !ok {
+			return policyRule{}, false
+		}
 	}
-	rule := policyRule{priority: l.priority, from: from, to: to, table: table}
-	okProto, okPort := true, true
-	if p := valueAfter(l.tokens, "ipproto"); p != "" {
-		rule.ipproto, okProto = parseIPProtocol(p)
-	}
-	if s := valueAfter(l.tokens, "sport"); s != "" {
-		rule.sport, okPort = parsePortRange(s)
-	}
-	return rule, okFrom && okTo && okProto && okPort && table != ""
+	return rule, len(tokens) == 0 && rule.table != ""
 }
 
-// parseRuleAddress reads a from/to selector: absent and "all" are any.
+// tableName is the name netguard uses for a table ip rule show lists.
+func tableName(s string) string {
+	if s == "254" {
+		return mainTable
+	}
+	return s
+}
+
+// parseRuleAddress reads a from/to selector: "all" is any.
 func parseRuleAddress(s string) (netip.Prefix, bool) {
-	if s == "" || s == "all" {
+	if s == "all" {
 		return anyAddress, true
 	}
 	prefix, err := domain.ParseIPv4Prefix(s)
 	return prefix, err == nil
-}
-
-func parseIPProtocol(s string) (int, bool) {
-	if n, ok := ipProtocolNames[s]; ok {
-		return n, true
-	}
-	n, err := strconv.Atoi(s)
-	return n, err == nil
-}
-
-func parsePortRange(s string) (domain.PortRange, bool) {
-	first, last, isRange := strings.Cut(s, "-")
-	from, err := strconv.Atoi(first)
-	if err != nil {
-		return domain.PortRange{}, false
-	}
-	if !isRange {
-		return normalisedPorts(domain.SinglePort(from)), true
-	}
-	to, err := strconv.Atoi(last)
-	return normalisedPorts(domain.PortRange{From: from, To: to}), err == nil
-}
-
-func normalisedPorts(p domain.PortRange) domain.PortRange {
-	return domain.PortRange{From: p.From, To: p.Last()}
 }
 
 // syncPolicyRules makes the rules at ownedPriorities equal to want: stale
@@ -224,10 +235,11 @@ func mayNeedPolicyRules(firewall domain.Firewall) bool {
 
 // wantedPolicyRules lists the policy rules of firewall (SPEC §16.1):
 // outbound rules route their traffic into table 7194; replies of port
-// forwards follow them, because the target answers with the source of
-// the original destination port; LAN traffic of all these sources and
-// traffic from the host's own addresses stays in the main table.
-func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule {
+// forwards follow them, masqueraded or not, because the host routes a
+// reply to the original sender on the VPN side either way (reply);
+// LAN traffic of all these sources and traffic from the host's own
+// addresses stays in the main table.
+func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress, reply replyRouting) []policyRule {
 	var exclusions, routes []policyRule
 	var sources []netip.Prefix
 	host := hostAddresses(lan)
@@ -240,11 +252,11 @@ func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule 
 		case parsed.isOutboundAccept():
 			sources = appendPrefix(sources, parsed.source)
 			routes = appendPolicyRule(routes, newPolicyRule(outboundPriority, parsed.source, parsed.destination, routingTable))
+		case parsed.isPortForward() && reply == replyByMark:
+			routes = appendPolicyRule(routes, markedReplyRule)
 		case parsed.isPortForward():
 			sources = appendPrefix(sources, parsed.destination)
-			for _, rr := range replyRules(parsed) {
-				routes = appendPolicyRule(routes, rr)
-			}
+			routes = appendPolicyRule(routes, newPolicyRule(replyPriority, parsed.destination, anyAddress, routingTable))
 		}
 	}
 	for _, addr := range lan {
@@ -261,11 +273,16 @@ func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule 
 	return append(exclusions, routes...)
 }
 
+// markedReplyRule routes every packet that TUNNELDECK-MANGLE-PRE gave the
+// mark of a connection from the tunnel. Only packets that leave a LAN
+// device for the VPN side carry it, so it needs no LAN exclusion.
+var markedReplyRule = policyRule{priority: replyPriority, from: anyAddress, to: anyAddress, fwmark: replyMark, table: routingTable}
+
 // policyRulesFor lists every policy rule of a routed tunnel: those of
 // firewall followed by one rule per remote network. A remote network that
 // overlaps the LAN is refused, as routing it into the tunnel would cut the
 // host off from that part of its LAN.
-func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress) ([]policyRule, error) {
+func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress, reply replyRouting) ([]policyRule, error) {
 	for i, network := range remoteNetworks {
 		for _, addr := range lan {
 			if network.Overlaps(addr.subnet()) {
@@ -274,7 +291,7 @@ func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan
 			}
 		}
 	}
-	rules := wantedPolicyRules(firewall, lan)
+	rules := wantedPolicyRules(firewall, lan, reply)
 	for _, network := range remoteNetworks {
 		rules = appendPolicyRule(rules, newPolicyRule(remoteNetworkPriority, anyAddress, network, routingTable))
 	}
@@ -311,19 +328,6 @@ func remoteNetworkError(index int, code, message string, lan []lanAddress) *doma
 		issue.Params["subnets"] = strings.Join(listed, ", ")
 	}
 	return domain.NewFieldError("remoteNetworks", issue, "entry "+entry+" "+message)
-}
-
-func replyRules(rule parsedRule) []policyRule {
-	var out []policyRule
-	for _, proto := range rule.Protocol.Protocols() {
-		reply := newPolicyRule(replyPriority, rule.destination, anyAddress, routingTable)
-		reply.ipproto = ipProtocolNumbers[proto]
-		if proto.HasPorts() {
-			reply.sport = normalisedPorts(rule.DestinationPort)
-		}
-		out = append(out, reply)
-	}
-	return out
 }
 
 func coveredBy(host netip.Prefix, sources []netip.Prefix) bool {

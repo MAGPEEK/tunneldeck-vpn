@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSession, login, logout, setup } from '../api/session';
+import { getSession, login, logout, logoutEverywhere, setup } from '../api/session';
 import { SESSION_QUERY_KEY, endSession } from './queryClient';
 
 export function useSession() {
@@ -24,4 +24,9 @@ export function useLogin() {
 export function useLogout() {
   const client = useQueryClient();
   return useMutation({ mutationFn: logout, onSuccess: () => endSession(client) });
+}
+
+export function useLogoutEverywhere() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: logoutEverywhere, onSuccess: () => endSession(client) });
 }

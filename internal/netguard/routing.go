@@ -81,7 +81,7 @@ func (g *Guard) routedPolicyRules(ctx context.Context, remoteNetworks []netip.Pr
 	if err != nil {
 		return nil, err
 	}
-	return policyRulesFor(firewall, remoteNetworks, lan)
+	return policyRulesFor(firewall, remoteNetworks, lan, g.replyRouting())
 }
 
 // installedFirewall returns the installed firewall, or none.

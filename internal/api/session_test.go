@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,9 +15,10 @@ func TestGetSession(t *testing.T) {
 		opts      []requestOption
 		want      sessionResponse
 	}{
-		{name: "signed in", setupDone: true, want: sessionResponse{Authenticated: true, Username: testUser}},
-		{name: "signed out", setupDone: true, opts: []requestOption{anonymous}, want: sessionResponse{}},
-		{name: "setup required", opts: []requestOption{anonymous}, want: sessionResponse{SetupRequired: true}},
+		{name: "signed in", setupDone: true, want: sessionResponse{Authenticated: true, Username: testUser, RememberAvailable: true}},
+		{name: "signed out", setupDone: true, opts: []requestOption{anonymous}, want: sessionResponse{RememberAvailable: true}},
+		{name: "setup required", opts: []requestOption{anonymous}, want: sessionResponse{SetupRequired: true, RememberAvailable: true}},
+		{name: "HTTPS listener", setupDone: true, opts: []requestOption{anonymous, viaHTTPS}, want: sessionResponse{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,7 +82,7 @@ func TestLogin(t *testing.T) {
 			name: "rate limited below a second", body: `{"username":"admin","password":"correct-password"}`,
 			retryAfter: 10 * time.Millisecond, status: http.StatusTooManyRequests, code: CodeRateLimited, wantRetry: "1",
 		},
-		{name: "unknown field", body: `{"username":"admin","password":"x","remember":true}`, status: http.StatusBadRequest, code: CodeBadRequest},
+		{name: "unknown field", body: `{"username":"admin","password":"x","stay":true}`, status: http.StatusBadRequest, code: CodeBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -106,6 +108,37 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+func TestLoginRemember(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		opts         []requestOption
+		wantRemember bool
+	}{
+		{name: "LAN with remember", body: `{"username":"admin","password":"correct-password","remember":true}`, wantRemember: true},
+		{name: "LAN without remember", body: `{"username":"admin","password":"correct-password","remember":false}`},
+		{name: "LAN without the field", body: `{"username":"admin","password":"correct-password"}`},
+		{
+			name: "HTTPS listener ignores remember", body: `{"username":"admin","password":"correct-password","remember":true}`,
+			opts: []requestOption{viaHTTPS},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			rec := env.do(t, http.MethodPost, "/api/login", tt.body, append([]requestOption{anonymous}, tt.opts...)...)
+			assertStatus(t, rec, http.StatusNoContent)
+			if env.auth.remembered != tt.wantRemember {
+				t.Errorf("remember passed to Login = %v, want %v", env.auth.remembered, tt.wantRemember)
+			}
+			cookie := rec.Header().Get("Set-Cookie")
+			if got := strings.Contains(cookie, "Max-Age="); got != tt.wantRemember {
+				t.Errorf("Set-Cookie = %q, want Max-Age only with remember", cookie)
+			}
+		})
+	}
+}
+
 func TestLoginIgnoresForwardedFor(t *testing.T) {
 	env := newTestEnv(t)
 	env.do(t, http.MethodPost, "/api/login", `{"username":"admin","password":"x"}`, anonymous,
@@ -126,4 +159,37 @@ func TestLogout(t *testing.T) {
 		t.Error("session still valid after logout")
 	}
 	assertProblem(t, env.do(t, http.MethodPost, "/api/logout", ""), http.StatusUnauthorized, CodeUnauthenticated)
+}
+
+func TestLogoutStoreErrorStillClearsCookie(t *testing.T) {
+	env := newTestEnv(t)
+	env.auth.logoutErr = errors.New("disk full")
+	rec := env.do(t, http.MethodPost, "/api/logout", "")
+	assertProblem(t, rec, http.StatusInternalServerError, CodeInternal)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), "Max-Age=0") {
+		t.Errorf("Set-Cookie = %q, want a deletion", rec.Header().Get("Set-Cookie"))
+	}
+}
+
+func TestLogoutEverywhere(t *testing.T) {
+	env := newTestEnv(t)
+	env.auth.tokens["other-token"] = testUser
+	rec := env.do(t, http.MethodDelete, "/api/sessions", "")
+	assertStatus(t, rec, http.StatusNoContent)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), "Max-Age=0") {
+		t.Errorf("Set-Cookie = %q, want a deletion", rec.Header().Get("Set-Cookie"))
+	}
+	for _, token := range []string{testToken, "other-token"} {
+		if _, ok := env.auth.Authenticate(token); ok {
+			t.Errorf("session %s still valid", token)
+		}
+	}
+	assertProblem(t, env.do(t, http.MethodDelete, "/api/sessions", ""), http.StatusUnauthorized, CodeUnauthenticated)
+	assertProblem(t, env.do(t, http.MethodDelete, "/api/sessions", "", withoutCSRF), http.StatusForbidden, CodeCSRF)
+}
+
+func TestLogoutEverywhereStoreError(t *testing.T) {
+	env := newTestEnv(t)
+	env.auth.logoutErr = errors.New("disk full")
+	assertProblem(t, env.do(t, http.MethodDelete, "/api/sessions", ""), http.StatusInternalServerError, CodeInternal)
 }

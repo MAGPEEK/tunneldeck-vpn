@@ -56,6 +56,16 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 		"-A FORWARD -s "+target+"/32 -j TUNNELDECK-FORWARD")
 	assertJumpsOnTop(t, g, natTable, "PREROUTING", "-A PREROUTING -i tdvpn0 -j TUNNELDECK-PREROUTING")
 	assertJumpsOnTop(t, g, natTable, "POSTROUTING", "-A POSTROUTING -j TUNNELDECK-POSTROUTING")
+	if g.replyRouting() != replyByMark {
+		t.Fatalf("capabilities %+v: the integration host must have CONNMARK", g.caps)
+	}
+	assertJumpsOnTop(t, g, mangleTable, "PREROUTING", "-A PREROUTING -j TUNNELDECK-MANGLE-PRE")
+	mangle := listRulesOrFail(t, g, mangleTable, mangleChain)
+	if len(mangle) != 2 || lineTag(mangle[0]) != "tdfixed:reply-mark" || !strings.Contains(mangle[0], "-i tdvpn0") ||
+		!strings.Contains(mangle[0], "CONNMARK --set-xmark 0x7194/0xffff") ||
+		!strings.Contains(mangle[1], "! -i tdvpn0 -m connmark --mark 0x7194/0xffff") || !strings.Contains(mangle[1], "--restore-mark") {
+		t.Errorf("TUNNELDECK-MANGLE-PRE = %q", mangle)
+	}
 
 	input := listRulesOrFail(t, g, filterTable, inputChain)
 	if len(input) != 11 || !strings.Contains(input[5], "--dport 22") || lineTag(input[5]) != "tdrule:ssh" || input[len(input)-1] != "-A TUNNELDECK-INPUT -j DROP" {
@@ -86,6 +96,9 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	if chain := listRulesOrFail(t, g, natTable, preroutingChain); len(chain) != 0 {
 		t.Errorf("TUNNELDECK-PREROUTING after rule change = %q", chain)
 	}
+	if chain := listRulesOrFail(t, g, mangleTable, mangleChain); len(chain) != 0 {
+		t.Errorf("TUNNELDECK-MANGLE-PRE without port forwards = %q", chain)
+	}
 	if err := g.InstallFirewall(ctx, firewall, 8080); err != nil {
 		t.Fatalf("InstallFirewall again: %v", err)
 	}
@@ -101,17 +114,20 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	if err != nil || len(listing.vpnSources) != 1 || listing.vpnSources[0] != "10.99.0.3" {
 		t.Errorf("policy rules at 7194 = %v, %v; want only 10.99.0.3", listing.vpnSources, err)
 	}
-	// One LAN exclusion per LAN subnet, the outbound rule, the TCP range
-	// replies, the ESP replies and the remote network; every listed rule
-	// must parse back into a wanted one, or the repeated calls above would
-	// have churned.
-	if want := len(lan) + 4; len(listing.owned) != want {
+	// One LAN exclusion per LAN subnet, the outbound rule, the replies of
+	// both forwards by connection mark and the remote network; every
+	// listed rule must parse back into a wanted one, or the repeated calls
+	// above would have churned.
+	if want := len(lan) + 3; len(listing.owned) != want {
 		t.Errorf("owned policy rules = %v, want %d", listing.owned, want)
 	}
 	for _, rule := range listing.owned {
 		if _, ok := rule.parse(); !ok {
 			t.Errorf("policy rule %v does not parse", rule.tokens)
 		}
+	}
+	if rules := mustRun(t, runner, "ip", "-4", "rule", "show"); !strings.Contains(rules, "7191:\tfrom all fwmark 0x7194/0xffff lookup 7194") {
+		t.Errorf("no reply rule by connection mark:\n%s", rules)
 	}
 	if routes := mustRun(t, runner, "ip", "route", "show", "table", routingTable); !strings.Contains(routes, "default dev tdvpn0") {
 		t.Errorf("table 7194 = %q", routes)
@@ -139,7 +155,7 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	for _, chain := range []struct {
 		table table
 		name  string
-	}{{filterTable, inputChain}, {filterTable, forwardChain}, {natTable, preroutingChain}, {natTable, postroutingChain}} {
+	}{{filterTable, inputChain}, {filterTable, forwardChain}, {natTable, preroutingChain}, {natTable, postroutingChain}, {mangleTable, mangleChain}} {
 		if _, err := g.listRules(ctx, chain.table, chain.name); !isAbsent(err) {
 			t.Errorf("%s still present: %v", chain.name, err)
 		}
@@ -203,6 +219,44 @@ func TestIntegrationProtectionsOnMinimalKernels(t *testing.T) {
 	}
 	if _, err := g.listRules(ctx, filterTable, limitChain); !isAbsent(err) {
 		t.Errorf("%s still present: %v", limitChain, err)
+	}
+}
+
+// TestIntegrationRepliesBySourceWithoutCONNMARK hides CONNMARK from the
+// probed capabilities, as on a kernel without xt_connmark: the mangle
+// table stays untouched and the replies of a port forward are routed by
+// the target's address, with Linux 4.4 selectors only.
+func TestIntegrationRepliesBySourceWithoutCONNMARK(t *testing.T) {
+	ctx := context.Background()
+	runner := ExecRunner{}
+	mustRun(t, runner, "ip", "link", "add", DeviceName, "type", "dummy")
+	t.Cleanup(func() { _, _ = runner.Run(ctx, "ip", "link", "del", DeviceName) })
+	mustRun(t, runner, "ip", "link", "set", DeviceName, "up")
+	g := New(runner)
+	t.Cleanup(func() { _ = g.ClearTunnelRouting(ctx); _ = g.RemoveFirewall(ctx) })
+	if _, err := g.detectCapabilities(ctx); err != nil {
+		t.Fatalf("detectCapabilities: %v", err)
+	}
+	g.caps.has[extConnmark] = false
+	lan, err := g.LANSubnets(ctx)
+	if err != nil || len(lan) == 0 {
+		t.Fatalf("LANSubnets = %v, %v", lan, err)
+	}
+	target := lanTarget(t, lan[0])
+	forward := domain.Firewall{Rules: []domain.FirewallRule{{ID: "web", Name: "Web", Direction: domain.DirectionInbound,
+		Protocol: domain.ProtocolTCP, Destination: target, DestinationPort: domain.SinglePort(80), Enabled: true}}}
+	if err := g.InstallFirewall(ctx, forward, 8080); err != nil {
+		t.Fatalf("InstallFirewall: %v", err)
+	}
+	if _, err := g.listRules(ctx, mangleTable, mangleChain); !isAbsent(err) {
+		t.Errorf("%s exists without CONNMARK: %v", mangleChain, err)
+	}
+	if err := g.RouteThroughTunnel(ctx, netip.MustParseAddr("10.99.0.2"), nil); err != nil {
+		t.Fatalf("RouteThroughTunnel: %v", err)
+	}
+	rules := mustRun(t, runner, "ip", "-4", "rule", "show")
+	if !strings.Contains(rules, "7191:\tfrom "+target+" lookup 7194") || strings.Contains(rules, "fwmark") {
+		t.Errorf("want the reply rule by source, no fwmark rule:\n%s", rules)
 	}
 }
 

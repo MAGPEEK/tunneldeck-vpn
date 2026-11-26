@@ -12,8 +12,9 @@ const (
 	ProfilesFileName = "profiles.json"
 
 	// settingsSchemaVersion 2 replaced hostAccessRules by firewall, 3 made
-	// rule destinations plain addresses (SPEC §16.3).
-	settingsSchemaVersion = 3
+	// rule destinations plain addresses (SPEC §16.3), 4 added
+	// rememberedSessions (SPEC §8).
+	settingsSchemaVersion = 4
 	profilesSchemaVersion = 1
 )
 

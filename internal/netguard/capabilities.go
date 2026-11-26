@@ -22,25 +22,38 @@ const (
 	extLimit     extension = "limit"
 	extTCPMSS    extension = "TCPMSS"
 	extReject    extension = "REJECT"
+	// extConnmark is the CONNMARK target with the connmark match in the
+	// mangle table (iptable_mangle, xt_connmark). Without it the replies of
+	// port forwards are routed by source address (replyBySource).
+	extConnmark extension = "CONNMARK"
 )
 
-// extensionProbeChain is created, given one line per extension and
+// extensionProbeChain is created, given the probe lines of its table and
 // deleted to probe the extensions.
 const extensionProbeChain = "TUNNELDECK-EXT-PROBE"
 
-// extensionProbe is a line that needs ext, written as netguard uses it.
+// extensionProbe is a line that needs ext, written as netguard uses it in
+// table. An extension with several lines is present when all of them
+// work.
 type extensionProbe struct {
-	ext  extension
-	rule []string
+	ext   extension
+	table table
+	rule  []string
 }
 
 var extensionProbes = []extensionProbe{
-	{extComment, fixedRule("probe", []string{"-j", "RETURN"})},
-	{extHashlimit, slices.Concat(synFloodRate.hashlimitAbove("td-probe"), []string{"-j", "RETURN"})},
-	{extLimit, slices.Concat(synFloodRate.limitWithin(), []string{"-j", "RETURN"})},
-	{extTCPMSS, mssClampRule},
-	{extReject, []string{"-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"}},
+	{extComment, filterTable, fixedRule("probe", []string{"-j", "RETURN"})},
+	{extHashlimit, filterTable, slices.Concat(synFloodRate.hashlimitAbove("td-probe"), []string{"-j", "RETURN"})},
+	{extLimit, filterTable, slices.Concat(synFloodRate.limitWithin(), []string{"-j", "RETURN"})},
+	{extTCPMSS, filterTable, mssClampRule},
+	{extReject, filterTable, []string{"-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"}},
+	{extConnmark, mangleTable, replyMarkRule},
+	{extConnmark, mangleTable, replyRestoreRule},
 }
+
+// probeTables are the tables of extensionProbes in probing order. The
+// filter table must work; a kernel may lack the mangle table.
+var probeTables = []table{filterTable, mangleTable}
 
 // capabilities are the extensions the backend binary has.
 type capabilities struct {
@@ -68,10 +81,31 @@ func (c capabilities) support() domain.ProtectionSupport {
 	}
 }
 
+// replyRouting tells how the replies of port forwards find the tunnel
+// with c.
+func (c capabilities) replyRouting() replyRouting {
+	if c.has[extConnmark] {
+		return replyByMark
+	}
+	return replyBySource
+}
+
+// replyRouting tells how the replies of port forwards find the tunnel with
+// the probed capabilities; by source until they are probed, which every
+// firewall installation does first.
+func (g *Guard) replyRouting() replyRouting {
+	if g.caps == nil {
+		return replyBySource
+	}
+	return g.caps.replyRouting()
+}
+
 // detectCapabilities probes the extensions once per backend, on a
-// temporary chain. A probe chain left over from a crash is reused and
-// deleted. Only a failing probe line counts as "missing"; failing to
-// create or delete the chain is an error, and nothing is cached.
+// temporary chain per table. A probe chain left over from a crash is
+// reused and deleted. Only a failing probe line, or a mangle table that
+// cannot hold the probe chain, counts as "missing"; failing to create the
+// filter probe chain or to delete a probe chain is an error, and nothing
+// is cached.
 func (g *Guard) detectCapabilities(ctx context.Context) (capabilities, error) {
 	backend, err := g.detectBackend(ctx)
 	if err != nil {
@@ -80,26 +114,34 @@ func (g *Guard) detectCapabilities(ctx context.Context) (capabilities, error) {
 	if g.caps != nil && g.caps.backend == backend.Binary {
 		return *g.caps, nil
 	}
-	has, err := g.probeExtensions(ctx)
-	if err != nil {
-		return capabilities{}, fmt.Errorf("probe the iptables extensions: %w", err)
+	has := make(map[extension]bool, len(extensionProbes))
+	for _, t := range probeTables {
+		if err := g.probeExtensions(ctx, t, has); err != nil {
+			return capabilities{}, fmt.Errorf("probe the iptables extensions: %w", err)
+		}
 	}
 	g.caps = &capabilities{backend: backend.Binary, has: has}
 	return *g.caps, nil
 }
 
-func (g *Guard) probeExtensions(ctx context.Context) (map[extension]bool, error) {
-	if _, err := g.iptables(ctx, filterTable, "-N", extensionProbeChain); err != nil && !isAlreadyExists(err) {
-		return nil, err
+// probeExtensions records in has which extensions of table t work.
+func (g *Guard) probeExtensions(ctx context.Context, t table, has map[extension]bool) error {
+	probes := slices.DeleteFunc(slices.Clone(extensionProbes), func(p extensionProbe) bool { return p.table != t })
+	if _, err := g.iptables(ctx, t, "-N", extensionProbeChain); err != nil && !isAlreadyExists(err) {
+		if t == filterTable {
+			return err
+		}
+		for _, probe := range probes {
+			has[probe.ext] = false
+		}
+		return nil
 	}
-	has := make(map[extension]bool, len(extensionProbes))
-	for _, probe := range extensionProbes {
-		has[probe.ext] = g.appendRaw(ctx, filterTable, extensionProbeChain, probe.rule) == nil
+	for _, probe := range probes {
+		works := g.appendRaw(ctx, t, extensionProbeChain, probe.rule) == nil
+		previous, probed := has[probe.ext]
+		has[probe.ext] = works && (previous || !probed)
 	}
-	if err := g.removeChain(ctx, filterTable, extensionProbeChain); err != nil {
-		return nil, err
-	}
-	return has, nil
+	return g.removeChain(ctx, t, extensionProbeChain)
 }
 
 // ProtectionSupport tells which global protections, and whether the hit

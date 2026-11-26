@@ -48,7 +48,8 @@ func TestInstallFirewallSequences(t *testing.T) {
 				"-D TUNNELDECK-INPUT 1",
 			), refillCalls(legacy, forwardChain, "FORWARD", 1, testForward),
 				refillCalls(natPrefix, preroutingChain, "PREROUTING", 0, nil),
-				refillCalls(natPrefix, postroutingChain, "POSTROUTING", 0, nil)),
+				refillCalls(natPrefix, postroutingChain, "POSTROUTING", 0, nil),
+				refillCalls(manglePrefix, mangleChain, "PREROUTING", 0, nil)),
 		},
 		{
 			name: "duplicate and displaced jumps are moved behind guards",
@@ -64,10 +65,14 @@ func TestInstallFirewallSequences(t *testing.T) {
 				f.scripts[natPrefix+"-S POSTROUTING"] = []fakeResult{ok("-P POSTROUTING ACCEPT\n" +
 					"-A POSTROUTING -j DOCKER_POSTROUTING\n" +
 					"-A POSTROUTING -j TUNNELDECK-POSTROUTING\n")}
+				f.scripts[manglePrefix+"-S PREROUTING"] = []fakeResult{ok("-P PREROUTING ACCEPT\n" +
+					"-A PREROUTING -j DOCKER_MANGLE\n" +
+					"-A PREROUTING -j TUNNELDECK-MANGLE-PRE\n")}
 				f.on(legacy+"-C INPUT -i tdvpn0 -j TUNNELDECK-INPUT", ok(""), ok(""), fail(badRule)).
 					on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", ok(""), fail(badRule)).
 					on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", ok(""), fail(badRule)).
-					on(natPrefix+"-C POSTROUTING -j TUNNELDECK-POSTROUTING", ok(""), fail(badRule))
+					on(natPrefix+"-C POSTROUTING -j TUNNELDECK-POSTROUTING", ok(""), fail(badRule)).
+					on(manglePrefix+"-C PREROUTING -j TUNNELDECK-MANGLE-PRE", ok(""), fail(badRule))
 			},
 			firewall: domain.Firewall{},
 			want: slices.Concat(detectInstall, []string{addrShow}, prefixed(legacy,
@@ -108,6 +113,14 @@ func TestInstallFirewallSequences(t *testing.T) {
 					"-D POSTROUTING -j TUNNELDECK-POSTROUTING",
 					"-C POSTROUTING -j TUNNELDECK-POSTROUTING",
 					"-I POSTROUTING 1 -j TUNNELDECK-POSTROUTING",
+				),
+				prefixed(manglePrefix,
+					"-S TUNNELDECK-MANGLE-PRE",
+					"-S PREROUTING",
+					"-C PREROUTING -j TUNNELDECK-MANGLE-PRE",
+					"-D PREROUTING -j TUNNELDECK-MANGLE-PRE",
+					"-C PREROUTING -j TUNNELDECK-MANGLE-PRE",
+					"-I PREROUTING 1 -j TUNNELDECK-MANGLE-PRE",
 				)),
 		},
 	}

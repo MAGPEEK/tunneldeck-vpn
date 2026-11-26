@@ -102,6 +102,7 @@ func (s *Server) routes() {
 	s.public("POST /api/setup", s.setup)
 	s.public("POST /api/login", s.login)
 	s.private("POST /api/logout", s.logout)
+	s.private("DELETE /api/sessions", s.logoutEverywhere)
 
 	s.private("GET /api/drivers", s.listDrivers)
 	s.private("GET /api/profiles", s.listProfiles)

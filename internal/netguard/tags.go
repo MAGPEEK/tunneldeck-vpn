@@ -26,6 +26,8 @@ const (
 	fixedKillSwitch   = "kill-switch"
 	fixedMSSClamp     = "mss-clamp"
 	fixedHostPort     = "host-port"
+	fixedReplyMark    = "reply-mark"
+	fixedReplyRestore = "reply-restore"
 )
 
 // commentMatch finds the comment of a line as iptables -S prints it

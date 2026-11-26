@@ -45,7 +45,7 @@ func TestSetRemoteAccess(t *testing.T) {
 	if got := s.RemoteAccess(); got != settings {
 		t.Fatalf("setting after a rejected change = %+v", got)
 	}
-	if !strings.Contains(string(readFile(t, dir, SettingsFileName)), `"schemaVersion": 3`) {
+	if !strings.Contains(string(readFile(t, dir, SettingsFileName)), `"schemaVersion": 4`) {
 		t.Error("schema version changed")
 	}
 }

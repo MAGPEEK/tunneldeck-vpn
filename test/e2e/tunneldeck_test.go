@@ -165,6 +165,16 @@ func (td *tunnelDeck) logTail() string {
 	return strings.Join(lines, "\n")
 }
 
+// logs returns every line of the connection log.
+func (td *tunnelDeck) logs(t *testing.T) []logLine {
+	t.Helper()
+	var logs struct {
+		Lines []logLine `json:"lines"`
+	}
+	td.must(t, td.api.get("/api/logs", &logs), "read the connection log")
+	return logs.Lines
+}
+
 // hostAddress returns this device's LAN address as GET /api/firewall
 // reports it.
 func (td *tunnelDeck) hostAddress(t *testing.T) string {

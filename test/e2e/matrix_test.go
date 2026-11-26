@@ -61,6 +61,8 @@ type variant struct {
 	// remoteHost, when valid, is an address on the network behind the
 	// server that the profile names in remoteNetworks.
 	remoteHost netip.Addr
+	// dataCipher is the data-channel cipher the status must report.
+	dataCipher string
 	settings   func(pki) map[string]any
 	secrets    func(p pki, password string) map[string]string
 }
@@ -73,6 +75,7 @@ var variants = []variant{
 		gateway:    netip.MustParseAddr("10.94.1.1"),
 		password:   true,
 		remoteHost: netip.MustParseAddr("10.99.0.1"),
+		dataCipher: "AES-256-GCM",
 		settings: func(p pki) map[string]any {
 			return map[string]any{
 				"remoteHost": "server-a", "port": 1194, "proto": "udp",
@@ -83,11 +86,12 @@ var variants = []variant{
 		secrets: passwordSecrets,
 	},
 	{
-		name:     "B-userpass-cipher-none",
-		service:  "server-b",
-		pool:     netip.MustParsePrefix("10.94.2.0/24"),
-		gateway:  netip.MustParseAddr("10.94.2.1"),
-		password: true,
+		name:       "B-userpass-cipher-none",
+		service:    "server-b",
+		pool:       netip.MustParsePrefix("10.94.2.0/24"),
+		gateway:    netip.MustParseAddr("10.94.2.1"),
+		password:   true,
+		dataCipher: "none",
 		settings: func(p pki) map[string]any {
 			return map[string]any{
 				"remoteHost": "server-b", "port": 1194, "proto": "udp",
@@ -99,10 +103,11 @@ var variants = []variant{
 		secrets: passwordSecrets,
 	},
 	{
-		name:    "C-certificate-tls-crypt-tcp",
-		service: "server-c",
-		pool:    netip.MustParsePrefix("10.94.3.0/24"),
-		gateway: netip.MustParseAddr("10.94.3.1"),
+		name:       "C-certificate-tls-crypt-tcp",
+		service:    "server-c",
+		pool:       netip.MustParsePrefix("10.94.3.0/24"),
+		gateway:    netip.MustParseAddr("10.94.3.1"),
+		dataCipher: "AES-256-GCM",
 		settings: func(p pki) map[string]any {
 			return map[string]any{
 				"remoteHost": "server-c", "port": 1194, "proto": "tcp",

@@ -14,6 +14,7 @@ type table string
 const (
 	filterTable table = "filter"
 	natTable    table = "nat"
+	mangleTable table = "mangle"
 )
 
 // maxDuplicateRules bounds the delete loop for duplicate rules so a

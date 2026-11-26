@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	legacy    = "iptables-legacy -w "
-	natPrefix = "iptables-legacy -w -t nat "
-	uiPort    = 8080
+	legacy       = "iptables-legacy -w "
+	natPrefix    = "iptables-legacy -w -t nat "
+	manglePrefix = "iptables-legacy -w -t mangle "
+	uiPort       = 8080
 	// testHostAddress is the host's LAN address in lanListing.
 	testHostAddress = "192.168.2.10"
 )
@@ -97,7 +98,22 @@ const (
 	dropAll        = "-j DROP"
 	// uiPortDrop keeps the web UI port (uiPort) closed to the tunnel.
 	uiPortDrop = "-p tcp --dport 8080 -m comment --comment tdfixed:ui-port -j DROP"
+	// replyMarkLine and replyRestoreLine fill TUNNELDECK-MANGLE-PRE while a
+	// port forward exists.
+	replyMarkLine    = "-i tdvpn0 -m comment --comment tdfixed:reply-mark -j CONNMARK --set-mark 0x7194/0xffff"
+	replyRestoreLine = "! -i tdvpn0 -m connmark --mark 0x7194/0xffff -m comment --comment tdfixed:reply-restore " +
+		"-j CONNMARK --restore-mark --nfmask 0xffff --ctmask 0xffff"
 )
+
+// mangleFor is the content of TUNNELDECK-MANGLE-PRE next to the nat
+// PREROUTING content prerouting: the reply marks while a port forward
+// translates anything.
+func mangleFor(prerouting []string) []string {
+	if !slices.ContainsFunc(prerouting, func(line string) bool { return strings.Contains(line, "-j DNAT") }) {
+		return nil
+	}
+	return []string{replyMarkLine, replyRestoreLine}
+}
 
 // inputWith is TUNNELDECK-INPUT with every protection off.
 func inputWith(rules ...string) []string {
@@ -121,8 +137,8 @@ var (
 // rules each chain holds (a sealed chain's last one is DROP) and the
 // FORWARD jump lines after the two tunnel jumps.
 type installedState struct {
-	input, forward, prerouting, postrouting int
-	forwardJumps                            []string
+	input, forward, prerouting, postrouting, mangle int
+	forwardJumps                                    []string
 }
 
 // scriptInstalled lists the state an installation of testFirewall leaves
@@ -138,7 +154,9 @@ func scriptState(f *fakeRunner, s installedState) {
 		on(natPrefix+"-S TUNNELDECK-PREROUTING", ok(chainListing(preroutingChain, s.prerouting, false))).
 		on(natPrefix+"-S PREROUTING", ok("-P PREROUTING ACCEPT\n-A PREROUTING -i tdvpn0 -j TUNNELDECK-PREROUTING\n")).
 		on(natPrefix+"-S TUNNELDECK-POSTROUTING", ok(chainListing(postroutingChain, s.postrouting, false))).
-		on(natPrefix+"-S POSTROUTING", ok("-P POSTROUTING ACCEPT\n-A POSTROUTING -j TUNNELDECK-POSTROUTING\n"))
+		on(natPrefix+"-S POSTROUTING", ok("-P POSTROUTING ACCEPT\n-A POSTROUTING -j TUNNELDECK-POSTROUTING\n")).
+		on(manglePrefix+"-S TUNNELDECK-MANGLE-PRE", ok(chainListing(mangleChain, s.mangle, false))).
+		on(manglePrefix+"-S PREROUTING", ok("-P PREROUTING ACCEPT\n-A PREROUTING -j TUNNELDECK-MANGLE-PRE\n"))
 }
 
 func chainListing(chain string, rules int, sealed bool) string {
@@ -174,7 +192,10 @@ func scriptFresh(f *fakeRunner) {
 		on(natPrefix+"-S PREROUTING", ok("-P PREROUTING ACCEPT\n")).
 		on(natPrefix+"-S POSTROUTING", ok("-P POSTROUTING ACCEPT\n")).
 		on(natPrefix+"-C PREROUTING -i tdvpn0 -j TUNNELDECK-PREROUTING", fail(noTarget)).
-		on(natPrefix+"-C POSTROUTING -j TUNNELDECK-POSTROUTING", fail(noTarget))
+		on(natPrefix+"-C POSTROUTING -j TUNNELDECK-POSTROUTING", fail(noTarget)).
+		on(manglePrefix+"-S TUNNELDECK-MANGLE-PRE", fail(noChain)).
+		on(manglePrefix+"-S PREROUTING", ok("-P PREROUTING ACCEPT\n")).
+		on(manglePrefix+"-C PREROUTING -j TUNNELDECK-MANGLE-PRE", fail(noTarget))
 }
 
 // freshCalls is a fresh installation with the given chain contents.
@@ -220,7 +241,21 @@ func freshCalls(input, forward, prerouting, postrouting []string) []string {
 			"-C POSTROUTING -j TUNNELDECK-POSTROUTING",
 			"-I POSTROUTING 1 -j TUNNELDECK-POSTROUTING"),
 		appends(natPrefix, postroutingChain, postrouting),
+		freshMangleCalls(mangleFor(prerouting)),
 	)
+}
+
+// freshMangleCalls create TUNNELDECK-MANGLE-PRE with its jump at the top
+// of mangle PREROUTING, then fill it with content.
+func freshMangleCalls(content []string) []string {
+	return slices.Concat(
+		prefixed(manglePrefix,
+			"-S TUNNELDECK-MANGLE-PRE",
+			"-N TUNNELDECK-MANGLE-PRE",
+			"-S PREROUTING",
+			"-C PREROUTING -j TUNNELDECK-MANGLE-PRE",
+			"-I PREROUTING 1 -j TUNNELDECK-MANGLE-PRE"),
+		appends(manglePrefix, mangleChain, content))
 }
 
 // refillCalls is the refill of a chain whose jumps are in place: listing,
@@ -240,7 +275,8 @@ func reinstallCalls(s installedState, input, forward, prerouting, postrouting []
 		refillCalls(legacy, inputChain, "INPUT", s.input, input),
 		refillCalls(legacy, forwardChain, "FORWARD", s.forward, forward),
 		refillCalls(natPrefix, preroutingChain, "PREROUTING", s.prerouting, prerouting),
-		refillCalls(natPrefix, postroutingChain, "POSTROUTING", s.postrouting, postrouting))
+		refillCalls(natPrefix, postroutingChain, "POSTROUTING", s.postrouting, postrouting),
+		refillCalls(manglePrefix, mangleChain, "PREROUTING", s.mangle, mangleFor(prerouting)))
 }
 
 func appends(prefix, chain string, content []string) []string {

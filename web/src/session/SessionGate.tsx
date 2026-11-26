@@ -92,7 +92,7 @@ export function SessionGate() {
     return <SetupPage />;
   }
   if (!session.data.authenticated) {
-    return <LoginPage />;
+    return <LoginPage rememberAvailable={session.data.rememberAvailable} />;
   }
   return <AppRoutes />;
 }

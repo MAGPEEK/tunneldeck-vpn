@@ -21,15 +21,21 @@ function loginErrorMessage(t: TFunction, error: unknown): string {
   return genericErrorMessage(t, error);
 }
 
-export function LoginPage() {
+/** rememberAvailable offers "Stay signed in" (LAN listener only). */
+export function LoginPage({ rememberAvailable }: { rememberAvailable: boolean }) {
   const { t } = useTranslation();
   const login = useLogin();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    login.mutate({ username: username.trim(), password });
+    login.mutate({
+      username: username.trim(),
+      password,
+      ...(rememberAvailable && { remember }),
+    });
   };
 
   return (
@@ -52,6 +58,17 @@ export function LoginPage() {
           value={password}
           onChange={(event) => setPassword(event.currentTarget.value)}
         />
+        {rememberAvailable && (
+          <label className={styles.checkbox}>
+            <input
+              type="checkbox"
+              name="remember"
+              checked={remember}
+              onChange={(event) => setRemember(event.currentTarget.checked)}
+            />
+            {t('login.remember')}
+          </label>
+        )}
         {login.isError && (
           <p role="alert" className={styles.formError}>
             {loginErrorMessage(t, login.error)}

@@ -87,7 +87,7 @@ Every profile (driver-independent, part of `domain.Profile`) has `dailyReconnect
 
 Container runs with `network_mode: host`, `cap_add: NET_ADMIN`, device `/dev/net/tun`.
 
-- **Routing:** routing table `7194`. On connect: `ip route replace default dev tdvpn0 table 7194`, `ip rule add from <vpn-ip> lookup 7194 priority 7194`. On disconnect both are removed. TunnelDeck-VPN and OpenVPN never add routes to the main table (`route-noexec`, `route-nopull`), so the host keeps its default route; the only entry that appears there is the kernel's own connected route for the tunnel subnet. Routing is re-applied on every `CONNECTED` state because the VPN IP can change. Effect: replies to connections arriving at the VPN IP leave through the tunnel.
+- **Routing:** routing table `7194`. On connect: `ip route replace default dev tdvpn0 table 7194`, `ip rule add from <vpn-ip> lookup 7194 priority 7194`. On disconnect both are removed. TunnelDeck-VPN and OpenVPN never add routes to the main table (`route-noexec`; pushed routes, gateway redirects, DNS options, `route-delay` and `ifconfig-ipv6` are dropped with `pull-filter ignore`), so the host keeps its default route; the only entry that appears there is the kernel's own connected route for the tunnel subnet (with a point-to-point address, the host route to the peer). Routing is re-applied on every `CONNECTED` state because the VPN IP can change; when applying it fails, the tunnel stays up, the status carries `routingWarning` (code `routing_failed`) and the routing is retried with the backoff of §4.2. Effect: replies to connections arriving at the VPN IP leave through the tunnel.
 - **Host protection:** chain `TUNNELDECK-INPUT`, jumped to from `INPUT` (position 1) for `-i tdvpn0`: accept `ESTABLISHED,RELATED`; accept each enabled `HostAccessRule` (proto tcp|udp, port, optional source CIDR); drop the rest. Chain `TUNNELDECK-FORWARD` from `FORWARD` (position 1): drop everything in or out of `tdvpn0` (stage 1 forwards nothing).
 - Rules are installed at application start (before any tunnel) and re-applied idempotently whenever host-access rules change; removed on graceful shutdown.
 - The UI port can never be opened through a host-access rule (validation error).
@@ -98,7 +98,7 @@ Container runs with `network_mode: host`, `cap_add: NET_ADMIN`, device `/dev/net
 
 Data directory `/data` (volume):
 
-- `settings.json` — admin account (argon2id hash), language default, host-access rules, desired connection state.
+- `settings.json` — admin account (argon2id hash), language default, host-access rules, desired connection state, remembered sessions (token hashes only, §8).
 - `profiles.json` — profiles; secret fields stored as `enc:v1:<base64 nonce+ciphertext>`.
 - `secret.key` — 32 random bytes, mode 0600, created on first start. Overridden by env `TUNNELDECK_SECRET_KEY` (base64).
 
@@ -109,6 +109,7 @@ Writes are atomic (temp file + rename) and serialised by a mutex. The API never 
 - First start: no admin exists → UI shows setup (username, password ≥ 12 chars). `POST /api/setup` works only while no admin exists.
 - Login → random 256-bit session token in an `HttpOnly`, `SameSite=Strict` cookie; sessions kept in memory (hashed), 12 h idle timeout.
 - All `/api/*` except `setup`, `login`, `session` require a session. Mutating requests also require header `X-TunnelDeck-Request: 1` and a matching `Origin`/`Host` (CSRF).
+- "Stay signed in" (`POST /api/login {username, password, remember?}`), offered only on the LAN HTTP listener (`GET /api/session` → `rememberAvailable`); the HTTPS listener (§8.1) hides it and ignores the flag. A remembered session has a 30-day idle timeout and a 90-day absolute lifetime, and its cookie gets `Max-Age` (90 days; still `HttpOnly`, `SameSite=Strict`, `Path=/`). Remembered sessions survive a restart: `settings.json` (`rememberedSessions`, schema 4, max 10, oldest dropped) keeps only the SHA-256 token hash, username, created/last-used time (RFC 3339 UTC, last-used written at most once per hour) and the client IP at login — never the token. Logout removes the session from the store too; `DELETE /api/sessions` ("Sign out everywhere" on the System page) ends every session; `reset-admin` and a new admin account drop all remembered sessions.
 - Lost password: `tunneldeck reset-admin` (run via `docker exec`) removes the admin account and all sessions; alternatively env `TUNNELDECK_RESET_ADMIN=1` does the same at start and logs a warning on every start until it is removed. Profiles and settings are kept; the UI shows setup again.
 - Login rate limit: 5 failures per IP per minute, then lockout with backoff. Constant-time comparison.
 
@@ -129,8 +130,9 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/session` | `{ setupRequired, authenticated, username }` |
+| GET | `/api/session` | `{ setupRequired, authenticated, username, rememberAvailable }` |
 | POST | `/api/setup`, `/api/login`, `/api/logout` | Account and session |
+| DELETE | `/api/sessions` | Sign out everywhere: ends every session, remembered ones included |
 | GET | `/api/drivers` | Protocols with their `FormSchema` |
 | GET/POST | `/api/profiles` | List / create |
 | GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete is always possible: an active profile in any state other than `disconnected` is disconnected first and deleted once the manager reports `disconnected`; if the tunnel does not stop within 15 s the profile is kept and `503 unavailable` is returned) |
@@ -253,7 +255,7 @@ Built before the 0.1.0 field test (owner decided 2026-11-25). Owner's decisions 
 - Validation: one inbound rule per (protocol, publicPort) on the shared public address; the HTTP UI port can never be a public port; the remote-access HTTPS port is reserved; `destination` of inbound rules must be inside a LAN subnet of the host; ranges ≤ 1000 ports.
 - Requires `net.ipv4.ip_forward=1` on the host; the self-check reports it (Docker hosts normally have it on) and the docs explain how to enable it. Coexists with Docker's own `FORWARD`/`DOCKER-USER` chains by inserting the jump at position 1.
 
-Implementation notes (task 16, task 20): `ip rule` priorities 7100 (LAN exclusion, `lookup main`), 7180 (a profile's remote networks while connected, `from all to <net> lookup 7194`; remote networks never overlap a LAN subnet), 7190 (outbound rules), 7191 (replies of port-forward targets, `from <target> ipproto N [sport P] lookup 7194`, so masqueraded replies leave through the tunnel), 7194 (VPN source address). Drop/reject rules currently act on traffic to the host only (INPUT); exceptions for port forwards are expressed by the forward rule's `source`. Inbound `any` protocol only with drop/reject. The `nat` table is required.
+Implementation notes (task 16, task 20): `ip rule` priorities 7100 (LAN exclusion, `lookup main`), 7180 (a profile's remote networks while connected, `from all to <net> lookup 7194`; remote networks never overlap a LAN subnet), 7190 (outbound rules), 7191 (replies of port-forward targets, masqueraded or not: after the reverse NAT their destination is the original sender on the VPN side, which the main table would route elsewhere), 7194 (VPN source address). Only selectors Linux 4.4 knows are used (`from`, `to`, `fwmark`; `ipproto`/`sport`/`dport` need Linux 4.17). Reply routing (task 25): while the kernel has the CONNMARK target and the mangle table, chain `TUNNELDECK-MANGLE-PRE` (jump at position 1 of mangle `PREROUTING`, tagged `tdfixed:reply-mark`/`tdfixed:reply-restore`, filled only while a port forward exists, removed with the firewall) sets connmark `0x7194/0xffff` on every connection arriving on `tdvpn0` and restores it onto the packets of such connections arriving by another interface, and 7191 holds one rule `fwmark 0x7194/0xffff lookup 7194`; without them 7191 holds `from <target> lookup 7194` per forward target (with its LAN exclusion at 7100), which also sends other traffic the host routes for that target into the tunnel, and the self-check `reply-routing` warns. Drop/reject rules currently act on traffic to the host only (INPUT); exceptions for port forwards are expressed by the forward rule's `source`. Inbound `any` protocol only with drop/reject. The `nat` table is required.
 
 ### 16.1a Adopted from the Teltonika RUT240 firewall
 

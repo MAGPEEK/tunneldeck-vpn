@@ -116,6 +116,10 @@ func (f *fakeAccounts) AdminAccount() (domain.AdminAccount, bool) {
 }
 func (f *fakeAccounts) CreateAdminAccount(a domain.AdminAccount) error { f.account = &a; return nil }
 func (f *fakeAccounts) RemoveAdminAccount() error                      { f.account = nil; return nil }
+func (f *fakeAccounts) RememberedSessions() []domain.RememberedSession { return nil }
+func (f *fakeAccounts) SetRememberedSessions([]domain.RememberedSession) error {
+	return nil
+}
 
 func TestAuthAdapterMapsErrors(t *testing.T) {
 	service := auth.NewService(&fakeAccounts{}, auth.WithHashParams(auth.HashParams{MemoryKiB: 64, Iterations: 1, Parallelism: 1, KeyLength: 32, SaltLength: 16}))
@@ -123,18 +127,18 @@ func TestAuthAdapterMapsErrors(t *testing.T) {
 	if err := service.Setup("admin", "correct horse battery"); err != nil {
 		t.Fatalf("Setup: %v", err)
 	}
-	if _, err := adapter.Login("admin", "correct horse battery", api.LoginClient{IP: "192.0.2.1"}); err != nil {
+	if _, err := adapter.Login("admin", "correct horse battery", api.LoginClient{IP: "192.0.2.1"}, false); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
 	var lastErr error
 	for range 6 {
-		_, lastErr = adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.2"})
+		_, lastErr = adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.2"}, false)
 	}
 	var rateLimit *api.RateLimitError
 	if !errors.As(lastErr, &rateLimit) || rateLimit.RetryAfter <= 0 {
 		t.Errorf("sixth failure = %v, want *api.RateLimitError", lastErr)
 	}
-	if _, err := adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.3"}); !errors.Is(err, api.ErrInvalidCredentials) {
+	if _, err := adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.3"}, false); !errors.Is(err, api.ErrInvalidCredentials) {
 		t.Errorf("wrong password = %v, want api.ErrInvalidCredentials", err)
 	}
 }
@@ -147,22 +151,28 @@ func TestAuthAdapterUsesTheStrictLimitForRemoteClients(t *testing.T) {
 	adapter := authAdapter{service}
 	remote := api.LoginClient{IP: "203.0.113.9", Remote: true}
 	for range 3 {
-		if _, err := adapter.Login("admin", "wrong password!", remote); !errors.Is(err, api.ErrInvalidCredentials) {
+		if _, err := adapter.Login("admin", "wrong password!", remote, false); !errors.Is(err, api.ErrInvalidCredentials) {
 			t.Fatalf("failure = %v, want api.ErrInvalidCredentials", err)
 		}
 	}
 	var rateLimit *api.RateLimitError
-	if _, err := adapter.Login("admin", "correct horse battery", remote); !errors.As(err, &rateLimit) {
+	if _, err := adapter.Login("admin", "correct horse battery", remote, false); !errors.As(err, &rateLimit) {
 		t.Errorf("fourth attempt = %v, want *api.RateLimitError after 3 failures", err)
 	}
 }
 
 func TestSessionCookies(t *testing.T) {
 	rec := httptest.NewRecorder()
-	sessionCookies{}.Set(rec, "tok", false)
+	sessionCookies{}.Set(rec, "tok", false, false)
 	cookie := rec.Header().Get("Set-Cookie")
-	if !strings.Contains(cookie, auth.SessionCookieName+"=tok") || strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "HttpOnly") {
+	if !strings.Contains(cookie, auth.SessionCookieName+"=tok") || strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "HttpOnly") ||
+		strings.Contains(cookie, "Max-Age") {
 		t.Errorf("Set-Cookie = %q", cookie)
+	}
+	rec = httptest.NewRecorder()
+	sessionCookies{}.Set(rec, "tok", false, true)
+	if cookie := rec.Header().Get("Set-Cookie"); !strings.Contains(cookie, "Max-Age=7776000") {
+		t.Errorf("remembered Set-Cookie = %q, want a 90-day Max-Age", cookie)
 	}
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: "tok"})

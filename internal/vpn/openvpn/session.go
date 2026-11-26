@@ -177,7 +177,7 @@ func (s *session) onLog(m logMessage) {
 	if isManagementEcho(m.text) {
 		return
 	}
-	s.run.driver.emit(domain.LogEvent{Time: m.time, Level: managementLogLevel(m.flags, m.text), Text: m.text})
+	s.run.report(domain.LogEvent{Time: m.time, Level: managementLogLevel(m.flags, m.text), Text: m.text})
 }
 
 func (s *session) onReply(m replyMessage) {

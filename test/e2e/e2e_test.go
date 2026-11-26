@@ -58,11 +58,13 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
-func checkSelfChecks(t *testing.T, td *tunnelDeck) {
+// checkSelfChecks: every self-check passes, except the warnings expected
+// on this host, which must fail.
+func checkSelfChecks(t *testing.T, td *tunnelDeck, warnings ...string) {
 	t.Helper()
 	for _, check := range td.selfChecks(t) {
-		if !check.OK {
-			t.Errorf("self-check %s failed: %s", check.ID, check.Detail)
+		if want := !slices.Contains(warnings, check.ID); check.OK != want {
+			t.Errorf("self-check %s ok = %v, want %v: %s", check.ID, check.OK, want, check.Detail)
 		}
 		if check.ID == "iptables" && !strings.HasPrefix(check.Detail, td.backend.selfCheckPrefix) {
 			t.Errorf("iptables self-check = %q, want it to start with %q", check.Detail, td.backend.selfCheckPrefix)
@@ -90,6 +92,7 @@ func (sc *scenario) run(t *testing.T) {
 	t.Cleanup(func() { sc.cleanUp(t, id) })
 
 	vpnIP := sc.connect(t, id)
+	sc.checkNegotiation(t)
 	sc.checkTraffic(t)
 	sc.checkRouting(t, vpnIP)
 	sc.checkRemoteNetwork(t, true)
@@ -168,6 +171,28 @@ func (sc *scenario) checkRejectedPasswordIsNotRetried(t *testing.T) {
 func (sc *scenario) authAttempts(t *testing.T) int {
 	t.Helper()
 	return len(lines(sc.stack.exec(t, sc.variant.service, "cat", "/run/e2e/auth-attempts.log")))
+}
+
+// checkNegotiation: every server pushes a default route, A and B also a
+// route and a DNS option; the pull filters drop them without the
+// "Options error" lines route-nopull used to cause. The status names the
+// negotiated data cipher and the control channel, and the routing applied
+// without a warning.
+func (sc *scenario) checkNegotiation(t *testing.T) {
+	t.Helper()
+	for _, line := range sc.td.logs(t) {
+		if strings.Contains(line.Text, "Options error") || strings.Contains(line.Text, "[PUSH-OPTIONS]") {
+			t.Errorf("log line %q, want pushed options dropped quietly", line.Text)
+		}
+	}
+	status := sc.td.status(t)
+	if status.DataCipher != sc.variant.dataCipher || !strings.HasPrefix(status.ControlChannel, "TLSv1.") {
+		t.Errorf("data cipher %q, control channel %q; want %q and a TLS version with its cipher suite",
+			status.DataCipher, status.ControlChannel, sc.variant.dataCipher)
+	}
+	if status.RoutingWarning != nil {
+		t.Errorf("routing warning %+v", status.RoutingWarning)
+	}
 }
 
 // checkTraffic pings the server's tunnel address from the host side and

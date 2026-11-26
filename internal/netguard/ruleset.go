@@ -18,6 +18,29 @@ const (
 	// limitChain drops SYNs and pings above their global rate while the
 	// kernel has the limit match but not the hashlimit match.
 	limitChain = "TUNNELDECK-LIMIT"
+	// mangleChain marks the connections that come in through the tunnel
+	// while the kernel has the CONNMARK target (replyByMark).
+	mangleChain = "TUNNELDECK-MANGLE-PRE"
+)
+
+// replyMark is the connection mark of connections that came in through the
+// tunnel, with the mask of the bits netguard owns; the upper 16 bits stay
+// free for other software.
+const (
+	replyMarkMask = "0xffff"
+	replyMark     = "0x7194/" + replyMarkMask
+)
+
+var (
+	// replyMarkRule marks every connection that comes in through the
+	// tunnel.
+	replyMarkRule = []string{"-i", DeviceName, "-j", "CONNMARK", "--set-mark", replyMark}
+	// replyRestoreRule copies that mark onto the packets of such a
+	// connection that arrive by another interface: the replies of
+	// port-forward targets, which the policy rule "fwmark" then routes
+	// into the tunnel. Packets of other connections keep their mark.
+	replyRestoreRule = []string{"!", "-i", DeviceName, "-m", "connmark", "--mark", replyMark,
+		"-j", "CONNMARK", "--restore-mark", "--nfmask", replyMarkMask, "--ctmask", replyMarkMask}
 )
 
 // Connection-tracking states used in rules.
@@ -83,6 +106,12 @@ var (
 	// limitSpec is reached only from the lines of TUNNELDECK-INPUT and
 	// TUNNELDECK-FORWARD that send SYNs and pings to it (rateRules).
 	limitSpec = chainSpec{table: filterTable, name: limitChain, sealed: true}
+	// mangleSpec sees every packet: the replies it marks arrive by the LAN
+	// interfaces. Its lines never decide a packet's fate.
+	mangleSpec = chainSpec{
+		table: mangleTable, name: mangleChain, parent: "PREROUTING",
+		jumps: [][]string{{}},
+	}
 )
 
 // forwardSpec jumps to TUNNELDECK-FORWARD for traffic in or out of the
@@ -109,10 +138,15 @@ type ruleset struct {
 	limit [][]string
 	// killSwitch holds the matches of the extra FORWARD jumps.
 	killSwitch [][]string
+	// marksReplies is set while the kernel has the CONNMARK target, so
+	// TUNNELDECK-MANGLE-PRE exists with the content mangle.
+	marksReplies bool
+	mangle       [][]string
 }
 
 // chainContent pairs each chain with its content, in installation order:
-// TUNNELDECK-LIMIT, when needed, before the chains that jump to it.
+// TUNNELDECK-LIMIT, when needed, before the chains that jump to it, and
+// TUNNELDECK-MANGLE-PRE last while the kernel can mark replies.
 func (rs ruleset) chainContent() []struct {
 	spec    chainSpec
 	content [][]string
@@ -122,6 +156,10 @@ func (rs ruleset) chainContent() []struct {
 	if rs.limit != nil {
 		specs = append([]chainSpec{limitSpec}, specs...)
 		contents = append([][][]string{rs.limit}, contents...)
+	}
+	if rs.marksReplies {
+		specs = append(specs, mangleSpec)
+		contents = append(contents, rs.mangle)
 	}
 	out := make([]struct {
 		spec    chainSpec
@@ -145,8 +183,8 @@ type hostPorts struct {
 // its rule or its fixed purpose. lan are the host's LAN addresses: an
 // inbound rule to one of them is a rule to the host, any other a port
 // forward. caps are the optional extensions of the kernel: a protection
-// it cannot provide falls back or is left out, and reject rules drop
-// without the REJECT target.
+// it cannot provide falls back or is left out, reject rules drop without
+// the REJECT target, and without CONNMARK there is no mangle chain.
 func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress, caps capabilities) ruleset {
 	var enabled []parsedRule
 	host := hostAddresses(lan)
@@ -157,13 +195,25 @@ func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress
 	}
 	opts := renderOptions(firewall.FirewallSettings, caps)
 	return ruleset{
-		input:       inputContent(opts, enabled, reserved),
-		forward:     forwardContent(opts, enabled, subnets(lan)),
-		prerouting:  preroutingContent(enabled, reserved),
-		postrouting: postroutingContent(enabled),
-		limit:       limitContent(opts),
-		killSwitch:  killSwitchJumps(enabled),
+		input:        inputContent(opts, enabled, reserved),
+		forward:      forwardContent(opts, enabled, subnets(lan)),
+		prerouting:   preroutingContent(enabled, reserved),
+		postrouting:  postroutingContent(enabled),
+		limit:        limitContent(opts),
+		killSwitch:   killSwitchJumps(enabled),
+		marksReplies: caps.replyRouting() == replyByMark,
+		mangle:       mangleContent(enabled),
 	}
+}
+
+// mangleContent marks the connections from the tunnel and restores that
+// mark on their replies while a port forward exists; nothing otherwise,
+// as only port forwards route by it (markedReplyRule).
+func mangleContent(rules []parsedRule) [][]string {
+	if !slices.ContainsFunc(rules, parsedRule.isPortForward) {
+		return nil
+	}
+	return [][]string{fixedRule(fixedReplyMark, replyMarkRule), fixedRule(fixedReplyRestore, replyRestoreRule)}
 }
 
 // rateMatch is the match a rate-limited protection is rendered with.

@@ -20,6 +20,9 @@ const (
 	CheckPingLimit = "ping-limit"
 	CheckMSSClamp  = "mss-clamp"
 	CheckReject    = "reject-target"
+	// CheckReplyRouting tells how the replies of port forwards find the
+	// tunnel: by connection mark, or by the target's address.
+	CheckReplyRouting = "reply-routing"
 )
 
 // Stable English hints for failed checks.
@@ -39,6 +42,9 @@ const (
 		"Some NAS kernels do not ship it; the firewall works without it, but large transfers through the tunnel may stall."
 	hintReject = "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. " +
 		"Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently."
+	hintReplyRouting = "Load the connmark module and the mangle table on the host (modprobe xt_connmark iptable_mangle), " +
+		"then restart the container. Port forwards work without them, but a device that receives a port forward and " +
+		"uses this device as its gateway sends all its traffic through the tunnel while it is up."
 )
 
 // Paths relative to Guard.root, which is "/" outside tests.
@@ -155,7 +161,8 @@ func (g *Guard) checkLAN(ctx context.Context) CheckResult {
 // without the comment match, one global rate instead of one per source
 // for the SYN flood protection without hashlimit, neither SYN flood
 // protection nor ping limit without limit as well, no MSS clamping
-// without TCPMSS, DROP for reject rules without REJECT.
+// without TCPMSS, DROP for reject rules without REJECT, replies of port
+// forwards routed by address without CONNMARK.
 func (g *Guard) checkExtensions(ctx context.Context) []CheckResult {
 	caps, err := g.detectCapabilities(ctx)
 	if err != nil {
@@ -166,6 +173,7 @@ func (g *Guard) checkExtensions(ctx context.Context) []CheckResult {
 			warning(CheckPingLimit, detail, hintRateLimit),
 			warning(CheckMSSClamp, detail, hintMSSClamp),
 			warning(CheckReject, detail, hintReject),
+			warning(CheckReplyRouting, detail, hintReplyRouting),
 		}
 	}
 	return []CheckResult{
@@ -174,6 +182,7 @@ func (g *Guard) checkExtensions(ctx context.Context) []CheckResult {
 		checkPingLimit(caps),
 		checkMSSClamp(caps),
 		checkReject(caps),
+		checkReplyRouting(caps),
 	}
 }
 
@@ -222,6 +231,18 @@ func checkReject(caps capabilities) CheckResult {
 			"drop instead and send no answer", hintReject)
 	}
 	return passed(CheckReject, "the REJECT target is available")
+}
+
+// checkReplyRouting warns without CONNMARK: replies of port forwards are
+// then routed by the target's address, which also sends everything else
+// the host routes for that device into the tunnel.
+func checkReplyRouting(caps capabilities) CheckResult {
+	if caps.replyRouting() == replyBySource {
+		return warning(CheckReplyRouting, "the CONNMARK target (xt_connmark) or the mangle table (iptable_mangle) is unavailable, "+
+			"so replies of port forwards are routed by the target's address: everything this device routes for a "+
+			"port-forward target goes through the tunnel while it is up", hintReplyRouting)
+	}
+	return passed(CheckReplyRouting, "replies of port forwards follow a connection mark (CONNMARK in the mangle table)")
 }
 
 func passed(id, detail string) CheckResult {

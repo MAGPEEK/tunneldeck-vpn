@@ -19,12 +19,14 @@ var routerFirewall = rulesOnly(
 	outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"),
 )
 
-// The policy rules of routerFirewall on lanListing.
+// The policy rules of routerFirewall on lanListing, the replies of its
+// forwards by connection mark.
 const (
 	addLANExclusion = "ip rule add from 192.168.2.2/32 to 192.168.2.0/24 lookup main priority 7100"
-	addIKEReplies   = "ip rule add from 192.168.2.2/32 to 0.0.0.0/0 ipproto 17 sport 500 lookup 7194 priority 7191"
-	addESPReplies   = "ip rule add from 192.168.2.2/32 to 0.0.0.0/0 ipproto 50 lookup 7194 priority 7191"
-	addOutbound     = "ip rule add from 192.168.2.2/32 to 0.0.0.0/0 lookup 7194 priority 7190"
+	addMarkedReply  = "ip rule add fwmark 0x7194/0xffff lookup 7194 priority 7191"
+	addOutbound     = "ip rule add from 192.168.2.2/32 lookup 7194 priority 7190"
+	// listedMarkedReply is addMarkedReply as ip rule show lists it.
+	listedMarkedReply = "7191:\tfrom all fwmark 0x7194/0xffff lookup 7194\n"
 )
 
 func routerGuard(t *testing.T, f *fakeRunner) *Guard {
@@ -48,21 +50,24 @@ func TestRouteThroughTunnelInstallsPolicyRules(t *testing.T) {
 			name:    "nothing installed yet",
 			listing: defaultRules,
 			want: []string{routeReplace, ruleShow, "ip rule add from 10.8.0.2 lookup 7194 priority 7194", addrShow,
-				addLANExclusion, addIKEReplies, addESPReplies, addOutbound},
+				addLANExclusion, addMarkedReply, addOutbound},
 		},
 		{
-			name: "present rules are kept, stale ones deleted routing first",
+			name: "present rules are kept, stale ones and those of older versions deleted routing first",
 			listing: "0:\tfrom all lookup local\n" +
 				"7100:\tfrom 192.168.9.9 to 192.168.2.0/24 lookup main\n" +
 				"7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n" +
 				"7190:\tfrom 192.168.2.2 lookup 7194\n" +
 				"7190:\tfrom 192.168.9.9 lookup 7194\n" +
+				listedMarkedReply +
 				"7191:\tfrom 192.168.2.2 ipproto udp sport 500 lookup 7194\n" +
-				"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n" +
+				"7191:\tfrom 192.168.2.2 lookup 7194\n" +
 				"7191:\tfrom 192.168.2.2 iif eth9 weird\n" +
 				"7194:\tfrom 10.8.0.2 lookup 7194\n" +
 				"32766:\tfrom all lookup main\n",
 			want: []string{routeReplace, ruleShow, addrShow,
+				"ip rule del priority 7191 from 192.168.2.2 ipproto udp sport 500 lookup 7194",
+				"ip rule del priority 7191 from 192.168.2.2 lookup 7194",
 				"ip rule del priority 7191 from 192.168.2.2 iif eth9 weird",
 				"ip rule del priority 7190 from 192.168.9.9 lookup 7194",
 				"ip rule del priority 7100 from 192.168.9.9 to 192.168.2.0/24 lookup main",
@@ -91,11 +96,12 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 	}
 	f.takeCalls()
 
+	// Without the outbound rule only the forwards remain; their replies
+	// need no LAN exclusion.
 	scriptState(f, installedState{input: 1, forward: 1, forwardJumps: []string{"-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"}})
 	f.on(ruleShow, ok("7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n"+
 		"7190:\tfrom 192.168.2.2 lookup 7194\n"+
-		"7191:\tfrom 192.168.2.2 ipproto 17 sport 500 lookup 7194\n"+
-		"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n"))
+		listedMarkedReply))
 	f.on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
 		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
 	if err := g.InstallFirewall(context.Background(), rulesOnly(routerFirewall.Rules[:2]...), uiPort); err != nil {
@@ -103,7 +109,8 @@ func TestInstallFirewallWhileRoutedUpdatesThePolicyRules(t *testing.T) {
 	}
 	calls := f.takeCalls()
 	assertCalls(t, calls[slices.Index(calls, ruleShow):], []string{ruleShow,
-		"ip rule del priority 7190 from 192.168.2.2 lookup 7194"})
+		"ip rule del priority 7190 from 192.168.2.2 lookup 7194",
+		"ip rule del priority 7100 from 192.168.2.2 to 192.168.2.0/24 lookup main"})
 }
 
 func TestKillSwitchWhileDisconnected(t *testing.T) {
@@ -111,13 +118,13 @@ func TestKillSwitchWhileDisconnected(t *testing.T) {
 	g := routerGuard(t, f)
 	f.on(ruleShow, ok("7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n"+
 		"7190:\tfrom 192.168.2.2 lookup 7194\n"+
-		"7191:\tfrom 192.168.2.2 ipproto 17 sport 500 lookup 7194\n"+
+		listedMarkedReply+
 		"7194:\tfrom 10.8.0.2 lookup 7194\n"))
 	if err := g.ClearTunnelRouting(context.Background()); err != nil {
 		t.Fatalf("ClearTunnelRouting: %v", err)
 	}
 	assertCalls(t, f.takeCalls(), []string{ruleShow,
-		"ip rule del priority 7191 from 192.168.2.2 ipproto 17 sport 500 lookup 7194",
+		"ip rule del priority 7191 from all fwmark 0x7194/0xffff lookup 7194",
 		"ip rule del priority 7190 from 192.168.2.2 lookup 7194",
 		"ip rule del priority 7100 from 192.168.2.2 to 192.168.2.0/24 lookup main",
 		"ip rule del from 10.8.0.2 lookup 7194 priority 7194",
@@ -221,64 +228,130 @@ func TestWantedPolicyRulesExcludeTheHostsOwnAddress(t *testing.T) {
 		changed(outboundRule(domain.ProtocolAny, "192.168.2.0/24", "10.1.0.0/16"), func(r *domain.FirewallRule) { r.Action = domain.ActionDrop }),
 		changed(outboundRule(domain.ProtocolAny, "192.168.2.7", "10.2.0.0/16"), func(r *domain.FirewallRule) { r.Enabled = false }),
 		changed(portForward(domain.ProtocolTCPUDP, "192.168.2.3", ports(6000, 6010)), func(r *domain.FirewallRule) { r.KeepSourceAddress = true }),
+		portForward(domain.ProtocolESP, "192.168.2.4", domain.PortRange{}),
 	)
-	var got []string
-	for _, rule := range wantedPolicyRules(firewall, lan) {
-		got = append(got, strings.Join(rule.addArgs(), " "))
+	tests := []struct {
+		name  string
+		reply replyRouting
+		want  []string
+	}{
+		{
+			name:  "replies by connection mark: one rule, no exclusion for the targets",
+			reply: replyByMark,
+			want: []string{
+				"rule add from 192.168.2.10/32 lookup main priority 7100",
+				"rule add from 192.168.2.0/24 to 192.168.2.0/24 lookup main priority 7100",
+				"rule add from 192.168.2.0/24 to 10.0.0.0/8 lookup 7194 priority 7190",
+				"rule add fwmark 0x7194/0xffff lookup 7194 priority 7191",
+			},
+		},
+		{
+			name:  "replies by source: one rule per target with its LAN exclusion",
+			reply: replyBySource,
+			want: []string{
+				"rule add from 192.168.2.10/32 lookup main priority 7100",
+				"rule add from 192.168.2.0/24 to 192.168.2.0/24 lookup main priority 7100",
+				"rule add from 192.168.2.3/32 to 192.168.2.0/24 lookup main priority 7100",
+				"rule add from 192.168.2.4/32 to 192.168.2.0/24 lookup main priority 7100",
+				"rule add from 192.168.2.0/24 to 10.0.0.0/8 lookup 7194 priority 7190",
+				"rule add from 192.168.2.3/32 lookup 7194 priority 7191",
+				"rule add from 192.168.2.4/32 lookup 7194 priority 7191",
+			},
+		},
 	}
-	assertCalls(t, got, []string{
-		"rule add from 192.168.2.10/32 to 0.0.0.0/0 lookup main priority 7100",
-		"rule add from 192.168.2.0/24 to 192.168.2.0/24 lookup main priority 7100",
-		"rule add from 192.168.2.3/32 to 192.168.2.0/24 lookup main priority 7100",
-		"rule add from 192.168.2.0/24 to 10.0.0.0/8 lookup 7194 priority 7190",
-		"rule add from 192.168.2.3/32 to 0.0.0.0/0 ipproto 6 sport 6000-6010 lookup 7194 priority 7191",
-		"rule add from 192.168.2.3/32 to 0.0.0.0/0 ipproto 17 sport 6000-6010 lookup 7194 priority 7191",
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertCalls(t, ruleArgs(wantedPolicyRules(firewall, lan, tt.reply)), tt.want)
+		})
+	}
 	if mayNeedPolicyRules(testFirewall) {
 		t.Error("host rules need no policy rules")
 	}
 }
 
-func TestWantedPolicyRulesForAnAnyPortForward(t *testing.T) {
+func ruleArgs(rules []policyRule) []string {
+	var out []string
+	for _, rule := range rules {
+		out = append(out, strings.Join(rule.addArgs(), " "))
+	}
+	return out
+}
+
+// TestPolicyRulesUseOnlyLinux44Selectors: ipproto, sport and dport exist
+// since Linux 4.17; ip rule add on the DSM kernel 4.4 must never see them.
+func TestPolicyRulesUseOnlyLinux44Selectors(t *testing.T) {
+	lan := parseLANAddresses(lanListing)
+	firewall := rulesOnly(
+		portForward(domain.ProtocolTCP, "192.168.2.3", domain.SinglePort(443)),
+		portForward(domain.ProtocolTCPUDP, "192.168.2.3", ports(6000, 6010)),
+		changed(portForward(domain.ProtocolUDP, "192.168.2.4", domain.SinglePort(500)), func(r *domain.FirewallRule) { r.KeepSourceAddress = true }),
+		portForward(domain.ProtocolESP, "192.168.2.4", domain.PortRange{}),
+		portForward(domain.ProtocolGRE, "192.168.2.5", domain.PortRange{}),
+		portForward(domain.ProtocolTCP, "192.168.2.6", domain.PortRange{}),
+		outboundRule(domain.ProtocolTCP, "192.168.2.4", "0.0.0.0/0"),
+		outboundRule(domain.ProtocolUDP, "192.168.2.0/24", "10.0.0.0/8"),
+	)
+	allowed := map[string]bool{"rule": true, "add": true, "from": true, "to": true, "fwmark": true, "lookup": true, "priority": true}
+	for _, reply := range []replyRouting{replyByMark, replyBySource} {
+		rules, err := policyRulesFor(firewall, remoteNetworks, lan, reply)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range ruleArgs(rules) {
+			fields := strings.Fields(args)
+			for i := 0; i < len(fields); i += 2 {
+				if !allowed[fields[i]] {
+					t.Errorf("reply routing %d: %q uses the selector %q", reply, args, fields[i])
+				}
+			}
+		}
+	}
+}
+
+func TestListedPolicyRulesParseBack(t *testing.T) {
 	lan := parseLANAddresses(lanListing)
 	firewall := rulesOnly(portForward(domain.ProtocolTCP, "192.168.2.5", domain.PortRange{}))
-	var got []string
-	for _, rule := range wantedPolicyRules(firewall, lan) {
-		got = append(got, strings.Join(rule.addArgs(), " "))
+	tests := []struct {
+		reply  replyRouting
+		listed string
+	}{
+		{replyByMark, "from all fwmark 0x7194/0xffff lookup 7194"},
+		{replyBySource, "from 192.168.2.5 lookup 7194"},
 	}
-	assertCalls(t, got, []string{
-		"rule add from 192.168.2.5/32 to 192.168.2.0/24 lookup main priority 7100",
-		"rule add from 192.168.2.5/32 to 0.0.0.0/0 ipproto 6 lookup 7194 priority 7191",
-	})
-	listed := listedRule{priority: replyPriority, tokens: strings.Fields("from 192.168.2.5 ipproto tcp lookup 7194")}
-	if rule, ok := listed.parse(); !ok || rule != wantedPolicyRules(firewall, lan)[1] {
-		t.Errorf("listed rule %+v (ok %v) does not match the wanted reply rule", rule, ok)
+	for _, tt := range tests {
+		want := wantedPolicyRules(firewall, lan, tt.reply)
+		listed := listedRule{priority: replyPriority, tokens: strings.Fields(tt.listed)}
+		if rule, ok := listed.parse(); !ok || rule != want[len(want)-1] {
+			t.Errorf("listed rule %q = %+v (ok %v), want the reply rule %+v", tt.listed, rule, ok, want[len(want)-1])
+		}
 	}
 }
 
 func TestParsePolicyListing(t *testing.T) {
 	listing := parsePolicyListing("0:\tfrom all lookup local\n" +
 		"7100:\tfrom all to 192.168.2.0/24 lookup 254\n" +
-		"7191:\tfrom 192.168.2.3 ipproto tcp sport 6000-6010 lookup 7194 proto boot\n" +
-		"7191:\tfrom 192.168.2.3 ipproto ipv9 lookup 7194\n" +
-		"7191:\tfrom 192.168.2.3 sport x lookup 7194\n" +
+		"7191:\tfrom all fwmark 0x7194/0xffff lookup 7194 proto boot\n" +
+		"7191:\tfrom 192.168.2.3 lookup 7194\n" +
+		"7191:\tfrom 192.168.2.3 ipproto tcp sport 6000-6010 lookup 7194\n" +
+		"7191:\tfrom 192.168.2.3 lookup\n" +
+		"7191:\tfrom 192.168.2.300 lookup 7194\n" +
 		"7194:\tfrom 10.8.0.2 lookup 7194\n" +
 		"garbage\n" +
 		"x:\tfrom all lookup main\n")
-	if !slices.Equal(listing.vpnSources, []string{"10.8.0.2"}) || len(listing.owned) != 4 {
+	if !slices.Equal(listing.vpnSources, []string{"10.8.0.2"}) || len(listing.owned) != 6 {
 		t.Fatalf("listing = %+v", listing)
 	}
 	want := []policyRule{
 		{priority: 7100, from: anyAddress, to: netip.MustParsePrefix("192.168.2.0/24"), table: mainTable},
-		{priority: 7191, from: netip.MustParsePrefix("192.168.2.3/32"), to: anyAddress, ipproto: 6,
-			sport: domain.PortRange{From: 6000, To: 6010}, table: routingTable},
+		{priority: 7191, from: anyAddress, to: anyAddress, fwmark: "0x7194/0xffff", table: routingTable},
+		{priority: 7191, from: netip.MustParsePrefix("192.168.2.3/32"), to: anyAddress, table: routingTable},
 	}
 	for i, w := range want {
 		if got, ok := listing.owned[i].parse(); !ok || got != w {
 			t.Errorf("rule %d = %+v, %v; want %+v", i, got, ok, w)
 		}
 	}
-	for _, i := range []int{2, 3} {
+	for _, i := range []int{3, 4, 5} {
 		if _, ok := listing.owned[i].parse(); ok {
 			t.Errorf("rule %d %v parsed, want it treated as foreign", i, listing.owned[i].tokens)
 		}
@@ -289,8 +362,8 @@ func TestParsePolicyListing(t *testing.T) {
 var remoteNetworks = []netip.Prefix{netip.MustParsePrefix("10.99.0.0/24"), netip.MustParsePrefix("172.30.0.0/16")}
 
 const (
-	addRemote99 = "ip rule add from 0.0.0.0/0 to 10.99.0.0/24 lookup 7194 priority 7180"
-	addRemote30 = "ip rule add from 0.0.0.0/0 to 172.30.0.0/16 lookup 7194 priority 7180"
+	addRemote99 = "ip rule add to 10.99.0.0/24 lookup 7194 priority 7180"
+	addRemote30 = "ip rule add to 172.30.0.0/16 lookup 7194 priority 7180"
 )
 
 func TestRouteThroughTunnelRoutesRemoteNetworks(t *testing.T) {
@@ -337,8 +410,7 @@ func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
 	f.on(ruleShow, ok("7100:\tfrom 192.168.2.2 to 192.168.2.0/24 lookup main\n"+
 		"7180:\tfrom all to 10.99.0.0/24 lookup 7194\n"+
 		"7190:\tfrom 192.168.2.2 lookup 7194\n"+
-		"7191:\tfrom 192.168.2.2 ipproto 17 sport 500 lookup 7194\n"+
-		"7191:\tfrom 192.168.2.2 ipproto 50 lookup 7194\n"))
+		listedMarkedReply))
 	f.on(legacy+"-C FORWARD -i tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule)).
 		on(legacy+"-C FORWARD -o tdvpn0 -j TUNNELDECK-FORWARD", fail(badRule))
 	if err := g.InstallFirewall(context.Background(), rulesOnly(routerFirewall.Rules[:2]...), uiPort); err != nil {
@@ -346,7 +418,8 @@ func TestInstallFirewallWhileRoutedKeepsRemoteNetworks(t *testing.T) {
 	}
 	calls := f.takeCalls()
 	assertCalls(t, calls[slices.Index(calls, ruleShow):], []string{ruleShow,
-		"ip rule del priority 7190 from 192.168.2.2 lookup 7194"})
+		"ip rule del priority 7190 from 192.168.2.2 lookup 7194",
+		"ip rule del priority 7100 from 192.168.2.2 to 192.168.2.0/24 lookup main"})
 }
 
 func TestRouteThroughTunnelRefusesRemoteNetworks(t *testing.T) {

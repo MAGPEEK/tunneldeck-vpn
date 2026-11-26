@@ -37,7 +37,9 @@ type fakeAuth struct {
 	tokens      map[string]string
 	retryAfter  time.Duration // locks logins out when > 0
 	loginClient LoginClient
+	remembered  bool // remember of the last Login
 	setupCalled bool
+	logoutErr   error
 }
 
 func newFakeAuth() *fakeAuth {
@@ -64,10 +66,11 @@ func (a *fakeAuth) Setup(_, password string) error {
 	return nil
 }
 
-func (a *fakeAuth) Login(username, password string, client LoginClient) (string, error) {
+func (a *fakeAuth) Login(username, password string, client LoginClient, remember bool) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.loginClient = client
+	a.remembered = remember
 	if a.retryAfter > 0 {
 		return "", &RateLimitError{RetryAfter: a.retryAfter}
 	}
@@ -85,16 +88,32 @@ func (a *fakeAuth) Authenticate(token string) (string, bool) {
 	return username, ok
 }
 
-func (a *fakeAuth) Logout(token string) {
+func (a *fakeAuth) Logout(token string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.tokens, token)
+	return a.logoutErr
 }
+
+func (a *fakeAuth) LogoutEverywhere() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	clear(a.tokens)
+	return a.logoutErr
+}
+
+// fakeRememberedMaxAge is the Max-Age fakeCookies gives a remembered
+// session cookie.
+const fakeRememberedMaxAge = 3600
 
 type fakeCookies struct{}
 
-func (fakeCookies) Set(w http.ResponseWriter, token string, secure bool) {
-	http.SetCookie(w, &http.Cookie{Name: testCookie, Value: token, Path: "/", HttpOnly: true, Secure: secure})
+func (fakeCookies) Set(w http.ResponseWriter, token string, secure, remember bool) {
+	cookie := &http.Cookie{Name: testCookie, Value: token, Path: "/", HttpOnly: true, Secure: secure}
+	if remember {
+		cookie.MaxAge = fakeRememberedMaxAge
+	}
+	http.SetCookie(w, cookie)
 }
 
 func (fakeCookies) Clear(w http.ResponseWriter, secure bool) {

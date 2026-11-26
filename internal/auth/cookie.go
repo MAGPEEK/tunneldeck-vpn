@@ -1,15 +1,23 @@
 package auth
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 // SessionCookieName is the name of the session cookie.
 const SessionCookieName = "tunneldeck_session"
 
-// SetSessionCookie stores token in a session cookie (no Max-Age, so the
-// browser drops it when closed). Secure is set only when secure is true,
-// i.e. when the UI is served over HTTPS.
-func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
-	http.SetCookie(w, sessionCookie(token, secure))
+// SetSessionCookie stores token in the session cookie (RFC 6265). Without
+// remember it has no Max-Age, so the browser drops it when closed; with
+// remember it is persistent for RememberedLifetime. Secure is set only when
+// secure is true, i.e. when the UI is served over HTTPS.
+func SetSessionCookie(w http.ResponseWriter, token string, secure, remember bool) {
+	cookie := sessionCookie(token, secure)
+	if remember {
+		cookie.MaxAge = int(RememberedLifetime / time.Second)
+	}
+	http.SetCookie(w, cookie)
 }
 
 // ClearSessionCookie tells the browser to delete the session cookie.

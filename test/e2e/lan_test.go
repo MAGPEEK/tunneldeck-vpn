@@ -40,6 +40,10 @@ const (
 type lanHost struct {
 	backend    backend
 	lanAddress netip.Addr
+	// marksReplies is false on the host whose iptables lacks CONNMARK
+	// (compose.yml): replies of port forwards are then routed by the
+	// target's address.
+	marksReplies bool
 }
 
 var lanHosts = []lanHost{
@@ -55,7 +59,8 @@ var lanHosts = []lanHost{
 			name: "lan-legacy", service: "tunneldeck-lan-legacy", iptables: "iptables-legacy",
 			selfCheckPrefix: "using iptables-legacy: only the legacy backend works",
 		},
-		lanAddress: netip.MustParseAddr("10.95.0.3"),
+		lanAddress:   netip.MustParseAddr("10.95.0.3"),
+		marksReplies: true,
 	},
 }
 
@@ -111,10 +116,15 @@ func (sc *lanScenario) useHostAsGateway(t *testing.T) {
 	}
 }
 
-// checkLANSelfChecks: every self-check passes, ip_forward included, and the
-// LAN network is among the detected LAN subnets.
+// checkLANSelfChecks: every self-check passes, ip_forward included, but
+// reply-routing on the host without CONNMARK, and the LAN network is among
+// the detected LAN subnets.
 func (sc *lanScenario) checkLANSelfChecks(t *testing.T) {
-	checkSelfChecks(t, sc.td)
+	var warnings []string
+	if !sc.host.marksReplies {
+		warnings = append(warnings, "reply-routing")
+	}
+	checkSelfChecks(t, sc.td, warnings...)
 	for _, check := range sc.td.selfChecks(t) {
 		if check.ID == "lan-subnets" && !strings.Contains(check.Detail, lanSubnet.String()) {
 			t.Errorf("lan-subnets self-check = %q, want it to name %s", check.Detail, lanSubnet)
@@ -216,6 +226,7 @@ func webOutbound() firewallRule {
 func (sc *lanScenario) checkPortForwardMasquerade(t *testing.T) {
 	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{webForward(false, "")}), "forward the web port")
 	sc.expectWebClient(t, sc.host.lanAddress.String())
+	sc.expectReplyRule(t)
 }
 
 // checkPortForwardKeepSource: with keepSourceAddress lan-web sees the
@@ -223,6 +234,28 @@ func (sc *lanScenario) checkPortForwardMasquerade(t *testing.T) {
 func (sc *lanScenario) checkPortForwardKeepSource(t *testing.T) {
 	sc.td.must(t, sc.td.setFirewallRules([]firewallRule{webForward(true, "")}), "forward the web port keeping the source")
 	sc.expectWebClient(t, probeSource)
+	sc.expectReplyRule(t)
+}
+
+// expectReplyRule: the replies of the web forward reach the probe only
+// through policy rule 7191, by connection mark or, without CONNMARK, by
+// lan-web's address; no rule uses a selector Linux 4.4 lacks, which
+// linux44-ip.sh would have refused anyway.
+func (sc *lanScenario) expectReplyRule(t *testing.T) {
+	t.Helper()
+	want := "7191: from all fwmark 0x7194/0xffff lookup 7194"
+	if !sc.host.marksReplies {
+		want = fmt.Sprintf("7191: from %s lookup 7194", lanWebAddress)
+	}
+	rules := readRouting(t, sc.td).rules
+	if !slices.Contains(rules, want) {
+		t.Errorf("ip rule has no %q: %q", want, rules)
+	}
+	for _, rule := range rules {
+		if strings.Contains(rule, "ipproto") || strings.Contains(rule, "sport") || strings.Contains(rule, "dport") {
+			t.Errorf("policy rule %q uses a selector of Linux 4.17", rule)
+		}
+	}
 }
 
 // checkPortForwardSourceRestriction: a forward limited to a network the
@@ -358,7 +391,7 @@ func (sc *lanScenario) expectKillSwitch(t *testing.T, when string) {
 	}
 }
 
-// leakRule counts, in mangle POSTROUTING, which TunnelDeck never touches,
+// leakRule counts, in mangle POSTROUTING, a chain TunnelDeck never touches,
 // every packet from lan-web to the remote network that leaves the host by
 // another interface than the tunnel.
 func leakRule() []string {
