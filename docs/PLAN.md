@@ -101,3 +101,15 @@ Owner wants one thing: loading an OpenVPN profile must simply work. Make "Load .
 ## [x] 24. Destination is always an IP; generic wording — careful — after: 21, before: 22
 
 Owner decision 2026-11-26: remove the destination kind "Host". Inbound destination is always one IPv4 address in the local LAN (example `192.168.1.10`); outbound destination is a CIDR (example `10.0.0.0/8`). netguard classifies: an inbound destination equal to one of the host's own LAN addresses becomes an INPUT accept (no DNAT, public port must equal destination port or be empty); any other LAN address becomes a port forward. Settings schema 3: migrate `{kind:"host"}` rules to the host's LAN address — the store cannot detect it, so the API converts on read (GET returns host rules with `hostAddress`) and the next PUT stores plain addresses; netguard still accepts legacy host-kind rules until then. Generic wording everywhere (UI, i18n, docs, SPEC, templates, placeholders): "Local LAN" / "Lokales LAN", examples only from 192.168.1.0/24 and documentation ranges (RFC 5737), "device"/"Gerät" instead of brand names (no "LANCOM", no "NAS" in UI texts; the IPsec template is "IPsec router"/"IPsec-Router"). Docs may keep one clearly marked real-world example section. Tests at every layer; e2e still green.
+
+## [ ] 25. WireGuard driver backend — heavy — after: 24
+
+SPEC §18: package `internal/vpn/wireguard` (schema, validation, key generation endpoint, wg-quick importer, embedded wireguard-go device on `tdvpn0`, handshake-based state machine, traffic counters), registry wiring, API for key generation, tests.
+
+## [ ] 26. WireGuard UI — medium — after: 25
+
+SPEC §18: protocol chooser offers WireGuard; schema form renders it; "Generate key pair" with public key + Copy; `.conf` loading in the existing import flow; encryption row shows ChaCha20-Poly1305; i18n de/en; help texts.
+
+## [ ] 27. WireGuard e2e and docs — careful — after: 26
+
+SPEC §18: WireGuard server container in `test/e2e`, matrix case D-wireguard on both backends; README, docs/linux, docs/synology, filemap, CHANGELOG.
