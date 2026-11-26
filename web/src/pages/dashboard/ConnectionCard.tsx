@@ -61,17 +61,14 @@ export function ConnectionCard(props: ConnectionCardProps) {
 
   return (
     <section className={styles.card} aria-label={t('connection.label')}>
-      <div className={styles.header}>
-        <span className="visually-hidden" aria-live="polite" aria-atomic="true">
-          {t(`connection.state.${status.state}`)}
-        </span>
-        {remoteAccessActive(props.remoteAccess) && (
+      <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+        {t(`connection.state.${status.state}`)}
+      </span>
+      {remoteAccessActive(props.remoteAccess) && (
+        <div className={styles.header}>
           <StatePill tone="accent">{t('connection.remoteAccessOn')}</StatePill>
-        )}
-        <div className={styles.actions}>
-          <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
-      </div>
+      )}
       {status.state === 'error' && <ErrorLine status={status} />}
       {status.routingWarning !== undefined && status.state !== 'error' && <RoutingWarning />}
       {actionError !== undefined && (
@@ -89,6 +86,9 @@ export function ConnectionCard(props: ConnectionCardProps) {
           version={props.version}
         />
       )}
+      <div className={styles.actions}>
+        <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
+      </div>
       <AdvisoryList advisories={advisories} />
     </section>
   );

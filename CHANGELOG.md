@@ -13,6 +13,7 @@ First release of the 0.2 line, field-tested on a Synology DS723+ with mdex. It c
 - The remote access address on the Dashboard and the System page is a plain link; the Copy button next to it is gone.
 - The Dashboard connection card no longer repeats the state pill, the profile name and the protocol badge in its header; the state is still announced to screen readers, and the status list and connection line show the details.
 - System page, Version card: "Container running for" replaces "TunnelDeck-VPN running for" and "Host running for". TunnelDeck-VPN is the container's main process, so its start is the container start. `GET /api/system` no longer returns `hostUptimeSeconds`.
+- Dashboard: Connect, Reconnect and Disconnect sit below the connection line instead of in the header.
 - Dashboard, Connection details: the "VPN tunnel" row is gone, because the connection line already shows the state and both rates; "Traffic total" is now the first row, in the list and in Customize.
 - The log on the Log page fills the window height (at least 360px) instead of a fixed 360px box.
 - Edit, Duplicate and Delete on the Profiles page stay on one line; on narrow screens the table scrolls sideways.

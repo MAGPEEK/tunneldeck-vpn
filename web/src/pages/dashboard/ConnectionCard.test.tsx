@@ -65,6 +65,13 @@ describe('ConnectionCard', () => {
     expect(screen.getAllByText('OpenVPN')).toHaveLength(1);
   });
 
+  it('places the actions below the connection line', () => {
+    renderCard(connected);
+    const line = document.querySelector('[data-link="tunnel"]');
+    const disconnect = screen.getByRole('button', { name: 'Disconnect' });
+    expect(line?.compareDocumentPosition(disconnect)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('offers a profile select and Connect when disconnected', () => {
     const { onConnect } = renderCard({ state: 'disconnected' });
     const select = screen.getByRole('combobox', { name: 'Profile' });
