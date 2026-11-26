@@ -89,6 +89,13 @@ var certificateProblems = map[string]failure{
 	"cert-exceeded-path-len": certificateFailure("has too long a chain"),
 }
 
+// certificateNote is a certificate problem charon raised for the IKE SA
+// with the unique ID ikeID ("" when the alert named none).
+type certificateNote struct {
+	failure failure
+	ikeID   string
+}
+
 func certificateFailure(problem string) failure {
 	return failure{domain.ErrorCodeAuthFailed, "the gateway's certificate " + problem + "; check the CA certificate"}
 }
@@ -119,14 +126,17 @@ type tunnel struct {
 	tick   chan struct{}
 
 	// Owned by the run goroutine.
-	connected       bool
+	connected bool
+	// ikeID is the unique ID of the IKE SA that carries the connected
+	// tunnel.
+	ikeID           string
 	vip             netip.Addr // the address on the tunnel device
 	traffic         trafficCounter
 	missingSince    time.Time
 	reinitiateDelay time.Duration
 	// certificateProblem is the last certificate alert (certificateProblems)
 	// of the current attempt.
-	certificateProblem *failure
+	certificateProblem *certificateNote
 }
 
 func newTunnel(d *Driver, c profileConfig, remoteNetworks []netip.Prefix) *tunnel {
@@ -414,7 +424,7 @@ func (t *tunnel) schedulePoll() func() bool {
 
 func (t *tunnel) handleEvent(e viciEvent) *failure {
 	if e.name == "alert" {
-		return t.alert(e.message.get("type"))
+		return t.alert(e.message)
 	}
 	up := e.message.get("up") == "yes"
 	for _, sa := range parseIKESAs(e.message) {
@@ -425,23 +435,26 @@ func (t *tunnel) handleEvent(e viciEvent) *failure {
 		case e.name == "child-updown" && up:
 			return t.up(sa)
 		case e.name == "child-updown":
-			t.down("the CHILD_SA with the gateway went down")
+			return t.lost("the CHILD_SA with the gateway went down", "")
 		case e.name == "ike-updown" && !up:
-			t.down("the IKE SA with the gateway went down")
+			return t.lost("the IKE SA with the gateway went down", sa.uniqueID)
 		}
 	}
 	return nil
 }
 
 // alert ends the tunnel on the alerts that need the user or a new start.
-// A certificate problem is remembered to explain a later peer-auth-failed.
-func (t *tunnel) alert(kind string) *failure {
+// A certificate problem is remembered to explain a later peer-auth-failed
+// of the same IKE SA; charon retries with new IKE SAs (keyingtries = 0),
+// so the problem of an earlier attempt explains nothing.
+func (t *tunnel) alert(m *message) *failure {
+	kind, ikeID := m.get("type"), alertIKESA(m)
 	if f, ok := certificateProblems[kind]; ok {
-		t.certificateProblem = &f
+		t.certificateProblem = &certificateNote{failure: f, ikeID: ikeID}
 		return nil
 	}
-	if kind == peerAuthFailed && t.certificateProblem != nil {
-		return t.certificateProblem
+	if note := t.certificateProblem; kind == peerAuthFailed && note != nil && note.ikeID == ikeID {
+		return &note.failure
 	}
 	if f, ok := alertFailures[kind]; ok {
 		return &f
@@ -476,7 +489,7 @@ func (t *tunnel) up(sa ikeSA) *failure {
 		return f
 	}
 	t.connected, t.missingSince, t.reinitiateDelay = true, time.Time{}, firstReinitiateDelay
-	t.certificateProblem = nil
+	t.ikeID, t.certificateProblem = sa.uniqueID, nil
 	now := t.driver.opts.Clock.Now()
 	t.driver.log(domain.LogLevelInfo, "the IPsec tunnel to "+sa.remote()+" is up")
 	t.driver.emit(domain.StateEvent{
@@ -519,6 +532,53 @@ func (t *tunnel) addressTunnel(sa ikeSA) (string, *failure) {
 
 func hostPrefix(addr netip.Addr) string { return netip.PrefixFrom(addr, addr.BitLen()).String() }
 
+// alertIKESA returns the unique ID of the IKE SA an alert names, "" for
+// none.
+func alertIKESA(m *message) string {
+	if sas := parseIKESAs(m.section("ike-sa")); len(sas) > 0 {
+		return sas[0].uniqueID
+	}
+	return ""
+}
+
+// lost handles an IKE or CHILD SA of the tunnel that went down; gone is
+// the unique ID of the IKE SA that went down, "" when only a CHILD_SA did.
+// charon lists whether another IKE SA carries the tunnel now: IKEv1
+// reauthenticates make-before-break and moves the CHILD_SAs to the new IKE
+// SA before the old one goes down. Then the tunnel stays connected on the
+// new IKE SA; otherwise it is reconnecting.
+func (t *tunnel) lost(reason, gone string) *failure {
+	if !t.connected {
+		return nil
+	}
+	sas, f := t.listSAs()
+	if f != nil {
+		return f
+	}
+	for _, sa := range sas {
+		if _, installed := sa.installedChild(); installed && sa.state == stateEstablished && (gone == "" || sa.uniqueID != gone) {
+			return t.follow(sa)
+		}
+	}
+	t.down(reason)
+	return nil
+}
+
+// follow keeps a connected tunnel on sa, the IKE SA that carries it now.
+// A virtual IP that changed takes the tunnel through reconnecting to
+// connected with the new address, so the routing follows it.
+func (t *tunnel) follow(sa ikeSA) *failure {
+	if vip, ok := sa.virtualIP(); t.config.mode == ModeVirtualIP && (!ok || vip != t.vip) {
+		t.down("the IPsec tunnel moved to a new IKE SA with another virtual IP")
+		return t.up(sa)
+	}
+	if sa.uniqueID != t.ikeID {
+		t.ikeID = sa.uniqueID
+		t.driver.log(domain.LogLevelInfo, "the IPsec tunnel moved to a new IKE SA")
+	}
+	return nil
+}
+
 // down reports a lost SA of a connected tunnel as reconnecting; charon
 // restores it (dpd_action = restart, close_action = start).
 func (t *tunnel) down(reason string) {
@@ -534,20 +594,13 @@ func (t *tunnel) down(reason string) {
 // CHILD_SA whose event was missed, and whether an attempt is still under
 // way.
 func (t *tunnel) poll() *failure {
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-	defer cancel()
-	events, err := t.client.streamed(ctx, "list-sas", "list-sa", newMessage().set("noblock", "yes").set("ike", connName))
-	if err != nil {
-		return &failure{domain.ErrorCodeProcessFailed, "reading the SAs from charon failed: " + err.Error()}
+	ours, f := t.listSAs()
+	if f != nil {
+		return f
 	}
-	var ours []ikeSA
 	var children []childSA
-	for _, m := range events {
-		for _, sa := range parseIKESAs(m) {
-			if sa.name == connName {
-				ours, children = append(ours, sa), append(children, sa.children...)
-			}
-		}
+	for _, sa := range ours {
+		children = append(children, sa.children...)
 	}
 	in, out := t.traffic.update(children)
 	t.driver.emit(domain.TrafficEvent{BytesIn: in, BytesOut: out})
@@ -562,6 +615,25 @@ func (t *tunnel) poll() *failure {
 		return nil
 	}
 	return t.keepInitiating(len(ours) > 0)
+}
+
+// listSAs returns the IKE SAs of the tunnel as charon lists them.
+func (t *tunnel) listSAs() ([]ikeSA, *failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+	events, err := t.client.streamed(ctx, "list-sas", "list-sa", newMessage().set("noblock", "yes").set("ike", connName))
+	if err != nil {
+		return nil, &failure{domain.ErrorCodeProcessFailed, "reading the SAs from charon failed: " + err.Error()}
+	}
+	var ours []ikeSA
+	for _, m := range events {
+		for _, sa := range parseIKESAs(m) {
+			if sa.name == connName {
+				ours = append(ours, sa)
+			}
+		}
+	}
+	return ours, nil
 }
 
 // keepInitiating initiates again when no IKE SA has been under way for the

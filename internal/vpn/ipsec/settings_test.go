@@ -289,3 +289,66 @@ func TestSubnetIssueParams(t *testing.T) {
 		t.Errorf("issue = %+v", issue)
 	}
 }
+
+// TestGatewayIdentityMustBeExact: with certificate or EAP authentication
+// charon accepts any certificate matching the gateway identity, so forms
+// it reads as ID_ANY, wildcards, subnets and ranges are refused there.
+func TestGatewayIdentityMustBeExact(t *testing.T) {
+	pki := newTestPKI(t)
+	tests := []struct {
+		id       string
+		wantCode string
+	}{
+		{id: "vpn.example.com"},
+		{id: "vpn-gw.example.com"},
+		{id: "198.51.100.7"},
+		{id: "2001:db8::1"},
+		{id: "CN=vpn.example.com, O=Example"},
+		{id: "admin@example.com"},
+		{id: "fqdn:vpn.example.com"},
+		{id: "*", wantCode: "ipsec_identity_wildcard"},
+		{id: "0.0.0.0", wantCode: "ipsec_identity_wildcard"},
+		{id: "::", wantCode: "ipsec_identity_wildcard"},
+		{id: "0::0", wantCode: "ipsec_identity_wildcard"},
+		{id: "%any", wantCode: "ipsec_identity_invalid"},
+		{id: "%any6", wantCode: "ipsec_identity_invalid"},
+		{id: "CN=*", wantCode: "ipsec_identity_wildcard"},
+		{id: "C=DE, O=Example, CN=*", wantCode: "ipsec_identity_wildcard"},
+		{id: "*.example.com", wantCode: "ipsec_identity_wildcard"},
+		{id: "@*.example.com", wantCode: "ipsec_identity_wildcard"},
+		{id: "*@example.com", wantCode: "ipsec_identity_wildcard"},
+		{id: "198.51.100.0/24", wantCode: "ipsec_identity_wildcard"},
+		{id: "0.0.0.0/0", wantCode: "ipsec_identity_wildcard"},
+		{id: "198.51.100.1-198.51.100.9", wantCode: "ipsec_identity_wildcard"},
+		{id: "ipv4net:198.51.100.0/24", wantCode: "ipsec_identity_wildcard"},
+		{id: "IPv4Range:198.51.100.1-198.51.100.9", wantCode: "ipsec_identity_wildcard"},
+		{id: "2001:db8::/32", wantCode: "ipsec_identity_wildcard"},
+		{id: "{0}:vpn.example.com", wantCode: "ipsec_identity_wildcard"},
+		{id: "{2}:vpn.example.com", wantCode: "ipsec_identity_wildcard"},
+		{id: "fqdn:*.example.com", wantCode: "ipsec_identity_wildcard"},
+	}
+	for _, method := range []string{"certificate", "eapMschapv2"} {
+		for _, tt := range tests {
+			t.Run(method+" "+tt.id, func(t *testing.T) {
+				p := profileWith(map[string]any{
+					KeyGateway: "vpn.example.com", KeyAuthMethod: method, KeyCACert: pki.caPEM, KeyRemoteID: tt.id,
+					KeyClientCert: pki.clientPEM, KeyUsername: "alice",
+				}, map[string]string{SecretClientKey: pki.keyPEM, SecretEAPPassword: "pw"})
+				if got := issueCodes(t, Validate(p))[KeyRemoteID]; got != tt.wantCode {
+					t.Errorf("code = %q, want %q", got, tt.wantCode)
+				}
+			})
+		}
+	}
+}
+
+// TestPSKGatewayIdentityMayBeOpen: with a pre-shared key the key itself
+// authenticates the gateway, so only %-forms are refused.
+func TestPSKGatewayIdentityMayBeOpen(t *testing.T) {
+	for id, want := range map[string]string{"*.example.com": "", "0.0.0.0": "", "%any": "ipsec_identity_invalid"} {
+		p := profileWith(map[string]any{KeyGateway: "vpn.example.com", KeyRemoteID: id}, map[string]string{SecretPSK: testPSK})
+		if got := issueCodes(t, Validate(p))[KeyRemoteID]; got != want {
+			t.Errorf("%q: code = %q, want %q", id, got, want)
+		}
+	}
+}

@@ -26,8 +26,9 @@ type Process interface {
 	Kill() error
 }
 
-// ProcessStarter starts child processes with env added to the
-// environment.
+// ProcessStarter starts child processes with env as their whole
+// environment: nothing of TunnelDeck's own environment, such as
+// TUNNELDECK_SECRET_KEY, reaches them.
 type ProcessStarter interface {
 	Start(name string, env []string, args ...string) (Process, error)
 }
@@ -60,7 +61,8 @@ type LANSource func(ctx context.Context) ([]netip.Prefix, error)
 // driver.
 type execStarter struct{}
 
-// Start runs name with args. stdout and stderr share one pipe so charon's
+// Start runs name with args and only env (never nil, which would pass on
+// TunnelDeck's environment). stdout and stderr share one pipe so charon's
 // log arrives in order.
 func (execStarter) Start(name string, env []string, args ...string) (Process, error) {
 	reader, writer, err := os.Pipe()
@@ -68,7 +70,7 @@ func (execStarter) Start(name string, env []string, args ...string) (Process, er
 		return nil, fmt.Errorf("start %s: create output pipe: %w", name, err)
 	}
 	cmd := exec.Command(name, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append([]string{}, env...)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
 	configureCommand(cmd)

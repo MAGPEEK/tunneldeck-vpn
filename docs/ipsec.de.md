@@ -25,7 +25,7 @@ TunnelDeck-VPN verbindet sich per IPsec mit Firmen- und Router-Gateways: standar
 | Lokale Identität | Die Identität, die diese Seite sendet (FQDN, IP-Adresse, E-Mail oder DN). Leer: der Inhaber des Zertifikats, der EAP-Benutzername bzw. bei Pre-shared Key die eigene IP-Adresse. |
 | Identität des Gateways | Bei Zertifikat und EAP Pflicht: Sie muss zum Subject Alternative Name des Gateway-Zertifikats passen. Bei Pre-shared Key darf sie leer bleiben; dann wird jede Identität des Gateways angenommen. |
 | CA-Zertifikat des Gateways | Bei Zertifikat und EAP Pflicht; der CA-Speicher des Systems wird nicht verwendet. |
-| IKE- und ESP-Proposals | strongSwan-Schreibweise, ein Proposal pro Zeile. Leer bedeutet die Vorgaben nach RFC 8247/8221: AES-GCM und AES-CBC mit SHA-2, Curve25519, ECP-384/256, MODP-3072/2048, ESP mit Perfect Forward Secrecy. |
+| IKE- und ESP-Proposals | strongSwan-Schreibweise, ein Proposal pro Zeile. Leer bedeutet die Vorgaben nach RFC 8247/8221: AES-GCM und AES-CBC mit SHA-2, Curve25519, ECP-384/256, MODP-3072/2048, ESP mit Perfect Forward Secrecy und, für Gateways ohne, denselben Proposals ohne. |
 
 Traffic-Selektoren: Das Gateway darf die angeforderten Subnetze einschränken; TunnelDeck-VPN akzeptiert das. Deckt kein ausgehandeltes entferntes Subnetz `0.0.0.0/0` ab (etwa bei der FRITZ!Box, die nur ihr LAN anbietet), transportiert der Tunnel keinen Internetverkehr, und TunnelDeck-VPN ermittelt keine öffentliche IP über ihn (SPEC §6.1): Das Dashboard zeigt keine öffentliche IP, das Protokoll nennt den Grund.
 

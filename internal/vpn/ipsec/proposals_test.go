@@ -83,15 +83,36 @@ func TestDefaultsAndTemplatesAreValid(t *testing.T) {
 	}
 }
 
-// assertCleanProposals: every proposal of list is accepted for use, raises
-// no advisory and has a key exchange.
+// assertCleanProposals: every proposal of list is accepted for use and
+// raises no advisory; the preferred one has a key exchange, and none with
+// a key exchange follows one without.
 func assertCleanProposals(t *testing.T, name string, use proposalUse, list []string) {
 	t.Helper()
-	for _, text := range list {
+	withoutPFS := false
+	for i, text := range list {
 		p, problem := parseProposal(text, use)
-		if problem.code != "" || len(p.advisories) > 0 || !p.keyExchange {
+		misordered := (i == 0 && !p.keyExchange) || (withoutPFS && p.keyExchange)
+		if problem.code != "" || len(p.advisories) > 0 || misordered {
 			t.Errorf("%s: %q = %+v, %+v", name, text, p, problem)
 		}
+		withoutPFS = withoutPFS || !p.keyExchange
+	}
+}
+
+// TestESPDefaultsFallBackToNoPFS: IKEv2 creates the first CHILD_SA without
+// a key exchange, so a gateway without PFS would refuse only the first
+// rekey; the defaults end with the same proposals without one. IKEv1
+// negotiates PFS with the first CHILD_SA, where a mismatch shows at once.
+func TestESPDefaultsFallBackToNoPFS(t *testing.T) {
+	half := len(DefaultESPProposals) / 2
+	for i, withPFS := range DefaultESPProposals[:half] {
+		without := DefaultESPProposals[half+i]
+		if p, _ := parseProposal(without, forESP); p.keyExchange || !strings.HasPrefix(withPFS, without+"-") {
+			t.Errorf("fallback %q does not match %q", without, withPFS)
+		}
+	}
+	if got := Advise(profileWith(map[string]any{KeyESPProposals: DefaultESPProposals}, nil).Public()); len(got) != 0 {
+		t.Errorf("the defaults raise %+v", got)
 	}
 }
 

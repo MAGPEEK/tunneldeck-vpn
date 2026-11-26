@@ -48,6 +48,9 @@ type Guard struct {
 	// their own addresses; TUNNELDECK-POSTROUTING does not masquerade
 	// their traffic into the tunnel.
 	localNetworks []netip.Prefix
+	// localNetworksStale is set after a failed refill of the chains with
+	// other local networks, which may have changed some of them.
+	localNetworksStale bool
 }
 
 type installation struct {

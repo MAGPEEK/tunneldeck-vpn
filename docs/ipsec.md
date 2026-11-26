@@ -25,7 +25,7 @@ TunnelDeck-VPN connects to company and router gateways over IPsec: IKEv2 by defa
 | Local identity | The identity this side sends (FQDN, IP address, email or DN). Empty: the certificate's subject, the EAP username, or the own IP address with a pre-shared key. |
 | Gateway identity | Required with certificate and EAP: it must match the gateway certificate's subject alternative name. With a pre-shared key it may stay empty, then any gateway identity is accepted. |
 | CA certificate of the gateway | Required with certificate and EAP; the system CA store is not used. |
-| IKE and ESP proposals | strongSwan syntax, one proposal per line. Empty means the RFC 8247/8221 defaults: AES-GCM and AES-CBC with SHA-2, Curve25519, ECP-384/256, MODP-3072/2048, ESP with perfect forward secrecy. |
+| IKE and ESP proposals | strongSwan syntax, one proposal per line. Empty means the RFC 8247/8221 defaults: AES-GCM and AES-CBC with SHA-2, Curve25519, ECP-384/256, MODP-3072/2048, ESP with perfect forward secrecy and, for gateways without it, the same proposals without. |
 
 Traffic selectors: the gateway may narrow the requested subnets; TunnelDeck-VPN accepts that. If no negotiated remote subnet covers `0.0.0.0/0` (for example the FRITZ!Box, which offers only its LAN), the tunnel does not carry internet traffic, so TunnelDeck-VPN does not detect a public IP through it (SPEC §6.1): the dashboard shows no public IP and the log says why.
 

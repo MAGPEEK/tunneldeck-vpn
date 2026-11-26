@@ -116,3 +116,36 @@ func TestVICIClientTimeoutClosesTheConnection(t *testing.T) {
 		t.Error("the connection stayed open")
 	}
 }
+
+// TestVICIClientDropsUnrequestedReplies: replies nobody asked for neither
+// block the reader nor answer the next request.
+func TestVICIClientDropsUnrequestedReplies(t *testing.T) {
+	client, server := net.Pipe()
+	alerts := make(chan string, 1)
+	c := newVICIClient(client, func(_ string, m *message) { alerts <- m.get("type") })
+	defer c.close()
+	go func() {
+		for _, p := range []packet{
+			{kind: packetCmdResponse, message: newMessage().set("answer", "stale")},
+			{kind: packetCmdResponse, message: newMessage().set("answer", "stale")},
+			{kind: packetEvent, name: "alert", message: newMessage().set("type", "after-the-replies")},
+		} {
+			_ = writePacket(server, p)
+		}
+		if _, err := readPacket(server); err == nil {
+			_ = writePacket(server, packet{kind: packetCmdResponse, message: newMessage().set("answer", "fresh")})
+		}
+	}()
+	select {
+	case got := <-alerts:
+		if got != "after-the-replies" {
+			t.Fatalf("alert = %q", got)
+		}
+	case <-time.After(waitLimit):
+		t.Fatal("the unrequested replies blocked the reader")
+	}
+	reply, err := c.command(context.Background(), "version", newMessage())
+	if err != nil || reply.get("answer") != "fresh" {
+		t.Errorf("reply = %v, %v; want the fresh one", reply, err)
+	}
+}

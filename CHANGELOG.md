@@ -15,6 +15,15 @@ All notable changes to this project are documented in this file. The format foll
 
 - IPsec: a tunnel that carries only the networks behind the gateway (no negotiated remote subnet covers `0.0.0.0/0`, as with the FRITZ!Box user access) no longer tries to detect the public IP through the tunnel and logs a warning on every connect; the log says once that the public IP is not detected, and none is shown.
 - IPsec: profiles with certificate or EAP sign-in no longer fail with "the gateway's certificate could not be validated" when the gateway certificate has no reachable CRL or OCSP service; such a certificate is accepted as SPEC §19.1 (relaxed revocation) intends, and certificate problems are reported only when the gateway's authentication really fails.
+- IPsec: IKEv1 tunnels (FRITZ!Box user access) no longer show "reconnecting" every 4 hours when charon reauthenticates; the tunnel stays connected on the new IKE SA. An error message names a certificate problem only when it belongs to the failed attempt, not to an earlier retry.
+- IPsec: the default ESP proposals add proposals without perfect forward secrecy after those with it, so a gateway without PFS no longer drops the tunnel at the first rekey after about an hour; the "no perfect forward secrecy" advisory appears only when none of the ESP proposals has it.
+- Net-to-net tunnels: when updating the masquerade exemptions for the local subnets fails, the next connect or disconnect tries again instead of leaving missing or stale exemptions behind.
+- IPsec: the control connection to charon drops replies nobody asked for instead of hanging.
+
+### Security
+
+- IPsec: with certificate or EAP sign-in the gateway identity must name exactly one gateway; forms that strongSwan reads as "any" (`*`, `0.0.0.0`, `::`, `0::0`, `{0}:`), wildcards such as `CN=*` or `*.example.com`, subnets and address ranges are refused, because any certificate from the CA matching them would have been accepted.
+- IPsec: charon no longer runs as root: after setting up its tunnel device and sockets it drops to the unprivileged user `ipsec` and keeps only `CAP_NET_ADMIN`. It is started with only its configuration path in its environment, so it no longer sees `TUNNELDECK_SECRET_KEY` or other TunnelDeck variables.
 
 ## [0.3.0] - 2026-11-26
 

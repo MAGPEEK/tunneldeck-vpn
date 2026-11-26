@@ -238,7 +238,7 @@
     "ipsec_3des": "3DES ist veraltet. Verwenden Sie AES-GCM oder AES-CBC, wenn das Gateway sie unterstützt.",
     "ipsec_sha1": "SHA-1 ist veraltet. Verwenden Sie SHA-256 oder stärker, wenn das Gateway es unterstützt.",
     "ipsec_weak_dh_group": "Die Gruppe des Schlüsselaustauschs ist schwach (MODP-1024/1536 oder Gruppen 22 bis 24). Verwenden Sie Curve25519, ECP-256 oder MODP-2048 und stärker, wenn das Gateway sie unterstützt.",
-    "ipsec_no_pfs": "Ein ESP-Proposal hat keine Gruppe für den Schlüsselaustausch, erneuerte Schlüssel haben daher keine Perfect Forward Secrecy.",
+    "ipsec_no_pfs": "Kein ESP-Proposal hat eine Gruppe für den Schlüsselaustausch, erneuerte Schlüssel haben daher keine Perfect Forward Secrecy.",
     "ipsec_short_psk": "Der Pre-shared Key ist kürzer als 20 Zeichen. Verwenden Sie einen langen zufälligen Schlüssel (RFC 7296 §2.15).",
     "ipsec_eap_mschapv2": "EAP-MSCHAPv2 ist schwach und kein IETF-Standard. Verwenden Sie besser ein Zertifikat, wenn das Gateway es unterstützt.",
     "ikev1_aggressive": "IKEv1 ist veraltet (RFC 9395). Der Aggressive Mode überträgt die Identität unverschlüsselt und erlaubt einem Mithörer, den Pre-shared Key offline zu erraten. Verwenden Sie IKEv2, wenn das Gateway es anbietet; auf einer FRITZ!Box ab FRITZ!OS 7.50 besser WireGuard."
@@ -883,7 +883,8 @@
     "ipsec_pkcs12_with_client_cert": "Kann nicht mit Client-Zertifikat und Schlüssel kombiniert werden; verwenden Sie eines von beiden.",
     "ipsec_client_credentials_required": "Erforderlich, wenn keine PKCS#12-Datei angegeben ist.",
     "local_network_invalid": "Eintrag {{entry}} der lokalen Subnetze muss ein IPv4-Netz sein, das nicht alle Adressen umfasst.",
-    "vpn_address_with_local_networks": "Ein Tunnel, der lokale Subnetze überträgt, hat keine eigene VPN-Adresse."
+    "vpn_address_with_local_networks": "Ein Tunnel, der lokale Subnetze überträgt, hat keine eigene VPN-Adresse.",
+    "ipsec_identity_wildcard": "Geben Sie das Gateway genau so an wie in seinem Zertifikat: ohne Platzhalter (*), ohne 0.0.0.0 oder ::, ohne Subnetz oder Adressbereich."
   },
   "uptime": {
     "months_one": "{{count}} Monat",

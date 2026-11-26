@@ -19,10 +19,14 @@ var (
 	}
 	// DefaultESPProposals follow RFC 8221: AES-GCM-16 and
 	// ChaCha20-Poly1305, AES-CBC with HMAC-SHA2-256-128 as the fallback,
-	// each with key exchanges for perfect forward secrecy on rekeying.
+	// each with key exchanges for perfect forward secrecy on rekeying, then
+	// the same without: IKEv2 creates the first CHILD_SA without a key
+	// exchange, so a gateway without PFS would refuse only the first rekey.
 	DefaultESPProposals = []string{
 		"aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048",
 		"aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048",
+		"aes256gcm16-aes128gcm16-chacha20poly1305",
+		"aes256-aes128-sha256",
 	}
 	// DefaultIKEv1Proposals and DefaultIKEv1ESPProposals serve the IKEv1
 	// fallback: IKEv1 has no AEAD in phase 1 (RFC 2409) and no Curve25519

@@ -129,16 +129,30 @@ func hostAddressIn(lan []lanAddress, networks []netip.Prefix) (netip.Addr, bool)
 // carryLocalNetworks remembers the local networks of the tunnel and, when
 // they changed and the firewall is installed, refills the chains: only
 // TUNNELDECK-POSTROUTING's content depends on them, and installChain leaves
-// every unchanged chain untouched. The caller holds g.mu; lan are the
-// host's LAN addresses, detected here when not given.
+// every unchanged chain untouched. They are remembered only once the chains
+// hold them; after a failed refill the chains are refilled on the next
+// call whatever it carries, as the refill may have changed some of them.
+// The caller holds g.mu; lan are the host's LAN addresses, detected here
+// when not given.
 func (g *Guard) carryLocalNetworks(ctx context.Context, localNetworks []netip.Prefix, lan []lanAddress) error {
-	if slices.Equal(g.localNetworks, localNetworks) {
+	if slices.Equal(g.localNetworks, localNetworks) && !g.localNetworksStale {
 		return nil
 	}
-	g.localNetworks = slices.Clone(localNetworks)
 	if g.installed == nil {
+		g.localNetworks, g.localNetworksStale = slices.Clone(localNetworks), false
 		return nil
 	}
+	if err := g.installLocalNetworks(ctx, localNetworks, lan); err != nil {
+		g.localNetworksStale = true
+		return err
+	}
+	g.localNetworks, g.localNetworksStale = slices.Clone(localNetworks), false
+	return nil
+}
+
+// installLocalNetworks refills the chains of the installed firewall with
+// localNetworks.
+func (g *Guard) installLocalNetworks(ctx context.Context, localNetworks []netip.Prefix, lan []lanAddress) error {
 	if lan == nil {
 		detected, err := g.detectLAN(ctx)
 		if err != nil {
@@ -151,7 +165,7 @@ func (g *Guard) carryLocalNetworks(ctx context.Context, localNetworks []netip.Pr
 		return err
 	}
 	reserved := hostPorts{ui: g.installed.uiPort, remoteAccess: g.remoteAccessPort}
-	return g.installRuleset(ctx, buildRuleset(g.installed.firewall, reserved, lan, caps, g.localNetworks), caps)
+	return g.installRuleset(ctx, buildRuleset(g.installed.firewall, reserved, lan, caps, localNetworks), caps)
 }
 
 // routeVPNReplies leaves exactly one rule "from vpnIP" at priority 7194, or

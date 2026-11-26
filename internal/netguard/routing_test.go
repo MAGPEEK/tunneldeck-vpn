@@ -285,6 +285,61 @@ func TestLocalNetworksAreNotMasqueraded(t *testing.T) {
 	}
 }
 
+// TestLocalNetworksAreRetriedAfterAFailedInstall: local networks count as
+// carried only once TUNNELDECK-POSTROUTING holds them, so a failed refill
+// is repeated by the next routing or clearing instead of leaving a missing
+// or stale exemption behind.
+func TestLocalNetworksAreRetriedAfterAFailedInstall(t *testing.T) {
+	const (
+		exempt = natPrefix + "-A TUNNELDECK-POSTROUTING -o tdvpn0 -s 192.168.2.0/24 -m comment --comment tdfixed:local-network -j RETURN"
+		remove = natPrefix + "-D TUNNELDECK-POSTROUTING 1"
+	)
+	route := func(g *Guard) error {
+		return g.RouteThroughTunnel(context.Background(), netip.Addr{}, nil, localNetwork)
+	}
+	tests := []struct {
+		name string
+		// failing fails the first refill; it starts with postrouting rules
+		// in TUNNELDECK-POSTROUTING and the local networks carried when set.
+		failing     string
+		postrouting int
+		carried     bool
+		first, then func(*Guard) error
+		want        string
+	}{
+		{name: "routing", failing: exempt, first: route, then: route, want: exempt},
+		{name: "clearing", failing: remove, postrouting: 1, carried: true, first: clearTunnelRouting, then: clearTunnelRouting, want: remove},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRunner()
+			g := installedGuard(t, f)
+			if tt.carried {
+				scriptState(f, installedState{input: 1, forward: 1})
+				f.on(ruleShow, ok(defaultRules))
+				if err := route(g); err != nil {
+					t.Fatalf("RouteThroughTunnel: %v", err)
+				}
+			}
+			scriptState(f, installedState{input: 1, forward: 1, postrouting: tt.postrouting})
+			f.on(ruleShow, ok(defaultRules)).on(tt.failing, fail("iptables: Resource temporarily unavailable."))
+			if err := tt.first(g); err == nil {
+				t.Fatal("the failed refill was not reported")
+			}
+			f.takeCalls()
+
+			scriptState(f, installedState{input: 1, forward: 1, postrouting: tt.postrouting})
+			f.on(ruleShow, ok(defaultRules))
+			if err := tt.then(g); err != nil {
+				t.Fatalf("retry: %v", err)
+			}
+			if calls := f.takeCalls(); !slices.Contains(calls, tt.want) {
+				t.Errorf("the retry did not repeat %q:\n  %s", tt.want, strings.Join(calls, "\n  "))
+			}
+		})
+	}
+}
+
 func TestPostroutingExemptsLocalNetworksFirst(t *testing.T) {
 	rules := []parsedRule{parseRule(domain.FirewallRule{
 		ID: "o", Direction: domain.DirectionOutbound, Action: domain.ActionAccept, Protocol: domain.ProtocolAny,

@@ -423,18 +423,23 @@ func (p *entryProblems) report(errs *domain.ValidationError, key string) {
 
 // identity reads an IKE identity (RFC 7296 §3.5): a host name, an IP
 // address, an email address or a distinguished name, which charon tells
-// apart by their form. required is set for the gateway's identity with
-// certificate or EAP authentication (SPEC §19.1, RFC 7296 §2.16).
-func (r settingsReader) identity(key string, required bool) string {
+// apart by their form. gateway is set for the gateway's identity with
+// certificate or EAP authentication (SPEC §19.1, RFC 7296 §2.16): it is
+// required and must name the gateway exactly, because charon accepts any
+// certificate that matches it.
+func (r settingsReader) identity(key string, gateway bool) string {
 	id := r.str(key)
 	switch {
-	case id == "" && required:
+	case id == "" && gateway:
 		r.errs.AddIssue(key, domain.Issue("required"),
 			"is required with certificate or EAP authentication: the gateway's certificate must contain it")
 	case id == "":
 	case !isIdentity(id):
 		r.errs.AddIssue(key, domain.Issue("ipsec_identity_invalid"),
 			"must be a host name, an IP address, an email address or a distinguished name such as CN=vpn.example.com")
+	case gateway && matchesMany(id):
+		r.errs.AddIssue(key, domain.Issue("ipsec_identity_wildcard"),
+			"must name the gateway exactly: no wildcard (*), no 0.0.0.0 or ::, no subnet, address range or numeric type ({n}:)")
 	}
 	return id
 }
@@ -613,4 +618,38 @@ func (r settingsReader) xauth(c *profileConfig) {
 		r.errs.AddIssue(KeyXAuthUsername, domain.Issue("ipsec_identity_invalid"), "must be printable text without surrounding spaces")
 	}
 	c.xauthUser, c.xauthPassword = name, r.secret(SecretXAuthPassword)
+}
+
+// identityRangePrefixes are the type prefixes with which charon reads an
+// identity as an IP subnet or range.
+var identityRangePrefixes = []string{"ipv4net:", "ipv6net:", "ipv4range:", "ipv6range:"}
+
+// identityAnyForms are the strings charon reads as ID_ANY besides %any
+// (identification_create_from_string, strongSwan 6.0.7).
+var identityAnyForms = []string{"*", "0.0.0.0", "::", "0::0"}
+
+// matchesMany reports whether charon would read id as an identity that
+// matches more than one peer: ID_ANY, a "*" wildcard in a host name, email
+// address or distinguished name, or an IP subnet or address range. The
+// numeric type form "{n}:value" is refused as a whole: "{0}:" is ID_ANY,
+// and its raw value cannot be checked.
+func matchesMany(id string) bool {
+	lower := strings.ToLower(id)
+	switch {
+	case strings.Contains(id, "*") || slices.Contains(identityAnyForms, id):
+		return true
+	case strings.HasPrefix(id, "{") && strings.Contains(id, "}:"):
+		return true
+	case slices.ContainsFunc(identityRangePrefixes, func(p string) bool { return strings.HasPrefix(lower, p) }):
+		return true
+	case strings.ContainsAny(id, "=@"):
+		return false
+	}
+	if _, err := netip.ParsePrefix(id); err == nil {
+		return true
+	}
+	from, to, isRange := strings.Cut(id, "-")
+	_, fromErr := netip.ParseAddr(from)
+	_, toErr := netip.ParseAddr(to)
+	return isRange && fromErr == nil && toErr == nil
 }

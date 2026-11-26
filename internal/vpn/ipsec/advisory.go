@@ -28,8 +28,10 @@ var severities = map[string]vpn.AdvisorySeverity{
 }
 
 // Advise returns the advisories of p's settings: the IKEv1 fallback, weak
-// algorithms in the effective IKE and ESP proposals, ESP proposals without
-// perfect forward secrecy and EAP-MSCHAPv2. Invalid proposals are left to
+// algorithms in the effective IKE and ESP proposals, ESP proposals none of
+// which has perfect forward secrecy and EAP-MSCHAPv2. A list with PFS
+// proposals may end with proposals without, as the defaults do, for
+// gateways without PFS (SPEC §19.2). Invalid proposals are left to
 // Validate.
 func Advise(p domain.PublicProfile) []vpn.Advisory {
 	var out []vpn.Advisory
@@ -50,13 +52,14 @@ func Advise(p domain.PublicProfile) []vpn.Advisory {
 			add(code, KeyIKEProposals)
 		}
 	}
-	for _, p := range proposalsOf(p.Settings, KeyESPProposals, forESP, esp) {
+	espProposals := proposalsOf(p.Settings, KeyESPProposals, forESP, esp)
+	for _, p := range espProposals {
 		for _, code := range p.advisories {
 			add(code, KeyESPProposals)
 		}
-		if !p.keyExchange {
-			add(AdvisoryNoPFS, KeyESPProposals)
-		}
+	}
+	if len(espProposals) > 0 && !slices.ContainsFunc(espProposals, func(p proposal) bool { return p.keyExchange }) {
+		add(AdvisoryNoPFS, KeyESPProposals)
 	}
 	if method, _ := p.Settings.String(KeyAuthMethod); AuthMethod(method) == AuthEAPMSCHAPv2 {
 		add(AdvisoryEAPMSCHAPv2, KeyAuthMethod)

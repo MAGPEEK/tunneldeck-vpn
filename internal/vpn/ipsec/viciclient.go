@@ -11,13 +11,17 @@ import (
 // viciClient talks to charon over one VICI connection. Requests are
 // serialised: charon answers them in order. Events are read by their own
 // goroutine and handed to onEvent, which must return quickly; the events
-// of a streamed command go to that command instead.
+// of a streamed command go to that command instead. A reply nobody waits
+// for is dropped, so it can neither block the reader nor answer a later
+// request.
 type viciClient struct {
 	conn    io.ReadWriteCloser
 	onEvent func(name string, m *message)
 
 	mu      sync.Mutex // one request at a time
 	replies chan packet
+	replyMu sync.Mutex
+	waiting bool          // a request waits for its reply; guarded by replyMu
 	closed  chan struct{} // closed when the reader has ended
 	readErr error         // valid once closed is closed
 
@@ -50,13 +54,32 @@ func (c *viciClient) read() {
 			return
 		}
 		if p.kind != packetEvent {
-			c.replies <- p
+			c.deliver(p)
 			continue
 		}
 		if !c.collect(p) {
 			c.onEvent(p.name, p.message)
 		}
 	}
+}
+
+// deliver hands the reply p to the waiting request and drops it when none
+// waits. replies holds one packet and only one request waits, so this
+// never blocks.
+func (c *viciClient) deliver(p packet) {
+	c.replyMu.Lock()
+	defer c.replyMu.Unlock()
+	if c.waiting {
+		c.waiting = false
+		c.replies <- p
+	}
+}
+
+// expectReply sets whether a request waits for its reply.
+func (c *viciClient) expectReply(waiting bool) {
+	c.replyMu.Lock()
+	defer c.replyMu.Unlock()
+	c.waiting = waiting
 }
 
 // collect keeps p for the streamed command under way and reports whether
@@ -76,6 +99,8 @@ func (c *viciClient) collect(p packet) bool {
 func (c *viciClient) call(ctx context.Context, kind byte, name string, m *message) (packet, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.expectReply(true)
+	defer c.expectReply(false)
 	if err := writePacket(c.conn, packet{kind: kind, name: name, message: m}); err != nil {
 		return packet{}, err
 	}

@@ -11,6 +11,7 @@ import (
 // ike-updown and child-updown messages.
 type ikeSA struct {
 	name       string
+	uniqueID   string
 	state      string
 	remoteHost string
 	remotePort string
@@ -82,7 +83,7 @@ func parseIKESAs(m *message) []ikeSA {
 
 func parseIKESA(name string, m *message) ikeSA {
 	sa := ikeSA{
-		name: name, state: m.get("state"),
+		name: name, uniqueID: m.get("uniqueid"), state: m.get("state"),
 		remoteHost: m.get("remote-host"), remotePort: m.get("remote-port"),
 		localVIPs: m.items("local-vips"), transforms: parseTransforms(m), prf: m.get("prf-alg"),
 		version: m.get("version"),

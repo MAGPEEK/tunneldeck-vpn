@@ -45,6 +45,7 @@ func TestDriverConnectsAndReconnects(t *testing.T) {
 		t.Errorf("traffic = %+v", traffic)
 	}
 
+	h.charon.setSAs()
 	h.charon.send("ike-updown", updown(false, saMessage(stateEstablished, "10.10.10.5", "", "", "")))
 	if down := h.waitState(domain.StateReconnecting); down.Message != "the IKE SA with the gateway went down" {
 		t.Errorf("reconnecting = %+v", down)
@@ -442,6 +443,84 @@ func TestDriverCertificateAlerts(t *testing.T) {
 			e := h.waitState(domain.StateError)
 			if e.Code != domain.ErrorCodeAuthFailed || !strings.HasPrefix(e.Message, tt.wantMessage) {
 				t.Errorf("error = %+v, want auth_failed starting with %q", e, tt.wantMessage)
+			}
+		})
+	}
+}
+
+// TestDriverFollowsAReauthenticatedIKESA: IKEv1 reauthenticates
+// make-before-break and moves the CHILD_SA to the new IKE SA before the old
+// one goes down, so the tunnel stays connected. A new IKE SA with another
+// virtual IP takes it through reconnecting to the new address.
+func TestDriverFollowsAReauthenticatedIKESA(t *testing.T) {
+	h := newHarness(t)
+	h.initiated(profileWith(map[string]any{
+		KeyGateway: "office.example.net", KeyIKEVersion: "ikev1", KeyXAuthUsername: "alice",
+	}, map[string]string{SecretPSK: testPSK, SecretXAuthPassword: "xauth-password"}))
+	h.charon.send("child-updown", updown(true, ikeSAMessage("1", "10.10.10.5", "1")))
+	h.waitState(domain.StateConnected)
+
+	h.charon.setSAs(ikeSAMessage("2", "10.10.10.5", "1"))
+	h.charon.send("ike-updown", updown(false, ikeSAMessage("1", "10.10.10.5", "")))
+	h.waitEvent(func(e domain.Event) bool {
+		l, ok := e.(domain.LogEvent)
+		return ok && l.Text == "the IPsec tunnel moved to a new IKE SA"
+	})
+
+	h.charon.setSAs(ikeSAMessage("3", "10.10.10.9", "2"))
+	h.charon.send("ike-updown", updown(false, ikeSAMessage("2", "10.10.10.5", "")))
+	h.waitState(domain.StateReconnecting)
+	if up := h.waitState(domain.StateConnected); up.VPNIP != "10.10.10.9" {
+		t.Errorf("connected = %+v, want the new virtual IP", up)
+	}
+	if got := h.runner.recorded(); !slices.Contains(got, "ip address del 10.10.10.5/32 dev tdvpn0") ||
+		!slices.Contains(got, "ip address add 10.10.10.9/32 dev tdvpn0") {
+		t.Errorf("address commands = %v", got)
+	}
+	h.stop()
+	h.waitState(domain.StateDisconnected)
+}
+
+// TestDriverLosesTheIKESAThatWentDown: an IKE SA that went down carries
+// nothing, even when charon still lists it.
+func TestDriverLosesTheIKESAThatWentDown(t *testing.T) {
+	h := newHarness(t)
+	h.initiated(pskProfile())
+	h.charon.send("child-updown", updown(true, ikeSAMessage("1", "10.10.10.5", "1")))
+	h.waitState(domain.StateConnected)
+
+	h.charon.setSAs(ikeSAMessage("1", "10.10.10.5", "1"))
+	h.charon.send("ike-updown", updown(false, ikeSAMessage("1", "10.10.10.5", "")))
+	if down := h.waitState(domain.StateReconnecting); down.Message != "the IKE SA with the gateway went down" {
+		t.Errorf("reconnecting = %+v", down)
+	}
+}
+
+// TestDriverCertificateProblemsBelongToTheirIKESA: charon retries with a
+// new IKE SA, so a certificate problem of an earlier one explains nothing.
+func TestDriverCertificateProblemsBelongToTheirIKESA(t *testing.T) {
+	alert := func(kind, ikeID string) *message {
+		m := newMessage().set("type", kind)
+		m.setSection("ike-sa").setSection(connName).set("uniqueid", ikeID)
+		return m
+	}
+	tests := []struct {
+		name        string
+		problemSA   string
+		failedSA    string
+		wantMessage string
+	}{
+		{name: "same IKE SA", problemSA: "1", failedSA: "1", wantMessage: "the gateway's certificate has expired"},
+		{name: "a later IKE SA", problemSA: "1", failedSA: "2", wantMessage: "the gateway could not be authenticated"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.initiated(pskProfile())
+			h.charon.send("alert", alert("cert-expired", tt.problemSA))
+			h.charon.send("alert", alert(peerAuthFailed, tt.failedSA))
+			if e := h.waitState(domain.StateError); !strings.HasPrefix(e.Message, tt.wantMessage) {
+				t.Errorf("error = %+v, want %q", e, tt.wantMessage)
 			}
 		})
 	}

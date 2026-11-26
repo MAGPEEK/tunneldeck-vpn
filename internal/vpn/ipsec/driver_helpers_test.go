@@ -412,6 +412,14 @@ func saMessage(state, vip string, childID string, bytesIn, bytesOut string) *mes
 	return m
 }
 
+// ikeSAMessage is the established IKE SA with the unique ID ikeID, with
+// one installed CHILD_SA unless childID is "".
+func ikeSAMessage(ikeID, vip, childID string) *message {
+	m := saMessage(stateEstablished, vip, childID, "0", "0")
+	m.section(connName).set("uniqueid", ikeID)
+	return m
+}
+
 // updown is a child-updown or ike-updown event for sa.
 func updown(up bool, sa *message) *message {
 	m := newMessage()

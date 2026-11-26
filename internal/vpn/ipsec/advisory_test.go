@@ -28,8 +28,16 @@ func TestAdvise(t *testing.T) {
 				{Code: AdvisoryMODP768, Severity: vpn.AdvisoryDanger, Field: KeyIKEProposals},
 				{Code: Advisory3DES, Severity: vpn.AdvisoryWarning, Field: KeyESPProposals},
 				{Code: AdvisorySHA1, Severity: vpn.AdvisoryWarning, Field: KeyESPProposals},
-				{Code: AdvisoryNoPFS, Severity: vpn.AdvisoryWarning, Field: KeyESPProposals},
 			},
+		},
+		{
+			name:     "no proposal with PFS",
+			settings: map[string]any{KeyESPProposals: []string{"aes256gcm16", "aes256-sha256"}},
+			want:     []vpn.Advisory{{Code: AdvisoryNoPFS, Severity: vpn.AdvisoryWarning, Field: KeyESPProposals}},
+		},
+		{
+			name:     "PFS with a fallback without",
+			settings: map[string]any{KeyESPProposals: []string{"aes256gcm16-ecp256", "aes256gcm16"}},
 		},
 		{
 			name:     "DES in IKE",

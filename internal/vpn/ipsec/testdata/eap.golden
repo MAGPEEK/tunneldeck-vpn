@@ -25,7 +25,7 @@ tunneldeck {
     tunneldeck {
       local_ts = [dynamic]
       remote_ts = [0.0.0.0/0]
-      esp_proposals = [aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048, aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048]
+      esp_proposals = [aes256gcm16-aes128gcm16-chacha20poly1305-curve25519-ecp256-modp3072-modp2048, aes256-aes128-sha256-curve25519-ecp256-modp3072-modp2048, aes256gcm16-aes128gcm16-chacha20poly1305, aes256-aes128-sha256]
       rekey_time = 1h
       dpd_action = restart
       close_action = start
