@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-26
+
 ### Changed
 
 - Dashboard: Connect, Reconnect and Disconnect sit at the bottom of "Connection details". The "Remote access on" pill is gone; the remote access row shows only its state and port, without the URL. The "VPN address" row shows "VPN IP" and below it "Public IP" (the public address of the profile) instead of the server address, which the connection line already shows.
