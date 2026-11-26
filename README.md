@@ -6,11 +6,12 @@
 
 ## What it does
 
-- **Manage VPN profiles in the browser**: create them in a form or import an `.ovpn` file. Several profiles can be stored; one is active at a time.
+- **Manage VPN profiles in the browser**: OpenVPN or WireGuard; create them in a form or import an `.ovpn` or WireGuard `.conf` file. Several profiles can be stored; one is active at a time.
 - **Dashboard**: connection state, VPN address, traffic, and a live log.
 - **Stays connected**: reconnects automatically after network errors, stops immediately when credentials are rejected, and reconnects after a container restart.
 - **Optional daily reconnect** at a time you choose, per profile.
 - **Firewall between VPN and LAN**: everything is blocked unless a rule allows it. Inbound rules open ports on this device or forward them to any other device in the local LAN (also ESP/GRE, e.g. for an IPsec router); outbound rules let chosen LAN devices reach networks behind the VPN, with a kill switch. This device keeps its own default route.
+- **WireGuard built in**: no kernel module and no extra package needed, so it also runs on older NAS kernels. TunnelDeck-VPN generates the key pair and shows the public key to enter on the server; networks in *Allowed IPs* other than `0.0.0.0/0` are routed through the tunnel like remote networks.
 - **Flags outdated settings**: an unencrypted data channel, weak ciphers, compression and similar settings are shown as advisories.
 - **Secure by default**: sign-in required, credentials encrypted at rest, web UI on the LAN only. Optional remote access over HTTPS.
 - **German and English** UI, light and dark theme.
@@ -20,7 +21,7 @@
 | Method | Status |
 |---|---|
 | OpenVPN (2.7) | available |
-| WireGuard | planned |
+| WireGuard | available (from 0.3.0) |
 | IPsec / IKEv2 | planned |
 
 ## Quick start
@@ -63,7 +64,7 @@ All other traffic between the VPN and the LAN is blocked unless you allow it on 
 
 - **0.1.0**: OpenVPN client, dashboard, host protection, daily reconnect, HTTPS remote access
 - **0.2.0**: firewall with port forwarding to LAN devices, outbound rules and kill switch, IPsec template, remote networks, PKCS#12
-- **0.3.0**: WireGuard
+- **0.3.0**: WireGuard (built-in wireguard-go, key generation, `.conf` import)
 
 ## Development
 

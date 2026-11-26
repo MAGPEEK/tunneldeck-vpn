@@ -6,11 +6,12 @@
 
 ## Was es kann
 
-- **VPN-Profile im Browser verwalten**: per Formular anlegen oder als `.ovpn`-Datei importieren. Mehrere Profile lassen sich speichern; aktiv ist immer eines.
+- **VPN-Profile im Browser verwalten**: OpenVPN oder WireGuard; per Formular anlegen oder als `.ovpn`- bzw. WireGuard-`.conf`-Datei importieren. Mehrere Profile lassen sich speichern; aktiv ist immer eines.
 - **Dashboard**: Verbindungsstatus, VPN-Adresse, Datenverkehr und Live-Protokoll.
 - **Bleibt verbunden**: verbindet nach Netzfehlern automatisch neu, stoppt sofort bei abgelehnten Zugangsdaten und verbindet nach einem Container-Neustart wieder.
 - **Tägliche Trennung, wenn gewünscht**: einmal am Tag zur eingestellten Uhrzeit, je Profil.
 - **Firewall zwischen VPN und LAN**: Alles ist gesperrt, außer eine Regel erlaubt es. Eingangsregeln öffnen Ports auf diesem Gerät oder leiten sie an beliebige andere Geräte im lokalen LAN weiter (auch ESP/GRE, z. B. für einen IPsec-Router); Ausgangsregeln lassen ausgewählte LAN-Geräte Netze hinter dem VPN erreichen, mit Kill-Switch. Dieses Gerät behält seine eigene Standardroute.
+- **WireGuard eingebaut**: kein Kernelmodul und kein Zusatzpaket nötig, daher auch auf älteren NAS-Kerneln. TunnelDeck-VPN erzeugt das Schlüsselpaar und zeigt den öffentlichen Schlüssel an, den Sie auf dem Server eintragen; Netze unter *Erlaubte IPs* außer `0.0.0.0/0` werden wie Remote-Netze durch den Tunnel geleitet.
 - **Erkennt veraltete Einstellungen**: unverschlüsselter Datenkanal, schwache Verschlüsselung, Kompression und Ähnliches erscheinen als Hinweis.
 - **Sicher voreingestellt**: Anmeldung nötig, Zugangsdaten verschlüsselt gespeichert, Oberfläche nur im LAN. Fernzugriff per HTTPS zuschaltbar.
 - Oberfläche auf **Deutsch und Englisch**, helles und dunkles Design.
@@ -20,7 +21,7 @@
 | Verfahren | Status |
 |---|---|
 | OpenVPN (2.7) | verfügbar |
-| WireGuard | geplant |
+| WireGuard | verfügbar (ab 0.3.0) |
 | IPsec / IKEv2 | geplant |
 
 ## Schnellstart
@@ -63,7 +64,7 @@ Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer Sie erlauben ihn 
 
 - **0.1.0**: OpenVPN-Client, Dashboard, Host-Schutz, tägliche Trennung, Fernzugriff per HTTPS
 - **0.2.0**: Firewall mit Portweiterleitung zu LAN-Geräten, Ausgangsregeln und Kill-Switch, IPsec-Vorlage, Remote-Netze, PKCS#12
-- **0.3.0**: WireGuard
+- **0.3.0**: WireGuard (eingebautes wireguard-go, Schlüsselerzeugung, `.conf`-Import)
 
 ## Entwicklung
 

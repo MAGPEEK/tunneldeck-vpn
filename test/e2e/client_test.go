@@ -34,6 +34,7 @@ func (p *problem) Error() string {
 // connectionStatus is the part of GET /api/connection the test checks.
 type connectionStatus struct {
 	State          string       `json:"state"`
+	MessageCode    string       `json:"messageCode"`
 	VPNIP          string       `json:"vpnIp"`
 	BytesIn        uint64       `json:"bytesIn"`
 	BytesOut       uint64       `json:"bytesOut"`

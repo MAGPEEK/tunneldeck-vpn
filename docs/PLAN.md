@@ -110,6 +110,6 @@ SPEC §18: package `internal/vpn/wireguard` (schema, validation, key generation 
 
 SPEC §18: protocol chooser offers WireGuard; schema form renders it; "Generate key pair" with public key + Copy; `.conf` loading in the existing import flow; encryption row shows ChaCha20-Poly1305; i18n de/en; help texts.
 
-## [ ] 27. WireGuard e2e and docs — careful — after: 26
+## [x] 27. WireGuard e2e and docs — careful — after: 26
 
 SPEC §18: WireGuard server container in `test/e2e`, matrix case D-wireguard on both backends; README, docs/linux, docs/synology, filemap, CHANGELOG.

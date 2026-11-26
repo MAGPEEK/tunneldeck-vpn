@@ -58,6 +58,20 @@ services:
     <<: *server
     command: [c-certificate]
 
+  # WireGuard server (variant D) in the userspace wireguard-go; healthy
+  # once its device listens, so the test can read its public key.
+  server-wg:
+    image: tunneldeck-e2e-wgserver:local
+    build: wgserver
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    networks: [e2e]
+    healthcheck:
+      test: ["CMD-SHELL", "wg show wg0 listen-port | grep -qx 51820"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
   # All three detect the iptables backend automatically (README.md,
   # "iptables backends"). The first two see only one working backend: the
   # other backend's binaries are removed before the server starts.

@@ -1,6 +1,6 @@
 # End-to-end test
 
-Drives a real TunnelDeck-VPN image through its HTTP API against throwaway OpenVPN servers in Docker. Nothing contacts a real VPN provider.
+Drives a real TunnelDeck-VPN image through its HTTP API against throwaway OpenVPN and WireGuard servers in Docker. Nothing contacts a real VPN provider.
 
 ## Run
 
@@ -10,7 +10,7 @@ Requirements: Docker with Compose v2, Go (see `go.mod`), a Linux kernel with `/d
 go test -tags e2e -v -count=1 -timeout 45m ./test/e2e/
 ```
 
-The test builds the three images, starts the stack, runs the matrix and the firewall cases and removes everything again: containers, the networks, volumes and the images it built (`tunneldeck-e2e:local`, `tunneldeck-e2e-server:local`, `tunneldeck-e2e-node:local`). Only the firewall cases: `-run 'TestEndToEnd/firewall'`. Base images and the build cache stay. Set `E2E_KEEP_STACK=1` to keep the stack for debugging; remove it afterwards with
+The test builds the four images, starts the stack, runs the matrix and the firewall cases and removes everything again: containers, the networks, volumes and the images it built (`tunneldeck-e2e:local`, `tunneldeck-e2e-server:local`, `tunneldeck-e2e-wgserver:local`, `tunneldeck-e2e-node:local`). Only the firewall cases: `-run 'TestEndToEnd/firewall'`. Base images and the build cache stay. Set `E2E_KEEP_STACK=1` to keep the stack for debugging; remove it afterwards with
 
 ```sh
 docker compose -f test/e2e/compose.yml -p tunneldeck-e2e down -v --rmi all
@@ -18,7 +18,7 @@ docker compose -f test/e2e/compose.yml -p tunneldeck-e2e down -v --rmi all
 
 Without the `e2e` tag, `go test ./...` skips this package.
 
-Duration: about 10 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-26): about 7 minutes for the matrix on three backends, where each scenario takes 33–54 s, most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart. A cold build adds the image build time.
+Duration: about 12.5 minutes with a warm build cache (Docker Desktop on Windows, 2026-11-26): about 9 minutes for the matrix on three backends, where each scenario takes 32–50 s (WireGuard 43–45 s), most of it the deliberate 10 s no-retry wait, the three-second probe timeouts and the container restart, plus about 30 s once for `D-wireguard-no-handshake`. A cold build adds the image build time.
 
 ## Topology
 
@@ -29,6 +29,11 @@ Duration: about 10 minutes with a warm build cache (Docker Desktop on Windows, 2
    │ (own network namespace =     │ ─────────▶ │ OpenVPN 2.7 server, tun0      │
    │  the "host" of SPEC §6)      │  UDP/TCP   │ 10.94.{1,2,3}.1               │
    │ tdvpn0 = 10.94.x.2           │            │ probe source 198.18.0.1 on lo │
+   │                              │            └───────────────────────────────┘
+   │                              │ WireGuard  ┌───────────────────────────────┐
+   │                              │ ─────────▶ │ server-wg: wireguard-go, wg0  │
+   │                              │  UDP 51820 │ 10.94.4.1                     │
+   │                              │            │ probe source 198.18.0.1 on lo │
    └──────────────┬───────────────┘            └───────────────────────────────┘
                   │ 127.0.0.1:<random> → 8194 (API for the Go driver)
 ```
@@ -50,6 +55,12 @@ The servers generate a fresh PKI at start (`server/make-pki.sh`, ECDSA P-256, va
 Every server also has a dummy interface `remote0` with `10.99.0.1/24`, a network "behind" it that is pushed to nobody; only variant A's profile names it in `remoteNetworks`.
 
 The test password contains a space, `"`, `\`, `'`, `#`, `;` and `$` to exercise the management escaping.
+
+### Variant D: WireGuard
+
+`server-wg` (image `wgserver/`, Alpine with the userspace `wireguard-go` and `wg`, no kernel module needed) runs the device `wg0` with `10.94.4.1/24` on UDP 51820, the probe source `198.18.0.1` and `remote0` `10.99.0.1/24` like the OpenVPN servers. It generates its key pair at start (`/run/e2e/server.pub`, never committed); its healthcheck waits until the device listens. Each scenario asks TunnelDeck-VPN for a key pair (`POST /api/drivers/wireguard/keypair`) and makes the public key the server's only peer with allowed IP `10.94.4.2/32` (`wgserver/peer.sh`), as an owner would enter it on the server.
+
+Profile: address `10.94.4.2/24`, the server's public key, endpoint `server-wg:51820`, allowed IPs `0.0.0.0/0` and `10.99.0.0/24`, keepalive 25. `0.0.0.0/0` lets the probe (198.18.0.1) through WireGuard's cryptokey routing; `10.99.0.0/24` is the remote network.
 
 ## iptables backends
 
@@ -75,6 +86,16 @@ TunnelDeck-VPN shares the backend of the host's firewall (SPEC §6): it counts t
 7. Remote access: enabling HTTPS remote access (port 8443, self-signed) makes `https://<vpn-ip>:8443/api/session` answer 200 with `Strict-Transport-Security: max-age=31536000` from the probe, while 8194 stays closed; disabling closes 8443 again.
 8. Disconnect: main table and rules are exactly as before; variant A: `10.99.0.1` is no longer reachable.
 9. Restart: connect, `docker compose restart` the TunnelDeck-VPN container, sign in again; the tunnel comes back by itself, routing is as in step 5 and the firewall is installed.
+
+Variant D (`D-wireguard`, on every backend) runs steps 3–9 with these differences:
+
+- The profile is created from form fields; `GET /api/profiles/{id}` shows `secrets.privateKey.hasValue` and `derived.publicKey` equal to the generated public key, never the private key.
+- Connect means the first handshake. The status names `ChaCha20-Poly1305` as data cipher, no control channel, no message code and no `routingWarning`; no log line holds the private key.
+- Step 5 also covers the allowed IPs: `10.99.0.0/24` becomes `7180: from all to 10.99.0.0/24 lookup 7194`, `0.0.0.0/0` adds no rule and leaves the main table alone.
+- Step 8 also checks that `tdvpn0` is gone.
+- Step 9 uses a second profile imported from a wg-quick `.conf` (`POST /api/profiles/import`) with the same keys plus `DNS`, an IPv6 address and `::/0`, without `PersistentKeepalive`: the draft has the notes `dns_ignored`, `ipv6_ignored` and `keepalive_default`, nothing rejected or missing, and connects.
+
+`D-wireguard-no-handshake` (first backend only, as it waits about 30 s and does not depend on the iptables backend): a profile with a wrong server public key stays `connecting`, and the status gets `messageCode` `wireguard_no_handshake` no earlier than 25 s after the connect (30 s in the driver; Docker Desktop's VM clock runs a few percent fast against the host).
 
 ## Firewall topology
 
@@ -111,8 +132,9 @@ Each case is a subtest of `firewall-lan-nft` and `firewall-lan-legacy`:
 8. `ipsec-nat-t`: `POST /api/firewall/templates/ipsec` for 10.95.0.20 with peer 198.18.0.2 returns five rules (inbound ones keep the source), which are saved as the firewall. Both strongSwan endpoints load an IKEv2 PSK connection (AES-GCM, ECP-256; IDs, not addresses, since the addresses differ by NAT). `peer-initiates`: peer-ipsec initiates to the tunnel address; `lan-initiates`: lan-ipsec initiates to 198.18.0.2 (outbound rules). Each time both sides list the SA as `ESTABLISHED`/`INSTALLED` and `TUNNEL-in-UDP`, and the inner networks 10.96.1.0/24 and 10.96.2.0/24 ping each other in both directions. TunnelDeck masquerades the LAN router behind the tunnel address, so IKE always detects NAT and uses NAT-T (UDP 4500); raw ESP never occurs with IKE in this setup.
 9. `esp-forwarding`: the template's ESP forward with plain ESP (protocol 50): manually keyed tunnel-mode SAs (`ip xfrm`, AES-GCM) between 198.18.0.2 and the tunnel address on the peer and between 198.18.0.2 and 10.95.0.20 on lan-ipsec; the peer pings lan-ipsec's inner address 10.97.1.1 from 10.97.2.1. The answer proves the ESP packet reached lan-ipsec with the peer's own source and the reply ESP went back through the tunnel.
 10. `kill-switch`: with lan-web's outbound rule and the port forward, the test gives the host its own route to 10.99.0.0/24 via server-a outside the tunnel (and server-a a route back), plus a counting rule in `mangle POSTROUTING` (a chain TunnelDeck never touches) for lan-web's packets to that network leaving by any interface but `tdvpn0`. Then the tunnel drops: OpenVPN's UDP is blocked in `OUTPUT` and the OpenVPN process is killed, so the state leaves `connected` and `tdvpn0` disappears while TunnelDeck keeps reconnecting. lan-web's pings get no answer and the counter stays at 0; the port forward does not answer. After lifting the block the tunnel comes back, lan-web reaches 10.99.0.1 and the forward answers again. After a disconnect the pings again get no answer with 0 leaked packets. Control: without the outbound rule the same pings take the host's route, get answers and are counted, which proves both the leak path and the counter work.
+11. `outbound-policy-routing-wireguard`: case 7 over WireGuard. After the kill switch the host connects a WireGuard profile to `server-wg` with the only allowed IP `0.0.0.0/0` (no remote network); with lan-web's outbound rule, lan-web pings 10.99.0.1 behind `server-wg`, lan-ipsec does not.
 
-Duration of the firewall cases: 75–85 s per backend (Docker Desktop on Windows, 2026-11-26), most of it the kill switch (reconnect backoff) and the IPsec handshakes.
+Duration of the firewall cases: 90–95 s per backend (Docker Desktop on Windows, 2026-11-26), about 10 s of it the WireGuard case and most of it the kill switch (reconnect backoff) and the IPsec handshakes.
 
 ## Not covered
 
@@ -123,3 +145,4 @@ Duration of the firewall cases: 75–85 s per backend (Docker Desktop on Windows
 - arm64 (the test runs on the build machine's architecture only).
 - Uploaded remote-access certificates, `.ovpn` import and the web UI itself.
 - Wrong CA, unreachable server and backoff timing.
+- WireGuard: the kill switch with a dropped WireGuard tunnel. The driver reports a lost tunnel only after 180 s without a handshake (SPEC §18), so the case would add over three minutes per backend; the kill switch itself depends only on `tdvpn0` and the outbound rules, which case 10 covers with OpenVPN. Also the 180 s reconnect, DynDNS re-resolution, a pre-shared key and real WireGuard providers.

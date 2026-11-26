@@ -32,8 +32,9 @@ const (
 	noRetryWindow = 10 * time.Second
 )
 
-// TestEndToEnd runs every server variant against TunnelDeck on both
-// iptables backends, then the firewall cases with a LAN behind TunnelDeck.
+// TestEndToEnd runs every server variant, the OpenVPN ones and WireGuard,
+// against TunnelDeck on every iptables backend, then the firewall cases
+// with a LAN behind TunnelDeck.
 func TestEndToEnd(t *testing.T) {
 	s := startStack(t)
 	for _, v := range variants {
@@ -51,6 +52,12 @@ func TestEndToEnd(t *testing.T) {
 					sc.run(t)
 				})
 			}
+			// The 30 s wait for the missing handshake does not depend on
+			// the iptables backend, so it runs on the first one only.
+			if b.name == backends[0].name {
+				t.Run(wireGuardVariant.name+"-no-handshake", newWireGuardScenario(s, td).checkNoHandshake)
+			}
+			t.Run(wireGuardVariant.name, newWireGuardScenario(s, td).run)
 		})
 	}
 	for _, h := range lanHosts {

@@ -165,3 +165,13 @@ Die Tabelle der fünf Regeln und die ausführlichen Schritte stehen in [`linux.d
 #### Beispiel: LANCOM-Router mit mdex
 
 Ein LANCOM-Router unter `192.168.1.2` nutzt eine mdex-public.IP-Verbindung auf der NAS: Die öffentliche Adresse ist die Adresse von `publicipNN.mdex.de`, die jede Gegenstelle als Adresse des Routers verwendet. Die Schritte sind die oben genannten. *Nicht geprüft:* ein echter LANCOM-Router und eine echte mdex-public.IP-Verbindung.
+
+## 11. WireGuard
+
+Der Kernel 4.4 von DSM 7.2 hat kein WireGuard-Modul, und es wird auch keines gebraucht: TunnelDeck-VPN bringt wireguard-go eingebaut mit und nutzt wie OpenVPN das TUN-Gerät aus Abschnitt 1.
+
+- **Schlüssel:** **Schlüsselpaar erzeugen** im Profilformular erzeugt den privaten Schlüssel auf dem NAS (verschlüsselt gespeichert, nie wieder angezeigt). Kopieren Sie den darunter angezeigten öffentlichen Schlüssel und tragen Sie ihn auf dem WireGuard-Server als Peer ein, mit der Tunneladresse des Profils als erlaubter IP des Peers (z. B. `AllowedIPs = 10.66.0.2/32`). Oder importieren Sie die `.conf`-Datei vom Administrator des Servers.
+- **Ports:** Der UDP-Port des Servers (51820, sofern nicht anders eingestellt) muss auf der Serverseite offen bzw. weitergeleitet sein. TunnelDeck-VPN baut nur ausgehende Verbindungen auf: Für den Tunnel selbst ist weder eine Regel in der DSM-Firewall noch eine Portweiterleitung am Internet-Router nötig.
+- **Routing und Firewall:** Die erlaubte IP `0.0.0.0/0` lässt die Standardroute des NAS unverändert; andere erlaubte IPs werden wie Remote-Netze durch den Tunnel geleitet. Firewall-Regeln, Kill-Switch und Fernzugriff funktionieren wie bei OpenVPN (Abschnitt 10).
+
+Mehr dazu, auch zum Hinweis „Keine Antwort vom Server“, steht in [`linux.de.md`, „WireGuard“](linux.de.md#11-wireguard). *Auf Ihrem NAS prüfen:* WireGuard wurde bisher nur im End-to-End-Test geprüft, nicht auf DSM selbst.

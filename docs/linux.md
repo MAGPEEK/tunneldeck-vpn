@@ -260,3 +260,15 @@ What was tested and what was not:
 #### Example: LANCOM router with mdex
 
 With mdex public.IP the public address is the address of `publicipNN.mdex.de`. A LANCOM router at `192.168.1.2` is set up as described above: the template with the router's address, a static route for each peer's public address via the host (or the host as default gateway), IKEv2 with NAT traversal and an FQDN or e-mail identity, and `publicipNN.mdex.de` as the router's address on each peer. *Unverified:* neither a real LANCOM router nor a real mdex public.IP connection has been tested; the steps follow from the lab test with strongSwan.
+
+## 11. WireGuard
+
+TunnelDeck-VPN brings its own WireGuard: wireguard-go is built into the binary, so the host needs neither the `wireguard` kernel module nor `wireguard-tools`. It uses the same TUN device as OpenVPN (section 1) and the same firewall, kill switch and remote access.
+
+1. **Keys:** in the profile form, **Generate key pair** creates a new private key. It is stored encrypted and never shown again; the form shows the matching **public key** with a Copy button.
+2. **Server side:** add that public key on the WireGuard server as a peer, with the profile's tunnel address as the peer's allowed IP, for example `AllowedIPs = 10.66.0.2/32`. Enter the server's public key and its address (`host:port`) in the profile. Alternatively import the `.conf` file the server's administrator gave you; `DNS`, `Table`, IPv6 entries and further peers are dropped with a note, files with `PreUp`/`PostUp` scripts are refused.
+3. **Ports:** the server must accept UDP on its listen port (51820 unless configured otherwise); open or forward that port in the server's firewall or router. TunnelDeck-VPN only connects outbound, so nothing has to be opened on this host. Persistent keepalive (default 25 s) keeps NAT mappings open, so the server can reach this side.
+4. **Routing:** the allowed IP `0.0.0.0/0` does not change this host's default route; every other allowed IP is routed through the tunnel like a remote network. Which LAN devices may use the tunnel is set by outbound rules (section 10).
+5. **State:** the dashboard shows "Connecting" until the first handshake. If it still shows "No answer from the server – check the keys and the endpoint" after 30 seconds, check both public keys, the server address and the server's UDP port.
+
+The end-to-end test (`test/e2e/`) connects to a wireguard-go server on both iptables backends. *Unverified:* commercial WireGuard providers and arm64.

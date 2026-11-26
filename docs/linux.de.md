@@ -260,3 +260,15 @@ Was geprüft ist und was nicht:
 #### Beispiel: LANCOM-Router mit mdex
 
 Bei mdex public.IP ist die öffentliche Adresse die Adresse von `publicipNN.mdex.de`. Ein LANCOM-Router unter `192.168.1.2` wird wie oben beschrieben eingerichtet: die Vorlage mit der Adresse des Routers, eine statische Route für die öffentliche Adresse jeder Gegenstelle über den Host (oder der Host als Default-Gateway), IKEv2 mit NAT-Traversal und einer Identität vom Typ FQDN oder E-Mail, und in jeder Gegenstelle `publicipNN.mdex.de` als Adresse des Routers. *Ungeprüft:* Weder ein echter LANCOM-Router noch eine echte mdex-public.IP-Verbindung wurden getestet; die Schritte folgen aus dem Labortest mit strongSwan.
+
+## 11. WireGuard
+
+TunnelDeck-VPN bringt WireGuard selbst mit: wireguard-go ist in das Programm eingebaut, der Host braucht also weder das Kernelmodul `wireguard` noch `wireguard-tools`. Es nutzt dasselbe TUN-Gerät wie OpenVPN (Abschnitt 1) sowie dieselbe Firewall, denselben Kill-Switch und denselben Fernzugriff.
+
+1. **Schlüssel:** Im Profilformular erzeugt **Schlüsselpaar erzeugen** einen neuen privaten Schlüssel. Er wird verschlüsselt gespeichert und nie wieder angezeigt; das Formular zeigt den passenden **öffentlichen Schlüssel** mit einer Kopier-Schaltfläche.
+2. **Serverseite:** Tragen Sie diesen öffentlichen Schlüssel auf dem WireGuard-Server als Peer ein, mit der Tunneladresse des Profils als erlaubter IP des Peers, z. B. `AllowedIPs = 10.66.0.2/32`. Im Profil tragen Sie den öffentlichen Schlüssel des Servers und seine Adresse (`Host:Port`) ein. Alternativ importieren Sie die `.conf`-Datei, die Sie vom Administrator des Servers erhalten haben; `DNS`, `Table`, IPv6-Einträge und weitere Peers werden mit einem Hinweis verworfen, Dateien mit `PreUp`-/`PostUp`-Skripten abgelehnt.
+3. **Ports:** Der Server muss UDP auf seinem Port annehmen (51820, sofern nicht anders eingestellt); öffnen bzw. weiterleiten Sie diesen Port in der Firewall oder im Router des Servers. TunnelDeck-VPN baut nur ausgehende Verbindungen auf, auf diesem Host muss nichts geöffnet werden. Persistent Keepalive (Vorgabe 25 s) hält NAT-Zuordnungen offen, damit der Server diese Seite erreicht.
+4. **Routing:** Die erlaubte IP `0.0.0.0/0` ändert die Standardroute dieses Hosts nicht; jede andere erlaubte IP wird wie ein Remote-Netz durch den Tunnel geleitet. Welche LAN-Geräte den Tunnel nutzen dürfen, legen Ausgangsregeln fest (Abschnitt 10).
+5. **Status:** Das Dashboard zeigt „Verbindet“ bis zum ersten Handshake. Steht nach 30 Sekunden „Keine Antwort vom Server – prüfen Sie die Schlüssel und die Serveradresse“ da, prüfen Sie beide öffentlichen Schlüssel, die Serveradresse und den UDP-Port des Servers.
+
+Der End-to-End-Test (`test/e2e/`) verbindet sich mit einem wireguard-go-Server auf beiden iptables-Backends. *Nicht geprüft:* kommerzielle WireGuard-Anbieter und arm64.

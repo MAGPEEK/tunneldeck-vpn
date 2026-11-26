@@ -95,6 +95,7 @@ func runLANScenario(t *testing.T, s stack, host lanHost) {
 	t.Run("ipsec-nat-t", sc.checkIPsec)
 	t.Run("esp-forwarding", sc.checkESPForwarding)
 	t.Run("kill-switch", sc.checkKillSwitch)
+	t.Run("outbound-policy-routing-wireguard", sc.checkOutboundRoutingOverWireGuard)
 }
 
 // profile is variant A without remote networks, so only the outbound
