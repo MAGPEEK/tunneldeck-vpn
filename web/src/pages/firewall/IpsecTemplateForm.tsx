@@ -10,6 +10,7 @@ import { Notice } from '../../components/Notice';
 import { genericErrorMessage } from '../auth/formError';
 import { StringListField } from '../profiles/schema/StringListField';
 import { DevicePicker } from './DevicePicker';
+import { firstLanExample } from './lanExample';
 import styles from './FirewallPage.module.css';
 
 export interface IpsecTemplateFormProps {
@@ -18,6 +19,7 @@ export interface IpsecTemplateFormProps {
   devices: readonly LanDevice[] | undefined;
   devicesFailed: boolean;
   hostAddresses: readonly string[];
+  lanSubnets: readonly string[];
 }
 
 /** The "IPsec router" template (SPEC §16.2): asks the server for the rules and hands them over. */
@@ -76,7 +78,7 @@ export function IpsecTemplateForm(props: IpsecTemplateFormProps) {
         devicesFailed={props.devicesFailed}
         hostAddress=""
         hostAddresses={props.hostAddresses}
-        placeholder={t('firewall.ipsec.devicePlaceholder')}
+        placeholder={firstLanExample(props.lanSubnets) ?? t('firewall.device.addressPlaceholder')}
         error={fields.deviceAddress}
       />
       <StringListField

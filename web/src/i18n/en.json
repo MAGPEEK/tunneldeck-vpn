@@ -362,7 +362,6 @@
       "name": "Name",
       "namePlaceholder": "IPsec router",
       "device": "Router address",
-      "devicePlaceholder": "192.168.1.2",
       "peers": "Peer addresses (optional)",
       "submit": "Add rules",
       "cancel": "Cancel",
@@ -467,8 +466,11 @@
       "reserveHint": "Reserve this address in your router so it does not change.",
       "lanHint": "Must be inside the local LAN: {{subnets}}.",
       "sourceLabel": "Device or subnet address",
-      "sourcePlaceholder": "192.168.1.20 or 192.168.1.0/24",
-      "gatewayHint": "The device must send this traffic to this host: set it as its gateway or add a route in your router."
+      "sourcePlaceholder": "{{device}} or {{subnet}}",
+      "gatewayHint": "The device must send this traffic to this host: set it as its gateway or add a route in your router.",
+      "sourcePlaceholderNeutral": "Address or subnet",
+      "addressPlaceholder": "IPv4 address",
+      "useLan": "Whole local LAN ({{subnet}})"
     },
     "summary": {
       "anySender": "any sender",

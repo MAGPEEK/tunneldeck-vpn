@@ -9,6 +9,7 @@ import { DevicePicker } from './DevicePicker';
 import styles from './FirewallPage.module.css';
 import { FlowStrip } from './FlowStrip';
 import { editorSteps, type EditorIntent, type EditorStep } from './intents';
+import { firstLanExample } from './lanExample';
 import { isPortForward, type RuleDraft } from './ruleDraft';
 import { ruleCreates, ruleSummary } from './ruleSummary';
 import { suggestedName, type RuleContext } from './ruleText';
@@ -230,7 +231,9 @@ function RuleStep({ draft, intent, errors, context, onChange }: RuleEditorProps)
 function DeviceStep(props: RuleEditorProps) {
   const { draft, errors, context, hostAddress, lanSubnets, onChange } = props;
   const { t } = useTranslation();
+  const example = firstLanExample(lanSubnets);
   if (draft.direction === 'outbound') {
+    const subnet = lanSubnets[0];
     return (
       <DevicePicker
         label={t('firewall.device.sourceLabel')}
@@ -240,7 +243,12 @@ function DeviceStep(props: RuleEditorProps) {
         devicesFailed={props.devicesFailed}
         hostAddress=""
         hostAddresses={context.hostAddresses}
-        placeholder={t('firewall.device.sourcePlaceholder')}
+        lanSubnets={lanSubnets}
+        placeholder={
+          example !== undefined && subnet !== undefined
+            ? t('firewall.device.sourcePlaceholder', { device: example, subnet })
+            : t('firewall.device.sourcePlaceholderNeutral')
+        }
         hint={t('firewall.device.gatewayHint')}
         error={errors.source}
       />
@@ -255,7 +263,7 @@ function DeviceStep(props: RuleEditorProps) {
       devicesFailed={props.devicesFailed}
       hostAddress={hostAddress}
       hostAddresses={context.hostAddresses}
-      placeholder="192.168.1.10"
+      placeholder={example ?? t('firewall.device.addressPlaceholder')}
       hint={
         lanSubnets.length > 0
           ? t('firewall.device.lanHint', { subnets: lanSubnets.join(', ') })

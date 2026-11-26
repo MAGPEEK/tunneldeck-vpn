@@ -85,6 +85,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
   const [errorRound, setErrorRound] = useState(0);
   const [message, setMessage] = useState<Message>();
   const context: RuleContext = { hostAddresses: saved.hostAddresses, devices: devices.data ?? [] };
+  const hostAddress = saved.hostAddresses[0] ?? saved.hostAddress;
 
   const reset = (state: FirewallState) => {
     setDrafts(state.rules.map((rule) => toDraft(rule)));
@@ -157,7 +158,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
       setPanel('ipsec');
       return;
     }
-    const preset = intentDraft(intent, saved.hostAddress);
+    const preset = intentDraft(intent, hostAddress);
     const draft = {
       ...preset,
       name: suggestedName(t, preset, detectService(preset), context),
@@ -282,6 +283,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
                 devices={devices.data}
                 devicesFailed={devices.isError}
                 hostAddresses={saved.hostAddresses}
+                lanSubnets={saved.lanSubnets}
                 onInsert={insertTemplate}
                 onCancel={() => setPanel(undefined)}
               />
@@ -294,7 +296,7 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
                 isNew={editing.isNew}
                 errors={errors[editingDraft.key] ?? {}}
                 context={context}
-                hostAddress={saved.hostAddress}
+                hostAddress={hostAddress}
                 lanSubnets={saved.lanSubnets}
                 devicesFailed={devices.isError}
                 onChange={(change) => update(editingDraft.key, change)}

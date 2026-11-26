@@ -294,7 +294,7 @@ describe('FirewallPage', () => {
     await openPage();
     const e = await chooseIntent('Make a LAN device reachable from the VPN');
     const address = e.getByRole('textbox', { name: 'Device address' });
-    expect(address).toHaveAttribute('placeholder', '192.168.1.10');
+    expect(address).toHaveAttribute('placeholder', '192.168.1.x');
     fireEvent.change(address, { target: { value: '192.168.1.44' } });
     expect(e.getByTestId('flow')).toHaveTextContent('Local LAN · 192.168.1.44');
     expect(e.getByText(/Must be inside the local LAN: 192.168.1.0\/24./)).toBeInTheDocument();
@@ -693,5 +693,116 @@ describe('FirewallPage', () => {
     expect(alert.closest('[data-tone]')).toHaveAttribute('data-tone', 'danger');
     expect(screen.getByRole('switch', { name: 'Enabled: Admin UI' })).not.toBeChecked();
     expect(saveButton()).toBeEnabled();
+  });
+});
+
+describe('FirewallPage on a detected 192.168.2.0/24 network', () => {
+  const LAN2_DEVICES: LanDevice[] = [
+    {
+      address: '192.168.2.30',
+      mac: '02:00:00:00:00:30',
+      name: 'NAS',
+      state: 'REACHABLE',
+      onLan: true,
+    },
+    { address: '192.168.2.5', mac: '02:00:00:00:00:05', state: 'REACHABLE', onLan: true },
+  ];
+
+  function openLan2(overrides: Partial<FirewallState> = {}) {
+    return openPage({
+      'GET /api/firewall': {
+        body: state({
+          rules: [{ ...admin, destination: '192.168.2.5' }],
+          hostAddress: '192.168.2.9',
+          hostAddresses: ['192.168.2.5', '192.168.2.9'],
+          lanSubnets: ['192.168.2.0/24'],
+          counters: {},
+          ...overrides,
+        }),
+      },
+      'GET /api/firewall/devices': { body: { devices: LAN2_DEVICES } },
+    });
+  }
+
+  function placeholders(): string[] {
+    return Array.from(document.querySelectorAll('[placeholder]')).map(
+      (element) => element.getAttribute('placeholder') ?? '',
+    );
+  }
+
+  function expectNoStaticLan() {
+    expect(placeholders().join(' ')).not.toContain('192.168.1.');
+    expect(document.body.textContent).not.toContain('192.168.1.');
+  }
+
+  it('prefills the first host address when opening a service on this device', async () => {
+    await openLan2();
+    const e = await chooseIntent('Open a service on this device');
+    const address = e.getByRole('textbox', { name: 'Device address' });
+    expect(address).toHaveValue('192.168.2.5');
+    expect(address).toHaveAttribute('placeholder', '192.168.2.x');
+    expectNoStaticLan();
+  });
+
+  it('prefills this device for a block rule', async () => {
+    await openLan2();
+    const e = await chooseIntent('Block something');
+    expect(e.getByRole('textbox', { name: 'Device address' })).toHaveValue('192.168.2.5');
+    expectNoStaticLan();
+  });
+
+  it('offers the discovered devices and a LAN placeholder for a reachable device', async () => {
+    await openLan2();
+    const e = await chooseIntent('Make a LAN device reachable from the VPN');
+    const address = e.getByRole('textbox', { name: 'Device address' });
+    expect(address).toHaveValue('');
+    expect(address).toHaveAttribute('placeholder', '192.168.2.x');
+    expect(await e.findByRole('button', { name: /NAS/ })).toBeInTheDocument();
+    expect(
+      e.getByText('Must be inside the local LAN: 192.168.2.0/24.', { exact: false }),
+    ).toBeInTheDocument();
+    expectNoStaticLan();
+  });
+
+  it('builds the outbound source placeholder and offers the whole LAN in one click', async () => {
+    await openLan2();
+    const e = await chooseIntent('Let a LAN device into the VPN');
+    const source = e.getByRole('textbox', { name: 'Device or subnet address' });
+    expect(source).toHaveAttribute('placeholder', '192.168.2.x or 192.168.2.0/24');
+    fireEvent.click(e.getByRole('button', { name: 'Whole local LAN (192.168.2.0/24)' }));
+    expect(source).toHaveValue('192.168.2.0/24');
+    expect(
+      e.queryByRole('button', { name: 'Whole local LAN (192.168.2.0/24)' }),
+    ).not.toBeInTheDocument();
+    expectNoStaticLan();
+  });
+
+  it('uses the LAN placeholder for the IPsec router', async () => {
+    await openLan2();
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    fireEvent.click(screen.getByRole('button', { name: 'IPsec router' }));
+    const form = within(screen.getByRole('form', { name: 'IPsec router' }));
+    expect(form.getByRole('textbox', { name: 'Router address' })).toHaveAttribute(
+      'placeholder',
+      '192.168.2.x',
+    );
+    expect(await form.findByRole('button', { name: /NAS/ })).toBeInTheDocument();
+    expectNoStaticLan();
+  });
+
+  it('falls back to neutral placeholders when nothing is detected', async () => {
+    await openLan2({ hostAddress: '', hostAddresses: [], lanSubnets: [] });
+    let e = await chooseIntent('Make a LAN device reachable from the VPN');
+    expect(e.getByRole('textbox', { name: 'Device address' })).toHaveAttribute(
+      'placeholder',
+      'IPv4 address',
+    );
+    fireEvent.click(e.getByRole('button', { name: 'Cancel' }));
+    e = await chooseIntent('Let a LAN device into the VPN');
+    expect(e.getByRole('textbox', { name: 'Device or subnet address' })).toHaveAttribute(
+      'placeholder',
+      'Address or subnet',
+    );
+    expect(e.queryByRole('button', { name: /Whole local LAN/ })).not.toBeInTheDocument();
   });
 });

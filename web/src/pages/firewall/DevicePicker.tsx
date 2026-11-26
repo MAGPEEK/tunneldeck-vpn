@@ -14,6 +14,8 @@ export interface DevicePickerProps {
   /** Offered as "This device's address"; empty for none. */
   hostAddress: string;
   hostAddresses: readonly string[];
+  /** Offered as "Whole local LAN (…)", one button per subnet; omitted for single addresses. */
+  lanSubnets?: readonly string[];
   placeholder: string;
   hint?: string;
   error?: string;
@@ -21,7 +23,7 @@ export interface DevicePickerProps {
 
 /**
  * Step 1 of the editor: pick a LAN neighbour (name, IP, MAC), take this
- * device's own address, or type any address.
+ * device's own address or a whole LAN subnet, or type any address.
  */
 export function DevicePicker(props: DevicePickerProps) {
   const { value, onChange, devices, hostAddress, hostAddresses } = props;
@@ -62,6 +64,13 @@ export function DevicePicker(props: DevicePickerProps) {
           {t('firewall.device.useHost', { address: hostAddress })}
         </Button>
       )}
+      {(props.lanSubnets ?? [])
+        .filter((subnet) => subnet !== chosen)
+        .map((subnet) => (
+          <Button key={subnet} variant="ghost" onClick={() => onChange(subnet)}>
+            {t('firewall.device.useLan', { subnet })}
+          </Button>
+        ))}
       <Field
         label={props.label}
         hint={
