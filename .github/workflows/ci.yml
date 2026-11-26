@@ -56,7 +56,7 @@ jobs:
       # tables, and IPsec (ESP, xfrm) must be available in the runner's
       # kernel; the containers cannot load modules themselves.
       - run: sudo modprobe -a tun ip_tables iptable_filter iptable_nat iptable_mangle nf_tables esp4 xfrm_user
-      - run: go test -tags e2e -v -count=1 -timeout 45m ./test/e2e/
+      - run: go test -tags e2e -v -count=1 -timeout 60m ./test/e2e/
 
   image:
     runs-on: ubuntu-latest

@@ -122,6 +122,6 @@ SPEC §19: strongSwan charon with kernel-libipsec in the image, VICI client in G
 
 SPEC §19: protocol chooser offers IPsec/IKEv2 with templates; auth method switch; certificate uploads; mode switch (virtual IP / net-to-net) with subnet lists and the static-route hint; dashboard texts; help; i18n de/en.
 
-## [ ] 30. IPsec e2e and docs — careful — after: 29
+## [x] 30. IPsec e2e and docs — careful — after: 29
 
 SPEC §19: strongSwan gateway in test/e2e with PSK, certificate and EAP, both modes, both backends; gateway guides (LANCOM, FRITZ!Box, OPNsense) in docs (de/en), README, filemap, CHANGELOG.

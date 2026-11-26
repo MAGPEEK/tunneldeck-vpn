@@ -76,3 +76,38 @@ func TestControlChannelNamesTheIKEVersion(t *testing.T) {
 		t.Errorf("control channel = %q", got)
 	}
 }
+
+func TestChildCarriesInternet(t *testing.T) {
+	tests := []struct {
+		name     string
+		remoteTS []string
+		want     bool
+	}{
+		{name: "no selectors reported", want: true},
+		{name: "everything", remoteTS: []string{"0.0.0.0/0"}, want: true},
+		{name: "everything among others", remoteTS: []string{"192.168.178.0/24", "0.0.0.0/0"}, want: true},
+		{name: "full range", remoteTS: []string{"0.0.0.0..255.255.255.255"}, want: true},
+		{name: "everything for one protocol", remoteTS: []string{"0.0.0.0/0[tcp]"}, want: true},
+		{name: "one subnet", remoteTS: []string{"192.168.178.0/24"}},
+		{name: "two subnets", remoteTS: []string{"10.0.0.0/8", "192.168.0.0/16"}},
+		{name: "partial range", remoteTS: []string{"10.0.0.1..10.0.0.9"}},
+		{name: "IPv6 only", remoteTS: []string{"::/0"}},
+		{name: "unparsable", remoteTS: []string{"dynamic"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (childSA{remoteTS: tt.remoteTS}).carriesInternet(); got != tt.want {
+				t.Errorf("carriesInternet(%q) = %v, want %v", tt.remoteTS, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRemoteTrafficSelectors(t *testing.T) {
+	m := saMessage(stateEstablished, "10.10.10.5", "7", "0", "0")
+	m.section(connName).section("child-sas").section(connName+"-7").setList("remote-ts", "192.168.178.0/24")
+	child, ok := parseIKESAs(m)[0].installedChild()
+	if !ok || len(child.remoteTS) != 1 || child.remoteTS[0] != "192.168.178.0/24" || child.carriesInternet() {
+		t.Errorf("child = %+v", child)
+	}
+}

@@ -175,3 +175,10 @@ DSM 7.2's kernel 4.4 has no WireGuard module, and none is needed: TunnelDeck-VPN
 - **Routing and firewall:** the allowed IP `0.0.0.0/0` leaves the NAS's default route alone; other allowed IPs are routed through the tunnel like remote networks. Firewall rules, kill switch and remote access work as with OpenVPN (section 10).
 
 More detail, including the "No answer from the server" note, is in [`linux.md`, "WireGuard"](linux.md#11-wireguard). *Check on your NAS:* WireGuard has been tested in the end-to-end test only, not on DSM itself.
+
+## 12. IPsec/IKEv2
+
+DSM 7.2's kernel 4.4 needs nothing extra: charon runs ESP in user space on the TUN device from section 1, so **no IPsec kernel modules** are loaded and DSM gets no IPsec policies. charon and its plugins add about 2 MB to the image (about 52 MB).
+
+- **DSM VPN Server and port forwards:** charon uses **random local IKE ports**, so it collides neither with the DSM VPN Server (L2TP/IPsec on UDP 500/4500) nor with port forwards of UDP 500/4500 to a LAN IPsec router (section 10). No DSM firewall rule and no port forward on your internet router is needed for the tunnel itself.
+- **Gateway setup**, field mapping and the static route for net-to-net mode: [IPsec gateways](ipsec.md). *Check on your NAS:* IPsec has been tested in the end-to-end test and against a real FRITZ!Box user access, not on DSM itself.

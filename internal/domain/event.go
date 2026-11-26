@@ -67,6 +67,10 @@ const (
 // set while connected; Code is set in the error state. MessageCode names
 // Message for translation when the message is a known note, such as a
 // driver's hint while connecting; the UI shows Message for other codes.
+// NoInternet is set by a driver whose connected tunnel carries only
+// networks behind the gateway and not the internet (IPsec with narrowed
+// traffic selectors), so the public IP cannot be detected through it; it
+// stays inside the backend.
 type StateEvent struct {
 	State       ConnectionState `json:"state"`
 	Code        ErrorCode       `json:"code,omitempty"`
@@ -75,6 +79,7 @@ type StateEvent struct {
 	VPNIP       string          `json:"vpnIp,omitempty"`
 	Remote      string          `json:"remote,omitempty"`
 	Since       time.Time       `json:"since"`
+	NoInternet  bool            `json:"-"`
 }
 
 // Kind returns EventKindState.

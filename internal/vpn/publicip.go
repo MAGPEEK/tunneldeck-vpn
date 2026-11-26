@@ -31,13 +31,23 @@ func (d *publicIPDetection) stop() {
 	d.gen++
 }
 
+// noInternetNote is logged instead of a lookup through a tunnel that
+// carries only the networks behind the gateway.
+const noInternetNote = "the tunnel carries only the networks behind the gateway, not the internet; the public IP is not detected"
+
 // detectPublicIP starts the detection for the connected tunnel t in the
-// background, replacing one in progress. While the detection is off the
-// public IP is unknown.
+// background, replacing one in progress. While the detection is off, and
+// for a tunnel that carries no internet traffic (SPEC §6.1), the public IP
+// is unknown.
 func (l *loop) detectPublicIP(t *tunnel) {
 	l.publicIP.stop()
 	finder := l.cfg.PublicIP
 	if finder == nil || !finder.Enabled() {
+		l.setPublicIP("")
+		return
+	}
+	if t.noInternet {
+		l.logf(domain.LogLevelInfo, "%s", noInternetNote)
 		l.setPublicIP("")
 		return
 	}

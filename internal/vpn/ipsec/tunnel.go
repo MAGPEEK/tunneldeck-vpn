@@ -58,15 +58,8 @@ type failure struct {
 var alertFailures = map[string]failure{
 	"local-auth-failed": {domain.ErrorCodeAuthFailed,
 		"the gateway rejected the authentication (AUTHENTICATION_FAILED); check the credentials and the identities"},
-	"peer-auth-failed": {domain.ErrorCodeAuthFailed,
+	peerAuthFailed: {domain.ErrorCodeAuthFailed,
 		"the gateway could not be authenticated; check the CA certificate, the gateway identity or the pre-shared key"},
-	"cert-expired":           certificateFailure("has expired"),
-	"cert-revoked":           certificateFailure("is revoked"),
-	"cert-no-issuer":         certificateFailure("has no trusted issuer"),
-	"cert-untrusted-root":    certificateFailure("chains to an untrusted root"),
-	"cert-validation-failed": certificateFailure("could not be validated"),
-	"cert-policy-violation":  certificateFailure("violates a certificate policy"),
-	"cert-exceeded-path-len": certificateFailure("has too long a chain"),
 	"proposal-mismatch-ike": {domain.ErrorCodeProposalMismatch,
 		"the gateway accepted none of the IKE proposals (NO_PROPOSAL_CHOSEN); compare them with the gateway's"},
 	"proposal-mismatch-child": {domain.ErrorCodeProposalMismatch,
@@ -75,6 +68,25 @@ var alertFailures = map[string]failure{
 		"the gateway refused the subnets of the tunnel (TS_UNACCEPTABLE); compare the local and remote subnets with the gateway's"},
 	"vip-failure": {domain.ErrorCodeNoVirtualIP,
 		"the gateway assigned no virtual IP (INTERNAL_ADDRESS_FAILURE); check its address pool"},
+}
+
+// peerAuthFailed is the alert of a gateway that could not be
+// authenticated.
+const peerAuthFailed = "peer-auth-failed"
+
+// certificateProblems map charon's certificate alerts to the failure they
+// explain. charon raises them while it checks a certificate, also when the
+// check still succeeds, as a rejected chain may be followed by one that is
+// trusted, so they only refine the failure of a later peer-auth-failed
+// alert. "cert-validation-failed" is none of them: it means only that no
+// CRL or OCSP answer was available, which relaxed revocation accepts.
+var certificateProblems = map[string]failure{
+	"cert-expired":           certificateFailure("has expired"),
+	"cert-revoked":           certificateFailure("is revoked"),
+	"cert-no-issuer":         certificateFailure("has no trusted issuer"),
+	"cert-untrusted-root":    certificateFailure("chains to an untrusted root"),
+	"cert-policy-violation":  certificateFailure("violates a certificate policy"),
+	"cert-exceeded-path-len": certificateFailure("has too long a chain"),
 }
 
 func certificateFailure(problem string) failure {
@@ -112,6 +124,9 @@ type tunnel struct {
 	traffic         trafficCounter
 	missingSince    time.Time
 	reinitiateDelay time.Duration
+	// certificateProblem is the last certificate alert (certificateProblems)
+	// of the current attempt.
+	certificateProblem *failure
 }
 
 func newTunnel(d *Driver, c profileConfig, remoteNetworks []netip.Prefix) *tunnel {
@@ -341,8 +356,10 @@ func (t *tunnel) load() error {
 }
 
 // initiate asks charon to establish the CHILD_SA and returns at once; the
-// outcome arrives as events.
+// outcome arrives as events. A certificate problem of an earlier attempt
+// no longer explains a failure.
 func (t *tunnel) initiate() error {
+	t.certificateProblem = nil
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 	request := newMessage().set("child", connName).set("ike", connName).set("timeout", "-1").set("init-limits", "no")
@@ -417,7 +434,15 @@ func (t *tunnel) handleEvent(e viciEvent) *failure {
 }
 
 // alert ends the tunnel on the alerts that need the user or a new start.
+// A certificate problem is remembered to explain a later peer-auth-failed.
 func (t *tunnel) alert(kind string) *failure {
+	if f, ok := certificateProblems[kind]; ok {
+		t.certificateProblem = &f
+		return nil
+	}
+	if kind == peerAuthFailed && t.certificateProblem != nil {
+		return t.certificateProblem
+	}
 	if f, ok := alertFailures[kind]; ok {
 		return &f
 	}
@@ -430,7 +455,8 @@ func (t *tunnel) alert(kind string) *failure {
 // up handles an established IKE SA: once its CHILD_SA is installed, the
 // tunnel is connected, with the gateway's virtual IP on the tunnel device
 // in virtual IP mode. A gateway address inside a remote network ends the
-// tunnel: its own packets would be routed into it.
+// tunnel: its own packets would be routed into it. The event says whether
+// the negotiated remote traffic selectors carry the internet (SPEC §6.1).
 func (t *tunnel) up(sa ikeSA) *failure {
 	child, installed := sa.installedChild()
 	if t.connected || !installed {
@@ -450,11 +476,13 @@ func (t *tunnel) up(sa ikeSA) *failure {
 		return f
 	}
 	t.connected, t.missingSince, t.reinitiateDelay = true, time.Time{}, firstReinitiateDelay
+	t.certificateProblem = nil
 	now := t.driver.opts.Clock.Now()
 	t.driver.log(domain.LogLevelInfo, "the IPsec tunnel to "+sa.remote()+" is up")
 	t.driver.emit(domain.StateEvent{
 		State: domain.StateConnected, VPNIP: vpnIP, Remote: sa.remote(),
-		Since: now.Add(-time.Duration(child.installTime) * time.Second).UTC(),
+		Since:      now.Add(-time.Duration(child.installTime) * time.Second).UTC(),
+		NoInternet: !child.carriesInternet(),
 	})
 	t.driver.emit(domain.ChannelEvent{DataCipher: child.transforms.cipher(), ControlChannel: sa.controlChannel()})
 	return nil

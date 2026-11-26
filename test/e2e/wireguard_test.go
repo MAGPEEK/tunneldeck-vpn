@@ -206,16 +206,6 @@ func (sc *wireGuardScenario) checkChannel(t *testing.T, keys keyPair) {
 	}
 }
 
-// checkTornDown: after disconnect tdvpn0 is gone and the main table and
-// the rules are exactly as before the tunnel.
-func (sc *wireGuardScenario) checkTornDown(t *testing.T) {
-	t.Helper()
-	if _, err := sc.stack.tryExec(sc.td.backend.service, "ip", "link", "show", "tdvpn0"); err == nil {
-		t.Error("tdvpn0 still exists after disconnect")
-	}
-	sc.checkRoutingRestored(t)
-}
-
 // importedProfile imports a wg-quick file with the same keys and checks
 // the draft: DNS, the IPv6 entries and the missing keepalive are noted,
 // nothing is rejected or missing.

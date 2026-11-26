@@ -82,7 +82,7 @@ func (l *loop) driverClosed(t *tunnel) {
 // then, once routed, detects the public IP through it. A routing failure
 // never takes a working tunnel down (applyRouting).
 func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
-	t.vpnIP = e.VPNIP
+	t.vpnIP, t.noInternet = e.VPNIP, e.NoInternet
 	l.resetRoutingRetry()
 	l.applyRouting(t)
 	l.failures = 0

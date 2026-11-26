@@ -175,3 +175,10 @@ Der Kernel 4.4 von DSM 7.2 hat kein WireGuard-Modul, und es wird auch keines geb
 - **Routing und Firewall:** Die erlaubte IP `0.0.0.0/0` lässt die Standardroute des NAS unverändert; andere erlaubte IPs werden wie Remote-Netze durch den Tunnel geleitet. Firewall-Regeln, Kill-Switch und Fernzugriff funktionieren wie bei OpenVPN (Abschnitt 10).
 
 Mehr dazu, auch zum Hinweis „Keine Antwort vom Server“, steht in [`linux.de.md`, „WireGuard“](linux.de.md#11-wireguard). *Auf Ihrem NAS prüfen:* WireGuard wurde bisher nur im End-to-End-Test geprüft, nicht auf DSM selbst.
+
+## 12. IPsec/IKEv2
+
+Der Kernel 4.4 von DSM 7.2 braucht nichts weiter: charon verarbeitet ESP im Benutzermodus auf dem TUN-Gerät aus Abschnitt 1, daher werden **keine IPsec-Kernelmodule** geladen, und DSM erhält keine IPsec-Policies. charon und seine Plugins vergrößern das Image um etwa 2 MB (auf etwa 52 MB).
+
+- **DSM-VPN-Server und Portweiterleitungen:** charon nutzt **zufällige lokale IKE-Ports** und kommt daher weder dem DSM-VPN-Server (L2TP/IPsec auf UDP 500/4500) noch Portweiterleitungen von UDP 500/4500 an einen IPsec-Router im LAN (Abschnitt 10) in die Quere. Für den Tunnel selbst brauchen Sie weder eine Regel in der DSM-Firewall noch eine Portweiterleitung im Internet-Router.
+- **Gateway einrichten**, Zuordnung der Felder und die statische Route für den Modus „Netz-zu-Netz“: [IPsec-Gateways](ipsec.de.md). *Auf Ihrem NAS prüfen:* IPsec wurde im End-to-End-Test und gegen einen echten FRITZ!Box-Benutzerzugang getestet, nicht auf DSM selbst.

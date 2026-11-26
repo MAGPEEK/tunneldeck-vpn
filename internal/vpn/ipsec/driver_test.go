@@ -122,8 +122,11 @@ func TestDriverFailures(t *testing.T) {
 			wantCode: domain.ErrorCodeAuthFailed,
 		},
 		{
-			name:     "gateway certificate untrusted",
-			event:    func(c *fakeCharon) { c.send("alert", newMessage().set("type", "cert-untrusted-root")) },
+			name: "gateway certificate untrusted",
+			event: func(c *fakeCharon) {
+				c.send("alert", newMessage().set("type", "cert-untrusted-root"))
+				c.send("alert", newMessage().set("type", "peer-auth-failed"))
+			},
 			wantCode: domain.ErrorCodeAuthFailed,
 		},
 		{
@@ -372,5 +375,74 @@ func TestDriverStopsOnRejectedXAuth(t *testing.T) {
 	h.process.logLine("09[IKE] XAuth authentication of 'alice' (myself) failed")
 	if e := h.waitState(domain.StateError); e.Code != domain.ErrorCodeAuthFailed || !strings.Contains(e.Message, "XAuth") {
 		t.Errorf("error = %+v", e)
+	}
+}
+
+func TestDriverReportsWhetherTheTunnelCarriesTheInternet(t *testing.T) {
+	tests := []struct {
+		name           string
+		remoteTS       []string
+		wantNoInternet bool
+	}{
+		{name: "everything", remoteTS: []string{"0.0.0.0/0"}},
+		{name: "narrowed to a subnet", remoteTS: []string{"192.168.178.0/24"}, wantNoInternet: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.initiated(pskProfile())
+			sa := saMessage(stateEstablished, "192.168.178.202", "1", "0", "0")
+			sa.section(connName).section("child-sas").section(connName+"-1").setList("remote-ts", tt.remoteTS...)
+			h.charon.send("child-updown", updown(true, sa))
+			if up := h.waitState(domain.StateConnected); up.NoInternet != tt.wantNoInternet {
+				t.Errorf("connected = %+v, want NoInternet %v", up, tt.wantNoInternet)
+			}
+			h.stop()
+		})
+	}
+}
+
+// charon raises certificate alerts also for checks that still succeed:
+// without a CRL or OCSP answer every gateway certificate gets
+// cert-validation-failed under relaxed revocation, and a rejected chain may
+// be followed by a trusted one. Only a following peer-auth-failed ends the
+// tunnel, explained by a certificate problem of the same attempt.
+func TestDriverCertificateAlerts(t *testing.T) {
+	tests := []struct {
+		name        string
+		alerts      []string
+		wantMessage string // "" when the tunnel comes up
+	}{
+		{name: "validation without revocation status", alerts: []string{"cert-validation-failed"}},
+		{name: "untrusted chain before a trusted one", alerts: []string{"cert-no-issuer"}},
+		{
+			name:        "authentication fails after a certificate problem",
+			alerts:      []string{"cert-expired", "peer-auth-failed"},
+			wantMessage: "the gateway's certificate has expired",
+		},
+		{
+			name:        "authentication fails without a certificate problem",
+			alerts:      []string{"cert-validation-failed", "peer-auth-failed"},
+			wantMessage: "the gateway could not be authenticated",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.initiated(pskProfile())
+			for _, kind := range tt.alerts {
+				h.charon.send("alert", newMessage().set("type", kind))
+			}
+			if tt.wantMessage == "" {
+				h.charon.send("child-updown", updown(true, saMessage(stateEstablished, "10.10.10.5", "1", "0", "0")))
+				h.waitState(domain.StateConnected)
+				h.stop()
+				return
+			}
+			e := h.waitState(domain.StateError)
+			if e.Code != domain.ErrorCodeAuthFailed || !strings.HasPrefix(e.Message, tt.wantMessage) {
+				t.Errorf("error = %+v, want auth_failed starting with %q", e, tt.wantMessage)
+			}
+		})
 	}
 }

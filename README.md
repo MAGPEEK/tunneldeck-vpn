@@ -6,7 +6,7 @@
 
 ## What it does
 
-- **Manage VPN profiles in the browser**: OpenVPN or WireGuard; create them in a form or import an `.ovpn` or WireGuard `.conf` file. Several profiles can be stored; one is active at a time.
+- **Manage VPN profiles in the browser**: OpenVPN, WireGuard or IPsec/IKEv2; create them in a form or import an `.ovpn` or WireGuard `.conf` file. Several profiles can be stored; one is active at a time.
 - **Dashboard**: connection state, VPN address, traffic, and a live log.
 - **Stays connected**: reconnects automatically after network errors, stops immediately when credentials are rejected, and reconnects after a container restart.
 - **Optional daily reconnect** at a time you choose, per profile.
@@ -22,7 +22,7 @@
 |---|---|
 | OpenVPN (2.7) | available |
 | WireGuard | available (from 0.3.0) |
-| IPsec / IKEv2 | planned |
+| IPsec / IKEv2 | available (unreleased; IKEv1 XAuth as legacy fallback), see [IPsec gateways](docs/ipsec.md) |
 
 ## Quick start
 
@@ -54,6 +54,7 @@ All other traffic between the VPN and the LAN is blocked unless you allow it on 
 
 - [Linux Docker host setup](docs/linux.md): TUN device, firewall tools (ufw, firewalld), HTTPS, backup, update
 - [Synology setup](docs/synology.md): TUN module, Container Manager, firewall, HTTPS, backup, update
+- [IPsec gateways](docs/ipsec.md): LANCOM, FRITZ!Box, OPNsense/pfSense/strongSwan, net-to-net routes
 - [System page checks explained](docs/system-checks.md): what each self-check entry means and how to fix it on Linux and DSM
 - [Lost admin password](docs/reset-admin.md): reset the admin account by command or environment variable, what is kept
 - [Moving from a Teltonika RUT240](docs/migrate-from-rut240.md): field mapping and extra options, mdex example

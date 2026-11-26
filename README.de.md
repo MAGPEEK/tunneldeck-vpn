@@ -6,7 +6,7 @@
 
 ## Was es kann
 
-- **VPN-Profile im Browser verwalten**: OpenVPN oder WireGuard; per Formular anlegen oder als `.ovpn`- bzw. WireGuard-`.conf`-Datei importieren. Mehrere Profile lassen sich speichern; aktiv ist immer eines.
+- **VPN-Profile im Browser verwalten**: OpenVPN, WireGuard oder IPsec/IKEv2; per Formular anlegen oder als `.ovpn`- bzw. WireGuard-`.conf`-Datei importieren. Mehrere Profile lassen sich speichern; aktiv ist immer eines.
 - **Dashboard**: Verbindungsstatus, VPN-Adresse, Datenverkehr und Live-Protokoll.
 - **Bleibt verbunden**: verbindet nach Netzfehlern automatisch neu, stoppt sofort bei abgelehnten Zugangsdaten und verbindet nach einem Container-Neustart wieder.
 - **Tägliche Trennung, wenn gewünscht**: einmal am Tag zur eingestellten Uhrzeit, je Profil.
@@ -22,7 +22,7 @@
 |---|---|
 | OpenVPN (2.7) | verfügbar |
 | WireGuard | verfügbar (ab 0.3.0) |
-| IPsec / IKEv2 | geplant |
+| IPsec / IKEv2 | verfügbar (noch nicht veröffentlicht; IKEv1 XAuth als veralteter Rückfall), siehe [IPsec-Gateways](docs/ipsec.de.md) |
 
 ## Schnellstart
 
@@ -54,6 +54,7 @@ Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer Sie erlauben ihn 
 
 - [Einrichtung auf einem Linux-Docker-Host](docs/linux.de.md): TUN-Gerät, Firewall-Werkzeuge (ufw, firewalld), HTTPS, Sicherung, Aktualisierung
 - [Einrichtung auf einer Synology](docs/synology.de.md): TUN-Modul, Container Manager, Firewall, HTTPS, Sicherung, Aktualisierung
+- [IPsec-Gateways](docs/ipsec.de.md): LANCOM, FRITZ!Box, OPNsense/pfSense/strongSwan, Routen für Netz-zu-Netz
 - [Systemprüfungen erklärt](docs/system-checks.de.md): was jeder Eintrag des Selbsttests bedeutet und wie Sie ihn unter Linux und DSM beheben
 - [Admin-Passwort verloren](docs/reset-admin.de.md): Admin-Konto per Befehl oder Umgebungsvariable zurücksetzen, was erhalten bleibt
 - [Umzug vom Teltonika RUT240](docs/migrate-from-rut240.de.md): Felder und zusätzliche Optionen, Beispiel mdex

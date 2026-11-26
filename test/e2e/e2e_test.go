@@ -32,9 +32,9 @@ const (
 	noRetryWindow = 10 * time.Second
 )
 
-// TestEndToEnd runs every server variant, the OpenVPN ones and WireGuard,
-// against TunnelDeck on every iptables backend, then the firewall cases
-// with a LAN behind TunnelDeck.
+// TestEndToEnd runs every server variant, the OpenVPN ones, WireGuard and
+// IPsec, against TunnelDeck on every iptables backend, then the firewall
+// cases with a LAN behind TunnelDeck.
 func TestEndToEnd(t *testing.T) {
 	s := startStack(t)
 	for _, v := range variants {
@@ -58,6 +58,7 @@ func TestEndToEnd(t *testing.T) {
 				t.Run(wireGuardVariant.name+"-no-handshake", newWireGuardScenario(s, td).checkNoHandshake)
 			}
 			t.Run(wireGuardVariant.name, newWireGuardScenario(s, td).run)
+			runIPsecVariants(t, s, td)
 		})
 	}
 	for _, h := range lanHosts {
@@ -292,6 +293,16 @@ func (sc *scenario) checkRoutingRestored(t *testing.T) {
 	if !slices.Equal(now.rules, sc.before.rules) {
 		t.Errorf("ip rules after disconnect = %q, want %q", now.rules, sc.before.rules)
 	}
+}
+
+// checkTornDown: after disconnect tdvpn0 is gone and the main table and
+// the rules are exactly as before the tunnel.
+func (sc *scenario) checkTornDown(t *testing.T) {
+	t.Helper()
+	if _, err := sc.stack.tryExec(sc.td.backend.service, "ip", "link", "show", "tdvpn0"); err == nil {
+		t.Error("tdvpn0 still exists after disconnect")
+	}
+	sc.checkRoutingRestored(t)
 }
 
 // checkFirewallInstalled: INPUT jumps to TUNNELDECK-INPUT first, and that

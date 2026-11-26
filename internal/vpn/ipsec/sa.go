@@ -3,6 +3,7 @@ package ipsec
 import (
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +30,33 @@ type childSA struct {
 	bytesIn     uint64
 	bytesOut    uint64
 	installTime uint64 // seconds since it was installed
+	// remoteTS are the negotiated remote traffic selectors as charon
+	// prints them: "10.0.0.0/24", "10.0.0.1..10.0.0.9", optionally with
+	// "[proto/port]".
+	remoteTS []string
+}
+
+// carriesInternet reports whether a negotiated remote traffic selector
+// covers every IPv4 address, i.e. the CHILD_SA can carry traffic to the
+// internet. A CHILD_SA without reported selectors is assumed to, so a
+// charon that does not list them keeps the public IP detection.
+func (c childSA) carriesInternet() bool {
+	if len(c.remoteTS) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(c.remoteTS, coversIPv4)
+}
+
+// coversIPv4 reports whether the traffic selector ts spans the whole IPv4
+// address space, as a prefix or as a range.
+func coversIPv4(ts string) bool {
+	ts, _, _ = strings.Cut(ts, "[")
+	ts = strings.TrimSpace(ts)
+	if from, to, isRange := strings.Cut(ts, ".."); isRange {
+		return from == "0.0.0.0" && to == "255.255.255.255"
+	}
+	prefix, err := netip.ParsePrefix(ts)
+	return err == nil && prefix.Addr().Is4() && prefix.Bits() == 0
 }
 
 // transforms are the negotiated transforms of an SA as charon names them.
@@ -64,7 +92,7 @@ func parseIKESA(name string, m *message) ikeSA {
 		sa.children = append(sa.children, childSA{
 			uniqueID: child.get("uniqueid"), state: child.get("state"), transforms: parseTransforms(child),
 			bytesIn: child.getUint("bytes-in"), bytesOut: child.getUint("bytes-out"),
-			installTime: child.getUint("install-time"),
+			installTime: child.getUint("install-time"), remoteTS: child.items("remote-ts"),
 		})
 	}
 	return sa

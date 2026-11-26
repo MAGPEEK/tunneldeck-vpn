@@ -272,3 +272,10 @@ TunnelDeck-VPN bringt WireGuard selbst mit: wireguard-go ist in das Programm ein
 5. **Status:** Das Dashboard zeigt „Verbindet“ bis zum ersten Handshake. Steht nach 30 Sekunden „Keine Antwort vom Server – prüfen Sie die Schlüssel und die Serveradresse“ da, prüfen Sie beide öffentlichen Schlüssel, die Serveradresse und den UDP-Port des Servers.
 
 Der End-to-End-Test (`test/e2e/`) verbindet sich mit einem wireguard-go-Server auf beiden iptables-Backends. *Nicht geprüft:* kommerzielle WireGuard-Anbieter und arm64.
+
+## 12. IPsec/IKEv2
+
+TunnelDeck-VPN bringt charon von strongSwan mit ESP im Benutzermodus mit (kernel-libipsec): Der Host braucht **keine IPsec-Kernelmodule** (`xfrm`, `esp4`, `af_key`) und erhält keine IPsec-Policies; genutzt wird nur das TUN-Gerät aus Abschnitt 1, daher funktionieren Routing, Firewall, Kill-Switch und Fernzugriff wie bei OpenVPN. charon und seine Plugins belegen etwa 2 MB; das Image ist etwa 52 MB groß.
+
+- **Ports:** charon nutzt **zufällige lokale IKE-Ports**, daher funktionieren ein IPsec-Server auf dem Host (strongSwan, Libreswan) und Portweiterleitungen von UDP 500/4500 an einen IPsec-Router im LAN (Abschnitt 10) weiterhin. Auf diesem Host muss nichts geöffnet werden; das Gateway muss UDP 500 und 4500 annehmen.
+- **Gateway einrichten:** was Sie auf LANCOM, FRITZ!Box, OPNsense/pfSense oder strongSwan einstellen, die Zuordnung der Felder und die statische Route für den Modus „Netz-zu-Netz“: [IPsec-Gateways](ipsec.de.md).

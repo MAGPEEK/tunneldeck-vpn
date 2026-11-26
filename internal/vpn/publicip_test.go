@@ -217,3 +217,36 @@ func TestManagerDetectsThePublicIPOnceRouted(t *testing.T) {
 	finder.answer("203.0.113.9", nil)
 	h.waitPublicIP("203.0.113.9")
 }
+
+func TestManagerSkipsThePublicIPForATunnelWithoutInternet(t *testing.T) {
+	finder := newFakeFinder(true)
+	h := newPublicIPHarness(t, finder)
+	h.connect("a")
+	d := h.nextDriver()
+	limited := connectedEvent("192.168.178.202")
+	limited.NoInternet = true
+	d.emit(limited)
+	h.waitState(domain.StateConnected)
+	h.waitLog(noInternetNote)
+	h.m.PublicIPLookupChanged()
+	h.m.Status()
+	select {
+	case local := <-finder.asked:
+		t.Fatalf("lookup from %s through a tunnel without internet", local)
+	default:
+	}
+	for _, e := range h.events.all() {
+		if l, ok := e.(domain.LogEvent); ok && l.Level == domain.LogLevelWarn {
+			t.Errorf("warning %q", l.Text)
+		}
+	}
+	if got := h.m.Status().PublicIP; got != "" {
+		t.Errorf("public IP = %q, want unknown", got)
+	}
+
+	// The next connected event may carry the internet again.
+	d.emit(connectedEvent("192.168.178.202"))
+	receive(t, "lookup once the tunnel carries the internet", finder.asked)
+	finder.answer("203.0.113.9", nil)
+	h.waitPublicIP("203.0.113.9")
+}

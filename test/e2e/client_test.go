@@ -42,6 +42,7 @@ type connectionStatus struct {
 	ControlChannel string       `json:"controlChannel"`
 	LastError      *statusError `json:"lastError"`
 	RoutingWarning *statusError `json:"routingWarning"`
+	PublicIP       string       `json:"publicIp"`
 }
 
 type statusError struct {
@@ -51,8 +52,9 @@ type statusError struct {
 
 // logLine is one line of GET /api/logs.
 type logLine struct {
-	Level string `json:"level"`
-	Text  string `json:"text"`
+	Time  time.Time `json:"time"`
+	Level string    `json:"level"`
+	Text  string    `json:"text"`
 }
 
 type profileRequest struct {

@@ -1,6 +1,6 @@
 # End-to-end test stack, driven by e2e_test.go:
 #
-#   go test -tags e2e -v -timeout 45m ./test/e2e/
+#   go test -tags e2e -v -timeout 60m ./test/e2e/
 #
 # Topology and assertions: README.md. Nothing here is published or reaches
 # the internet apart from the image builds.
@@ -68,6 +68,19 @@ services:
     networks: [e2e]
     healthcheck:
       test: ["CMD-SHELL", "wg show wg0 listen-port | grep -qx 51820"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # IPsec gateway (variant E): strongSwan with a connection per sign-in
+  # method and a net-to-net one; healthy once they are loaded.
+  server-ipsec:
+    image: tunneldeck-e2e-ipsecgw:local
+    build: ipsecgw
+    cap_add: [NET_ADMIN]
+    networks: [e2e]
+    healthcheck:
+      test: ["CMD-SHELL", "swanctl --list-conns | grep -q '^net:'"]
       interval: 2s
       timeout: 2s
       retries: 15

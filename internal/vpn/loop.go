@@ -55,9 +55,12 @@ type tunnel struct {
 	// addresses (LocalNetworker); read once per attempt as well.
 	localNetworks []netip.Prefix
 	// vpnIP is the address of the last connected event.
-	vpnIP    string
-	quit     chan struct{} // closed when the tunnel is discarded
-	stopping bool
+	vpnIP string
+	// noInternet is set when the last connected event said the tunnel
+	// carries no internet traffic (domain.StateEvent.NoInternet).
+	noInternet bool
+	quit       chan struct{} // closed when the tunnel is discarded
+	stopping   bool
 	// failure is set when the tunnel failed and must be stopped.
 	failure *failure
 }
