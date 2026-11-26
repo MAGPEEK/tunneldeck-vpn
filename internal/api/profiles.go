@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"slices"
 
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/vpn"
@@ -90,35 +91,24 @@ func (s *Server) advise(p domain.PublicProfile) []vpn.Advisory {
 	if err != nil {
 		return []vpn.Advisory{}
 	}
-	advisories := d.Advise(p)
-	if adviser, ok := d.(secretAdviser); ok {
-		if stored, err := s.deps.Profiles.ProfileWithSecrets(p.ID); err == nil {
-			advisories = append(advisories, adviser.AdviseSecrets(stored)...)
-		}
-	}
-	return nonNilSlice(advisories)
+	return advisories(d, p, s.secretFacts(d, p))
 }
 
+// view returns p with its advisories and the values the driver derives
+// from its stored secrets.
 func (s *Server) view(p domain.PublicProfile) profileView {
-	return profileView{PublicProfile: p, Advisories: s.advise(p), Derived: s.derive(p)}
-}
-
-// derive returns what the driver of p computes from its stored secrets, or
-// nil when the driver computes nothing or the profile is gone.
-func (s *Server) derive(p domain.PublicProfile) map[string]string {
 	d, err := s.driver(p.Protocol)
 	if err != nil {
-		return nil
+		return profileView{PublicProfile: p, Advisories: []vpn.Advisory{}}
 	}
-	values, ok := d.(deriver)
-	if !ok {
-		return nil
-	}
-	stored, err := s.deps.Profiles.ProfileWithSecrets(p.ID)
-	if err != nil {
-		return nil
-	}
-	return values.Derive(stored)
+	facts := s.secretFacts(d, p)
+	return profileView{PublicProfile: p, Advisories: advisories(d, p, facts), Derived: facts.derived}
+}
+
+// advisories joins the advisories of p's settings with those of its
+// secrets.
+func advisories(d vpn.Driver, p domain.PublicProfile, facts secretFacts) []vpn.Advisory {
+	return nonNilSlice(slices.Concat(d.Advise(p), facts.advisories))
 }
 
 // generateKeyPair answers POST /api/drivers/{protocol}/keypair with a new
@@ -219,6 +209,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := s.deps.Profiles.UpdateProfile(p, req.ClearSecrets)
+	s.facts.invalidate(id)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -280,7 +271,9 @@ func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.deps.Profiles.DeleteProfile(id); err != nil {
+	err := s.deps.Profiles.DeleteProfile(id)
+	s.facts.invalidate(id)
+	if err != nil {
 		writeError(w, r, err)
 		return
 	}

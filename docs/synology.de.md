@@ -181,4 +181,10 @@ Mehr dazu, auch zum Hinweis „Keine Antwort vom Server“, steht in [`linux.de.
 Der Kernel 4.4 von DSM 7.2 braucht nichts weiter: charon verarbeitet ESP im Benutzermodus auf dem TUN-Gerät aus Abschnitt 1, daher werden **keine IPsec-Kernelmodule** geladen, und DSM erhält keine IPsec-Policies. charon und seine Plugins vergrößern das Image um etwa 2 MB (auf etwa 52 MB).
 
 - **DSM-VPN-Server und Portweiterleitungen:** charon nutzt **zufällige lokale IKE-Ports** und kommt daher weder dem DSM-VPN-Server (L2TP/IPsec auf UDP 500/4500) noch Portweiterleitungen von UDP 500/4500 an einen IPsec-Router im LAN (Abschnitt 10) in die Quere. Für den Tunnel selbst brauchen Sie weder eine Regel in der DSM-Firewall noch eine Portweiterleitung im Internet-Router.
+- **Capabilities:** charon startet als root und wechselt danach zum Benutzer `ipsec`; dafür braucht es `SETUID` und `SETGID`, zwei der Standard-Capabilities von Docker. Die Compose-Datei aus Abschnitt 2 behält die Standards bei, Sie müssen also nichts tun. Wenn Sie den Container mit `cap_drop: ALL` härten, fügen Sie beide neben `NET_ADMIN` wieder hinzu, sonst startet charon nicht und IPsec-Profile können sich nicht verbinden:
+
+  ```yaml
+      cap_drop: [ALL]
+      cap_add: [NET_ADMIN, SETUID, SETGID]
+  ```
 - **Gateway einrichten**, Zuordnung der Felder und die statische Route für den Modus „Netz-zu-Netz“: [IPsec-Gateways](ipsec.de.md). *Auf Ihrem NAS prüfen:* IPsec wurde im End-to-End-Test und gegen einen echten FRITZ!Box-Benutzerzugang getestet, nicht auf DSM selbst.

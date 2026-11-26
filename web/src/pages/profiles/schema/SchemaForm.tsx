@@ -14,8 +14,12 @@ export interface SchemaFormProps {
   values: FormValues;
   secrets: SecretStates;
   errors: Record<string, string>;
-  onValuesChange: (values: FormValues) => void;
-  onSecretsChange: (secrets: SecretStates) => void;
+  /**
+   * Changes are updates of the latest values, not snapshots of the rendered
+   * ones: a file read in the background must not undo another field's change.
+   */
+  onValuesChange: (update: (values: FormValues) => FormValues) => void;
+  onSecretsChange: (update: (secrets: SecretStates) => SecretStates) => void;
   /** Extra content shown right below the field with that key, e.g. a key pair generator. */
   fieldAddons?: Record<string, ReactNode>;
 }
@@ -65,8 +69,9 @@ function SchemaInput({
   const error = errors[field.key];
   const value = values[field.key];
   const setValue = (next: string | boolean | string[]) =>
-    onValuesChange({ ...values, [field.key]: next });
-  const setSecret = (next: SecretState) => onSecretsChange({ ...secrets, [field.key]: next });
+    onValuesChange((current) => ({ ...current, [field.key]: next }));
+  const setSecret = (next: SecretState) =>
+    onSecretsChange((current) => ({ ...current, [field.key]: next }));
 
   switch (field.type) {
     case 'bool':

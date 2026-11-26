@@ -331,7 +331,8 @@
     "undo": "Rückgängig",
     "keepStored": "Gespeicherten Wert behalten",
     "loadFile": "Aus einer Datei laden",
-    "loadFileFor": "{{label}} aus einer Datei laden"
+    "loadFileFor": "{{label}} aus einer Datei laden",
+    "fileUnreadable": "Die Datei konnte nicht gelesen werden."
   },
   "importWarnings": {
     "group": {
@@ -381,6 +382,8 @@
       "ipv6_ignored": "enthält IPv6-Einträge, die weggelassen werden; verwendet wird nur IPv4.",
       "additional_address": "nennt eine weitere IPv4-Adresse; verwendet wird nur die erste.",
       "additional_peer": "ist ein weiterer Peer; verwendet wird nur der erste.",
+      "additional_interface": "ist ein weiterer [Interface]-Abschnitt; seine Einträge werden mit dem ersten zusammengeführt.",
+      "warnings_limited": "{{count}} weitere Hinweise werden nicht aufgeführt.",
       "keepalive_default": "ist nicht gesetzt; verwendet werden 25 Sekunden, damit der Tunnel vom Server aus erreichbar bleibt.",
       "unknown_key": "ist keine bekannte WireGuard-Einstellung."
     }

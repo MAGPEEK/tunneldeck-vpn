@@ -32,6 +32,11 @@ export interface SchemaField {
   placeholder?: string;
   /** `base64`: a multi-line secret holding a binary file; offer a file picker and send base64. */
   encoding?: 'base64';
+  /**
+   * A UI addon shown below the field, by id (`keyPair`, `ikeV1Warning`,
+   * `netToNetRoute`); unknown ids show nothing.
+   */
+  addon?: string;
 }
 
 export interface SchemaSection {
@@ -97,6 +102,8 @@ export interface ImportWarning {
   line?: number;
   /** The file a directive refers to, for file_reference. */
   file?: string;
+  /** How many further warnings were left out, for warnings_limited. */
+  count?: number;
   message: string;
 }
 

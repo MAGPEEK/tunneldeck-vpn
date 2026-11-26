@@ -49,7 +49,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-`network_mode: host` ist nötig: TunnelDeck-VPN verwaltet das Gerät `tdvpn0` des Hosts, sein Policy-Routing und seine Firewall-Ketten. `NET_ADMIN` und `/dev/net/tun` genügen; der Container läuft nicht privilegiert.
+`network_mode: host` ist nötig: TunnelDeck-VPN verwaltet das Gerät `tdvpn0` des Hosts, sein Policy-Routing und seine Firewall-Ketten. Neben den Standard-Capabilities von Docker genügen `NET_ADMIN` und `/dev/net/tun`; der Container läuft nicht privilegiert. Wenn Sie die Standard-Capabilities mit `cap_drop: ALL` entfernen, braucht IPsec zwei davon zurück (Abschnitt 12).
 
 ## 3. Erste Anmeldung
 
@@ -278,4 +278,10 @@ Der End-to-End-Test (`test/e2e/`) verbindet sich mit einem wireguard-go-Server a
 TunnelDeck-VPN bringt charon von strongSwan mit ESP im Benutzermodus mit (kernel-libipsec): Der Host braucht **keine IPsec-Kernelmodule** (`xfrm`, `esp4`, `af_key`) und erhält keine IPsec-Policies; genutzt wird nur das TUN-Gerät aus Abschnitt 1, daher funktionieren Routing, Firewall, Kill-Switch und Fernzugriff wie bei OpenVPN. charon und seine Plugins belegen etwa 2 MB; das Image ist etwa 52 MB groß.
 
 - **Ports:** charon nutzt **zufällige lokale IKE-Ports**, daher funktionieren ein IPsec-Server auf dem Host (strongSwan, Libreswan) und Portweiterleitungen von UDP 500/4500 an einen IPsec-Router im LAN (Abschnitt 10) weiterhin. Auf diesem Host muss nichts geöffnet werden; das Gateway muss UDP 500 und 4500 annehmen.
+- **Capabilities:** charon startet als root und wechselt danach zum Benutzer `ipsec`; dafür braucht es `SETUID` und `SETGID`, zwei der Standard-Capabilities von Docker. Die Compose-Datei aus Abschnitt 2 behält die Standards bei, Sie müssen also nichts tun. Wenn Sie den Container mit `cap_drop: ALL` härten, fügen Sie beide neben `NET_ADMIN` wieder hinzu, sonst startet charon nicht und IPsec-Profile können sich nicht verbinden:
+
+  ```yaml
+      cap_drop: [ALL]
+      cap_add: [NET_ADMIN, SETUID, SETGID]
+  ```
 - **Gateway einrichten:** was Sie auf LANCOM, FRITZ!Box, OPNsense/pfSense oder strongSwan einstellen, die Zuordnung der Felder und die statische Route für den Modus „Netz-zu-Netz“: [IPsec-Gateways](ipsec.de.md).

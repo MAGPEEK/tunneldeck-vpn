@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Field } from '../../../components/Field';
 import { FileInput } from './FileInput';
 import styles from './SchemaForm.module.css';
@@ -36,8 +37,9 @@ export function TextAreaField({
   placeholder,
   onChange,
 }: ValueFieldProps) {
+  const [fileError, setFileError] = useState<string>();
   return (
-    <Field label={label} error={error}>
+    <Field label={label} error={fileError ?? error}>
       {(control) => (
         <>
           <textarea
@@ -48,9 +50,12 @@ export function TextAreaField({
             placeholder={placeholder}
             spellCheck={false}
             rows={5}
-            onChange={(event) => onChange(event.currentTarget.value)}
+            onChange={(event) => {
+              setFileError(undefined);
+              onChange(event.currentTarget.value);
+            }}
           />
-          <FileInput fieldLabel={label} encoding="text" onValue={onChange} />
+          <FileInput fieldLabel={label} encoding="text" onValue={onChange} onError={setFileError} />
         </>
       )}
     </Field>

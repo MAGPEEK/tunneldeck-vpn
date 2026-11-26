@@ -78,3 +78,18 @@ func TestDescribeDefaultsAreValid(t *testing.T) {
 		t.Errorf("Validate = %v", err)
 	}
 }
+
+// TestDescribeNamesAddons: only the private key carries the key pair addon.
+func TestDescribeNamesAddons(t *testing.T) {
+	for _, section := range Describe().Sections {
+		for _, f := range section.Fields {
+			want := ""
+			if f.Key == SecretPrivateKey {
+				want = "keyPair"
+			}
+			if f.Addon != want {
+				t.Errorf("field %q has addon %q, want %q", f.Key, f.Addon, want)
+			}
+		}
+	}
+}

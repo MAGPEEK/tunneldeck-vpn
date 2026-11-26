@@ -5,7 +5,6 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +16,7 @@ import {
   updateProfile,
   type DailyReconnect,
   type Driver,
+  type FormSchema,
   type ImportWarning,
   type Profile,
   type ProfileRequest,
@@ -39,8 +39,7 @@ import {
   type SecretState,
   type SecretStates,
 } from '../schema/schemaValues';
-import { KeyPairPanel } from './KeyPairPanel';
-import { ipsecAddons, templateAddons } from './schemaAddons';
+import { schemaAddons, templateAddons } from './schemaAddons';
 import { applyTemplate, changedTemplate, forceTemplate } from './templatePresets';
 import { splitProfileErrors } from './formErrors';
 import { ImportWarnings } from './ImportWarnings';
@@ -51,9 +50,6 @@ import { ReconnectNotice } from './ReconnectNotice';
 import { AccessSection } from './AccessSection';
 import { ScheduleSection } from './ScheduleSection';
 
-/** The private-key secret of each protocol that can generate a key pair. */
-const KEY_PAIR_FIELDS: Readonly<Record<string, string>> = { wireguard: 'privateKey' };
-
 export interface ProfileDraft {
   name: string;
   protocol: string;
@@ -61,6 +57,12 @@ export interface ProfileDraft {
   secrets: SecretStates;
   dailyReconnect: DailyReconnect;
   publicAddress: string;
+}
+
+/** The draft and the fields the last template choice left as the user had changed them. */
+interface EditorState {
+  draft: ProfileDraft;
+  templateKept: string[];
 }
 
 export interface ProfileEditorProps {
@@ -94,11 +96,21 @@ export function ProfileEditor(props: ProfileEditorProps) {
   const text = useDriverText();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [draft, setDraft] = useState(initial);
+  const [editor, setEditor] = useState<EditorState>({ draft: initial, templateKept: [] });
   const [saved, setSaved] = useState(justSaved === true);
-  const [templateKept, setTemplateKept] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
-  const schema = drivers.find((driver) => driver.protocol === draft.protocol)?.schema;
+  const { draft, templateKept } = editor;
+  const schemaOf = (protocol: string) =>
+    drivers.find((driver) => driver.protocol === protocol)?.schema;
+  const schema = schemaOf(draft.protocol);
+
+  // Every change builds on the latest state: files load asynchronously and
+  // must not drop each other's values.
+  const setDraft: Dispatch<SetStateAction<ProfileDraft>> = (update) =>
+    setEditor((current) => ({
+      ...current,
+      draft: typeof update === 'function' ? update(current.draft) : update,
+    }));
 
   const save = useMutation({
     mutationFn: (body: ProfileRequest) =>
@@ -111,7 +123,6 @@ export function ProfileEditor(props: ProfileEditorProps) {
         setDraft((current) => ({ ...current, secrets: storedSecrets(current.secrets, result) }));
         return;
       }
-      client.removeQueries({ queryKey: queryKeys.importDraft });
       const state: ProfileFormState = { saved: true };
       void navigate(`/profiles/${result.id}`, { replace: true, state });
     },
@@ -130,25 +141,19 @@ export function ProfileEditor(props: ProfileEditorProps) {
     });
   };
 
-  // Choosing a template pre-fills its presets into fields the user has not changed.
-  const changeValues = (values: FormValues) => {
-    const choice = schema && changedTemplate(schema, draft.values, values);
-    if (!schema || !choice) {
-      setDraft({ ...draft, values });
-      return;
-    }
-    const result = applyTemplate(schema, draft.values, choice);
-    setTemplateKept(result.kept);
-    setDraft({ ...draft, values: result.values });
-  };
+  const changeValues = (update: (values: FormValues) => FormValues) =>
+    setEditor((current) =>
+      withValues(schemaOf(current.draft.protocol), current, update(current.draft.values)),
+    );
 
-  const takeTemplateValues = (fieldKey: string) => {
-    const field = schema && schemaFields(schema).find((candidate) => candidate.key === fieldKey);
-    const option = field?.options?.find((candidate) => candidate.value === draft.values[fieldKey]);
-    if (!schema || !field || !option) return;
-    setTemplateKept([]);
-    setDraft({ ...draft, values: forceTemplate(schema, draft.values, { field, option }) });
-  };
+  const changeSecrets = (update: (secrets: SecretStates) => SecretStates) =>
+    setDraft((current) => ({ ...current, secrets: update(current.secrets) }));
+
+  const takeTemplateValues = (fieldKey: string) =>
+    setEditor((current) => forcedTemplate(schemaOf(current.draft.protocol), current, fieldKey));
+
+  const takeGeneratedSecret = (key: string, value: string) =>
+    changeSecrets((secrets) => ({ ...secrets, [key]: typedSecret(secrets[key], value) }));
 
   // The save result is shown above the form; bring it into view.
   const failed = save.isError;
@@ -216,16 +221,21 @@ export function ProfileEditor(props: ProfileEditorProps) {
             maxLength={64}
             autoComplete="off"
             error={fieldErrors?.name}
-            onChange={(event) => setDraft({ ...draft, name: event.currentTarget.value })}
+            onChange={(event) => {
+              const name = event.currentTarget.value;
+              setDraft((current) => ({ ...current, name }));
+            }}
           />
           {!profile && (
             <ProtocolChooser
               available={drivers.map((driver) => driver.protocol)}
               value={draft.protocol}
-              onChange={(protocol) => {
-                setTemplateKept([]);
-                setDraft({ ...draftFor(protocol), name: draft.name });
-              }}
+              onChange={(protocol) =>
+                setEditor((current) => ({
+                  draft: { ...draftFor(protocol), name: current.draft.name },
+                  templateKept: [],
+                }))
+              }
             />
           )}
         </div>
@@ -237,16 +247,21 @@ export function ProfileEditor(props: ProfileEditorProps) {
           secrets={draft.secrets}
           errors={schemaErrors}
           onValuesChange={changeValues}
-          onSecretsChange={(secrets) => setDraft({ ...draft, secrets })}
+          onSecretsChange={changeSecrets}
           fieldAddons={{
-            ...keyPairAddon(draft, profile, setDraft),
             ...templateAddons({
               schema,
               values: draft.values,
               kept: templateKept,
               onForce: takeTemplateValues,
             }),
-            ...ipsecAddons(draft.protocol, draft.values, profile),
+            ...schemaAddons(schema, {
+              protocol: draft.protocol,
+              values: draft.values,
+              secrets: draft.secrets,
+              profile,
+              onGeneratedSecret: takeGeneratedSecret,
+            }),
           }}
         />
       )}
@@ -254,12 +269,12 @@ export function ProfileEditor(props: ProfileEditorProps) {
         value={draft.dailyReconnect}
         timeZone={timeZone}
         error={fieldErrors?.dailyReconnectTime}
-        onChange={(dailyReconnect) => setDraft({ ...draft, dailyReconnect })}
+        onChange={(dailyReconnect) => setDraft((current) => ({ ...current, dailyReconnect }))}
       />
       <AccessSection
         publicAddress={draft.publicAddress}
         error={fieldErrors?.publicAddress}
-        onChange={(publicAddress) => setDraft({ ...draft, publicAddress })}
+        onChange={(publicAddress) => setDraft((current) => ({ ...current, publicAddress }))}
       />
       <div className={styles.buttons}>
         <Button type="submit" variant="primary" loading={save.isPending} disabled={!schema}>
@@ -271,30 +286,34 @@ export function ProfileEditor(props: ProfileEditorProps) {
   );
 }
 
-/** The key pair generator below the private key, for protocols that have one. */
-function keyPairAddon(
-  draft: ProfileDraft,
-  profile: Profile | undefined,
-  setDraft: Dispatch<SetStateAction<ProfileDraft>>,
-): Record<string, ReactNode> | undefined {
-  const key = KEY_PAIR_FIELDS[draft.protocol];
-  if (key === undefined) {
-    return undefined;
+/** The state with new values; choosing a template pre-fills its presets into fields the user has not changed. */
+function withValues(
+  schema: FormSchema | undefined,
+  state: EditorState,
+  values: FormValues,
+): EditorState {
+  const before = state.draft.values;
+  const choice = schema && changedTemplate(schema, before, values);
+  if (!schema || !choice) {
+    return { ...state, draft: { ...state.draft, values } };
   }
-  const takeGenerated = (privateKey: string) =>
-    setDraft((current) => ({
-      ...current,
-      secrets: { ...current.secrets, [key]: typedSecret(current.secrets[key], privateKey) },
-    }));
+  const result = applyTemplate(schema, before, choice);
+  return { draft: { ...state.draft, values: result.values }, templateKept: result.kept };
+}
+
+/** The state with all presets of the chosen template of `fieldKey` taken over. */
+function forcedTemplate(
+  schema: FormSchema | undefined,
+  state: EditorState,
+  fieldKey: string,
+): EditorState {
+  const values = state.draft.values;
+  const field = schema && schemaFields(schema).find((candidate) => candidate.key === fieldKey);
+  const option = field?.options?.find((candidate) => candidate.value === values[fieldKey]);
+  if (!schema || !field || !option) return state;
   return {
-    [key]: (
-      <KeyPairPanel
-        protocol={draft.protocol}
-        state={draft.secrets[key]}
-        storedPublicKey={profile?.derived?.publicKey}
-        onGenerated={takeGenerated}
-      />
-    ),
+    draft: { ...state.draft, values: forceTemplate(schema, values, { field, option }) },
+    templateKept: [],
   };
 }
 

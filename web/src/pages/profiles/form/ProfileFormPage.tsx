@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
 import type { Driver, Profile } from '../../../api/profiles';
@@ -65,6 +65,19 @@ function copyName(t: TFunction, name: string): string {
   return t('profileForm.copyName', { name }).slice(0, 64);
 }
 
+/**
+ * The import draft holds the file's secrets in plain text, so it stays in
+ * the cache only while the form that took it is open: saving, cancelling
+ * and navigating away all drop it.
+ */
+function useForgetImportDraft(fromImport: boolean) {
+  const client = useQueryClient();
+  useEffect(() => {
+    if (!fromImport) return undefined;
+    return () => client.removeQueries({ queryKey: queryKeys.importDraft, exact: true });
+  }, [client, fromImport]);
+}
+
 /** /profiles/new (blank, duplicate or import) and /profiles/:id; each navigation starts fresh. */
 export function ProfileFormPage() {
   const location = useLocation();
@@ -80,6 +93,7 @@ function ProfileFormView() {
   const [imported] = useState(() =>
     state.fromImport ? client.getQueryData<CachedImportDraft>(queryKeys.importDraft) : undefined,
   );
+  useForgetImportDraft(state.fromImport === true);
   const drivers = useDrivers();
   const system = useSystem();
   const profile = useProfile(id);

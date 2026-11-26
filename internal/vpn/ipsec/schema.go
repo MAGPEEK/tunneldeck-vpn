@@ -19,8 +19,8 @@ func Describe() vpn.FormSchema {
 		section("gateway",
 			field(KeyTemplate, vpn.FieldSelect, templateOptions(), defaultValue(string(TemplateGeneric))),
 			field(KeyGateway, vpn.FieldText, required, placeholder("vpn.example.com")),
-			field(KeyIKEVersion, vpn.FieldSelect, options(KeyIKEVersion, ikeVersions...), defaultValue(string(IKEv2))),
-			field(KeyMode, vpn.FieldSelect, options(KeyMode, modes...), defaultValue(string(ModeVirtualIP))),
+			field(KeyIKEVersion, vpn.FieldSelect, options(KeyIKEVersion, ikeVersions...), defaultValue(string(IKEv2)), addon("ikeV1Warning")),
+			field(KeyMode, vpn.FieldSelect, options(KeyMode, modes...), defaultValue(string(ModeVirtualIP)), addon("netToNetRoute")),
 			field(KeyLocalSubnets, vpn.FieldStringList, required, visibleFor(KeyMode, string(ModeNetToNet)), placeholder("192.168.1.0/24")),
 			field(KeyRemoteSubnets, vpn.FieldStringList, required, defaultValue([]string{everything.String()}), placeholder("10.20.0.0/16")),
 		),
@@ -68,6 +68,10 @@ func base64Encoded(f *vpn.Field) { f.Encoding = vpn.EncodingBase64 }
 
 func placeholder(text string) fieldOption {
 	return func(f *vpn.Field) { f.Placeholder = text }
+}
+
+func addon(name string) fieldOption {
+	return func(f *vpn.Field) { f.Addon = name }
 }
 
 func defaultValue(value any) fieldOption {

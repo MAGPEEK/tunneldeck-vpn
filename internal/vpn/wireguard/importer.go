@@ -1,6 +1,7 @@
 package wireguard
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +12,11 @@ import (
 
 // maxImportBytes bounds the size of an imported .conf file.
 const maxImportBytes = 64 << 10
+
+// maxWarnings bounds the warnings an import lists; the rest is summed up
+// in one CodeWarningsLimited warning, so a file of junk lines cannot flood
+// the response.
+const maxWarnings = 50
 
 // importField is the validation field key for problems with the file as a
 // whole.
@@ -47,9 +53,11 @@ const (
 // [Interface] PrivateKey, Address and MTU and the first [Peer]'s PublicKey,
 // PresharedKey, Endpoint, AllowedIPs and PersistentKeepalive fill the
 // form. DNS, Table, FwMark, ListenPort, SaveConfig, IPv6 entries and
-// further peers are dropped with an info note; scripts (PreUp, PostUp,
+// further peers are dropped with an info note; a further [Interface]
+// section is merged into the first with a warning; scripts (PreUp, PostUp,
 // PreDown, PostDown) and unknown keys are reported with severity
-// "rejected". Only unusable input fails: a file that is too large, binary,
+// "rejected". At most maxWarnings warnings are listed, followed by one
+// that counts the rest. Only unusable input fails: a file that is too large, binary,
 // empty or without an [Interface] or [Peer] section; the error is a
 // *domain.ValidationError.
 func ImportConf(text string) (ImportResult, error) {
@@ -83,7 +91,9 @@ type confImporter struct {
 	settings   domain.Settings
 	secrets    vpn.Secrets
 	warnings   []Warning
+	omitted    int // warnings beyond maxWarnings
 	section    confSection
+	interfaces int
 	peers      int
 	allowedIPs []string
 	keepalive  bool // PersistentKeepalive was given
@@ -122,6 +132,13 @@ func (im *confImporter) enterSection(header string, number int) {
 	switch strings.ToLower(strings.TrimSpace(header[1 : len(header)-1])) {
 	case "interface":
 		im.section, im.recognized = sectionInterface, true
+		im.interfaces++
+		if im.interfaces > 1 {
+			im.warn(Warning{
+				Code: CodeAdditionalInterface, Severity: SeverityWarning, Directive: "[Interface]", Line: number,
+				Message: "is a further [Interface] section; its keys are merged into the first one",
+			})
+		}
 	case "peer":
 		im.peers++
 		im.recognized = true
@@ -271,8 +288,24 @@ func (im *confImporter) reject(code, key string, number int, message string) {
 	im.warn(Warning{Code: code, Severity: SeverityRejected, Directive: key, Line: number, Message: message})
 }
 
+// warn lists w, or only counts it once maxWarnings are listed.
 func (im *confImporter) warn(w Warning) {
+	if len(im.warnings) >= maxWarnings {
+		im.omitted++
+		return
+	}
 	im.warnings = append(im.warnings, w)
+}
+
+// summarizeOmitted appends the warning that counts the unlisted ones.
+func (im *confImporter) summarizeOmitted() {
+	if im.omitted == 0 {
+		return
+	}
+	im.warnings = append(im.warnings, Warning{
+		Code: CodeWarningsLimited, Severity: SeverityWarning, Count: im.omitted,
+		Message: fmt.Sprintf("%d more notes are not listed", im.omitted),
+	})
 }
 
 // result applies the defaults and returns the draft.
@@ -293,6 +326,7 @@ func (im *confImporter) result() ImportResult {
 			Message: "is not set; 25 seconds are used so that the tunnel stays reachable from the server",
 		})
 	}
+	im.summarizeOmitted()
 	return ImportResult{Settings: s, Secrets: im.secrets, Warnings: im.warnings, Missing: im.missing()}
 }
 

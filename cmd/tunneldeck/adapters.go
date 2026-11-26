@@ -82,7 +82,7 @@ func importWireGuard(text string) (api.ImportDraft, error) {
 	warnings := make([]api.ImportWarning, len(result.Warnings))
 	for i, w := range result.Warnings {
 		warnings[i] = api.ImportWarning{
-			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, Message: w.Message,
+			Code: w.Code, Severity: string(w.Severity), Directive: w.Directive, Line: w.Line, Count: w.Count, Message: w.Message,
 		}
 	}
 	return api.ImportDraft{

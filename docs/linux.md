@@ -49,7 +49,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-`network_mode: host` is required: TunnelDeck-VPN manages the host's `tdvpn0` device, its policy routing and its firewall chains. `NET_ADMIN` and `/dev/net/tun` are all it needs; the container does not run privileged.
+`network_mode: host` is required: TunnelDeck-VPN manages the host's `tdvpn0` device, its policy routing and its firewall chains. `NET_ADMIN` and `/dev/net/tun` are all it needs besides Docker's default capabilities; the container does not run privileged. If you drop the default capabilities with `cap_drop: ALL`, IPsec needs two of them back (section 12).
 
 ## 3. First sign-in
 
@@ -278,4 +278,10 @@ The end-to-end test (`test/e2e/`) connects to a wireguard-go server on both ipta
 TunnelDeck-VPN brings strongSwan's charon with ESP in user space (kernel-libipsec): the host needs **no IPsec kernel modules** (`xfrm`, `esp4`, `af_key`) and gets no IPsec policies; only the TUN device of section 1 is used, so routing, firewall, kill switch and remote access work as with OpenVPN. charon and its plugins add about 2 MB; the image is about 52 MB.
 
 - **Ports:** charon uses **random local IKE ports**, so an IPsec server on the host (strongSwan, Libreswan) and port forwards of UDP 500/4500 to a LAN IPsec router (section 10) keep working. Nothing has to be opened on this host; the gateway must accept UDP 500 and 4500.
+- **Capabilities:** charon starts as root and then drops to the user `ipsec`; for that it needs `SETUID` and `SETGID`, two of Docker's default capabilities. The compose file of section 2 keeps the defaults, so there is nothing to do. If you harden the container with `cap_drop: ALL`, add both back next to `NET_ADMIN`, otherwise charon does not start and IPsec profiles cannot connect:
+
+  ```yaml
+      cap_drop: [ALL]
+      cap_add: [NET_ADMIN, SETUID, SETGID]
+  ```
 - **Gateway setup:** what to configure on LANCOM, FRITZ!Box, OPNsense/pfSense or strongSwan, the field mapping and the static route for net-to-net mode: [IPsec gateways](ipsec.md).

@@ -19,28 +19,32 @@ const (
 // Warning codes. They are stable; the UI translates by code. Codes shared
 // with the OpenVPN importer keep their meaning.
 const (
-	CodeRunsCode          = "runs_code"
-	CodeRoutingHandled    = "routing_handled"
-	CodeInvalidLine       = "invalid_line"
-	CodeInvalidValue      = "invalid_value"
-	CodeDNSIgnored        = "dns_ignored"
-	CodeListenPortIgnored = "listen_port_ignored"
-	CodeSaveConfigIgnored = "save_config_ignored"
-	CodeIPv6Ignored       = "ipv6_ignored"
-	CodeAdditionalAddress = "additional_address"
-	CodeAdditionalPeer    = "additional_peer"
-	CodeKeepaliveDefault  = "keepalive_default"
-	CodeUnknownKey        = "unknown_key"
+	CodeRunsCode            = "runs_code"
+	CodeRoutingHandled      = "routing_handled"
+	CodeInvalidLine         = "invalid_line"
+	CodeInvalidValue        = "invalid_value"
+	CodeDNSIgnored          = "dns_ignored"
+	CodeListenPortIgnored   = "listen_port_ignored"
+	CodeSaveConfigIgnored   = "save_config_ignored"
+	CodeIPv6Ignored         = "ipv6_ignored"
+	CodeAdditionalAddress   = "additional_address"
+	CodeAdditionalPeer      = "additional_peer"
+	CodeAdditionalInterface = "additional_interface"
+	CodeWarningsLimited     = "warnings_limited"
+	CodeKeepaliveDefault    = "keepalive_default"
+	CodeUnknownKey          = "unknown_key"
 )
 
 // Warning reports a line of an imported .conf file that was dropped,
 // rejected or mapped. Directive is the key or section of the line; Line is
-// 1-based, 0 when no line applies. Message is English and never quotes a
-// value; the UI translates by Code.
+// 1-based, 0 when no line applies. Count is the number of warnings the
+// summary CodeWarningsLimited stands for, 0 otherwise. Message is English
+// and never quotes a value; the UI translates by Code.
 type Warning struct {
 	Code      string   `json:"code"`
 	Severity  Severity `json:"severity"`
 	Directive string   `json:"directive,omitempty"`
 	Line      int      `json:"line,omitempty"`
+	Count     int      `json:"count,omitempty"`
 	Message   string   `json:"message"`
 }

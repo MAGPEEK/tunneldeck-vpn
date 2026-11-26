@@ -1,5 +1,5 @@
 import type { Advisory } from '../../../api/profiles';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { problem, type MockRoutes } from '../../../test/fetchMock';
 import {
@@ -61,6 +61,39 @@ describe('new profile', () => {
     expect(within(group).getByRole('radio', { name: /IPsec\/IKEv2/ })).toBeDisabled();
     expect(within(group).getAllByText('Planned')).toHaveLength(2);
     expect(screen.getByText('Server time zone: Europe/Berlin')).toBeInTheDocument();
+  });
+
+  it('keeps a setting and a secret loaded from files at the same time', async () => {
+    const created = makeProfile({ id: 'new1', name: 'files' });
+    const { fetchMock } = renderApp(
+      routes({
+        'POST /api/profiles': { status: 201, body: created },
+        'GET /api/profiles/new1': { body: created },
+      }),
+      '/profiles/new',
+    );
+    await screen.findByLabelText('Server address');
+    change('Name', 'files');
+    change('Server address', 'vpn.example.com');
+    change('Username', 'u');
+    change('Password', 'p');
+    const ca = '-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----\n';
+    const ta = '-----BEGIN OpenVPN Static key V1-----\n';
+
+    fireEvent.change(screen.getByLabelText('Load CA certificate from a file'), {
+      target: { files: [new File([ca], 'ca.crt')] },
+    });
+    fireEvent.change(screen.getByLabelText('Load TLS auth key from a file'), {
+      target: { files: [new File([ta], 'ta.key')] },
+    });
+    await waitFor(() => expect(screen.getByLabelText('TLS auth key')).toHaveValue(ta));
+    expect(screen.getByLabelText('CA certificate')).toHaveValue(ca);
+    submitForm();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit profile' });
+    const body = bodyOf(fetchMock, 'POST', '/api/profiles');
+    expect(body.settings).toMatchObject({ caCert: ca });
+    expect(body.secrets).toMatchObject({ tlsAuthKey: ta });
   });
 
   it('creates the RUT240-style profile and shows its danger advisory prominently', async () => {

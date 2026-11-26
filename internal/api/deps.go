@@ -97,13 +97,15 @@ type deriver interface {
 }
 
 // ImportWarning reports a line of an imported file that was dropped,
-// rejected or mapped. File names a file the line refers to.
+// rejected or mapped. File names a file the line refers to. Count is the
+// number of warnings a summary warning stands for.
 type ImportWarning struct {
 	Code      string `json:"code"`
 	Severity  string `json:"severity"`
 	Directive string `json:"directive,omitempty"`
 	Line      int    `json:"line,omitempty"`
 	File      string `json:"file,omitempty"`
+	Count     int    `json:"count,omitempty"`
 	Message   string `json:"message"`
 }
 

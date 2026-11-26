@@ -297,6 +297,16 @@ func TestImportLines(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "a further interface section is merged with a warning",
+			text: "[Interface]\nPrivateKey = k\n[Interface]\nAddress = 10.0.0.2/32\n" + peer,
+			check: func(t *testing.T, result ImportResult) {
+				if got := settingString(t, result.Settings, KeyAddress); got != "10.0.0.2/32" || result.Secrets[SecretPrivateKey] != "k" {
+					t.Errorf("address = %q, result = %+v", got, result)
+				}
+			},
+			warnings: []expectedWarning{{CodeAdditionalInterface, SeverityWarning, "[Interface]", 3}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -307,6 +317,48 @@ func TestImportLines(t *testing.T) {
 			tt.check(t, result)
 			if got := warningsOf(result); !slices.Equal(got, tt.warnings) {
 				t.Errorf("warnings = %v, want %v", got, tt.warnings)
+			}
+		})
+	}
+}
+
+func TestImportLimitsWarnings(t *testing.T) {
+	const header = "[Interface]\nPrivateKey = k\nAddress = 10.0.0.2/32\n"
+	const peer = "[Peer]\nPublicKey = x\nEndpoint = e\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n"
+	mostJunk := (maxImportBytes - len(header) - len(peer)) / len("x\n")
+	tests := []struct {
+		name        string
+		junkLines   int
+		wantOmitted int
+	}{
+		{"up to the limit every warning is listed", maxWarnings, 0},
+		{"one over the limit", maxWarnings + 1, 1},
+		{"a file full of junk lines", mostJunk, mostJunk - maxWarnings},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ImportConf(header + strings.Repeat("x\n", tt.junkLines) + peer)
+			if err != nil {
+				t.Fatalf("ImportConf: %v", err)
+			}
+			listed := result.Warnings
+			if tt.wantOmitted > 0 {
+				summary := listed[len(listed)-1]
+				listed = listed[:len(listed)-1]
+				if summary.Code != CodeWarningsLimited || summary.Severity != SeverityWarning || summary.Count != tt.wantOmitted {
+					t.Errorf("summary = %+v, want %d omitted", summary, tt.wantOmitted)
+				}
+			}
+			if len(listed) != maxWarnings {
+				t.Fatalf("%d warnings listed, want %d", len(listed), maxWarnings)
+			}
+			for i, w := range listed {
+				if w.Code != CodeInvalidLine || w.Line != i+4 {
+					t.Fatalf("warning %d = %+v, want an invalid line %d", i, w, i+4)
+				}
+			}
+			if got := settingString(t, result.Settings, KeyEndpoint); got != "e" {
+				t.Errorf("endpoint = %q; lines after the limit must still be imported", got)
 			}
 		})
 	}

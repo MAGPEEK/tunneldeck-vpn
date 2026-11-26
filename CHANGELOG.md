@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- WireGuard import: a further `[Interface]` section is noted ("its keys are merged into the first one"), and the import lists at most 50 notes, followed by how many more are not listed.
+- IPsec documentation: the Linux and Synology guides and the IPsec gateway guide note that charon needs `SETUID` and `SETGID` (Docker defaults), which a compose file with `cap_drop: ALL` must add back next to `NET_ADMIN`.
+
+### Changed
+
+- Schema fields name their UI addon (`addon`: `keyPair`, `ikeV1Warning`, `netToNetRoute`) instead of the web interface checking protocol names.
+
+### Fixed
+
+- Abandoned imports no longer keep secrets in the browser cache: the cached import draft is dropped when the profile form closes.
+- File pickers handle read errors, too-large files (over 512 KiB), selecting the same file again and loads that overlap.
+- Listing and reading profiles and the connection status no longer decrypt every profile's secrets on each request; the advisories and derived values computed from the secrets are cached per profile revision.
+
 ## [0.4.0] - 2026-11-26
 
 IPsec/IKEv2 as the third VPN protocol (SPEC §19, §19.1): strongSwan with userspace ESP over tdvpn0, so no kernel IPsec modules and no host XFRM policies; tested live against a FRITZ!Box user access (IKEv1 XAuth PSK).

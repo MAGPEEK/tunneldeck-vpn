@@ -134,6 +134,8 @@ type fakeProfiles struct {
 	profiles []domain.Profile
 	nextID   int
 	failNext error
+	// secretReads counts ProfileWithSecrets calls.
+	secretReads int
 }
 
 func (s *fakeProfiles) add(p domain.Profile) domain.Profile {
@@ -143,6 +145,18 @@ func (s *fakeProfiles) add(p domain.Profile) domain.Profile {
 	p.ID = fmt.Sprintf("p%d", s.nextID)
 	s.profiles = append(s.profiles, p)
 	return p
+}
+
+// replace overwrites a stored profile past the API, like a change made by
+// another component.
+func (s *fakeProfiles) replace(p domain.Profile) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, err := s.index(p.ID)
+	if err != nil {
+		panic(err)
+	}
+	s.profiles[i] = p
 }
 
 func (s *fakeProfiles) index(id string) (int, error) {
@@ -164,13 +178,29 @@ func (s *fakeProfiles) ListProfiles() []domain.PublicProfile {
 }
 
 func (s *fakeProfiles) GetProfile(id string) (domain.PublicProfile, error) {
-	p, err := s.ProfileWithSecrets(id)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.profile(id)
 	return p.Public(), err
 }
 
+// ProfileWithSecrets counts its calls: each stands for decrypting the
+// secrets in the real store.
 func (s *fakeProfiles) ProfileWithSecrets(id string) (domain.Profile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.secretReads++
+	return s.profile(id)
+}
+
+func (s *fakeProfiles) secretReadCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.secretReads
+}
+
+// profile returns a copy of the profile id. The caller holds s.mu.
+func (s *fakeProfiles) profile(id string) (domain.Profile, error) {
 	i, err := s.index(id)
 	if err != nil {
 		return domain.Profile{}, err

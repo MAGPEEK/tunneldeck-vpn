@@ -120,3 +120,22 @@ func TestSecretConditionJSON(t *testing.T) {
 		t.Errorf("Marshal = %s, %v", b, err)
 	}
 }
+
+func TestFieldAddonJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		field Field
+		want  string
+	}{
+		{"named", Field{Key: "k", Type: FieldText, LabelKey: "l", Addon: "keyPair"}, `{"key":"k","type":"text","labelKey":"l","addon":"keyPair"}`},
+		{"omitted", Field{Key: "k", Type: FieldText, LabelKey: "l"}, `{"key":"k","type":"text","labelKey":"l"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := json.Marshal(tt.field)
+			if err != nil || string(b) != tt.want {
+				t.Errorf("Marshal = %s, %v; want %s", b, err, tt.want)
+			}
+		})
+	}
+}

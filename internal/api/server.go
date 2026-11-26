@@ -60,6 +60,9 @@ type Server struct {
 	// newer change.
 	portsMu sync.Mutex
 
+	// facts caches what drivers compute from profile secrets.
+	facts *secretFactsCache
+
 	closeOnce sync.Once
 	closed    chan struct{} // closed by CloseStreams
 }
@@ -72,6 +75,7 @@ func New(deps Deps, opts Options) *Server {
 		heartbeat:         opts.Heartbeat,
 		disconnectTimeout: opts.DisconnectTimeout,
 		mux:               http.NewServeMux(),
+		facts:             newSecretFactsCache(),
 		closed:            make(chan struct{}),
 	}
 	if s.now == nil {

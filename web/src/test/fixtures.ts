@@ -179,7 +179,13 @@ export const WIREGUARD_SCHEMA: FormSchema = {
       key: 'interface',
       labelKey: 'wireguard.section.interface',
       fields: [
-        { key: 'privateKey', type: 'secret', labelKey: 'wireguard.privateKey', required: true },
+        {
+          key: 'privateKey',
+          type: 'secret',
+          labelKey: 'wireguard.privateKey',
+          required: true,
+          addon: 'keyPair',
+        },
         {
           key: 'address',
           type: 'text',
@@ -322,6 +328,7 @@ export const IPSEC_SCHEMA: FormSchema = {
             },
           ],
           default: 'ikev2',
+          addon: 'ikeV1Warning',
         },
         {
           key: 'mode',
@@ -338,6 +345,7 @@ export const IPSEC_SCHEMA: FormSchema = {
             },
           ],
           default: 'virtualIp',
+          addon: 'netToNetRoute',
         },
         {
           key: 'localSubnets',

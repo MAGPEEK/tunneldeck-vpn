@@ -58,6 +58,10 @@ type Field struct {
 	Placeholder string     `json:"placeholder,omitempty"`
 	// Encoding is set only on multi-line secret fields; see EncodingBase64.
 	Encoding FieldEncoding `json:"encoding,omitempty"`
+	// Addon names a UI addon the frontend renders below the field, such as
+	// a key pair generator or a notice. The frontend ignores names it does
+	// not know, so it never needs to check protocol names.
+	Addon string `json:"addon,omitempty"`
 }
 
 // Option is one choice of a select field. Presets, when set, are the

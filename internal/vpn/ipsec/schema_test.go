@@ -69,3 +69,16 @@ func TestTemplatesPresetTheirProposals(t *testing.T) {
 		}
 	}
 }
+
+// TestDescribeNamesAddons: the IKE version warns about IKEv1 and the mode
+// shows the net-to-net route; no other field names an addon.
+func TestDescribeNamesAddons(t *testing.T) {
+	want := map[string]string{KeyIKEVersion: "ikeV1Warning", KeyMode: "netToNetRoute"}
+	for _, section := range Describe().Sections {
+		for _, f := range section.Fields {
+			if f.Addon != want[f.Key] {
+				t.Errorf("field %q has addon %q, want %q", f.Key, f.Addon, want[f.Key])
+			}
+		}
+	}
+}

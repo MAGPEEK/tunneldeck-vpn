@@ -1,5 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
+import { queryKeys } from '../../api/queryKeys';
 import { problem, type MockRoutes } from '../../test/fetchMock';
 import { DRIVERS, WIREGUARD_SCHEMA, makeProfile, makeStatus } from '../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../test/renderApp';
@@ -289,6 +291,65 @@ describe('import', () => {
     ).toHaveAttribute('data-tone', 'warning');
     expect(screen.getByText('1 note')).toBeInTheDocument();
     expect(screen.queryByText('Still missing from the file')).not.toBeInTheDocument();
+  });
+
+  describe('keeps the draft with its secrets only while the form is open', () => {
+    async function openImportedForm(overrides: MockRoutes = {}) {
+      const app = renderApp(
+        routes({ 'POST /api/profiles/import': { body: draft }, ...overrides }),
+        '/profiles',
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Paste configuration' }));
+      fireEvent.change(screen.getByLabelText('Configuration text'), {
+        target: { value: 'client\nremote publicip20.mdex.de 1194' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+      expect(await screen.findByLabelText('TLS auth key')).toHaveValue(
+        '-----BEGIN OpenVPN Static key V1-----',
+      );
+      expect(app.queryClient.getQueryData(queryKeys.importDraft)).toBeDefined();
+      return app;
+    }
+
+    function cachedDraft(queryClient: QueryClient) {
+      return queryClient.getQueryCache().find({ queryKey: queryKeys.importDraft });
+    }
+
+    it('drops it when the form is cancelled', async () => {
+      const { queryClient } = await openImportedForm();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(await screen.findByRole('cell', { name: 'Office' })).toBeInTheDocument();
+      expect(cachedDraft(queryClient)).toBeUndefined();
+    });
+
+    it('drops it when the user navigates away', async () => {
+      const { queryClient } = await openImportedForm();
+
+      fireEvent.click(screen.getByRole('link', { name: 'Profiles' }));
+
+      expect(await screen.findByRole('cell', { name: 'Office' })).toBeInTheDocument();
+      expect(cachedDraft(queryClient)).toBeUndefined();
+    });
+
+    it('drops it when the profile is saved', async () => {
+      const created = makeProfile({ id: 'new1', name: 'publicip20.mdex.de' });
+      const { queryClient } = await openImportedForm({
+        'POST /api/profiles': { status: 201, body: created },
+        'GET /api/profiles/new1': { body: created },
+      });
+      fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'u' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'p' } });
+      fireEvent.change(screen.getByLabelText('CA certificate'), { target: { value: 'CA' } });
+
+      fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form') as HTMLElement);
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Edit profile' }),
+      ).toBeInTheDocument();
+      expect(cachedDraft(queryClient)).toBeUndefined();
+    });
   });
 
   it('shows a translated problem of the pasted text under the text field', async () => {

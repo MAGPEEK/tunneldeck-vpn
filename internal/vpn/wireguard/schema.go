@@ -11,7 +11,7 @@ const labelPrefix = "wireguard."
 func Describe() vpn.FormSchema {
 	return vpn.FormSchema{Sections: []vpn.Section{
 		section("interface",
-			field(SecretPrivateKey, vpn.FieldSecret, required),
+			field(SecretPrivateKey, vpn.FieldSecret, required, addon("keyPair")),
 			field(KeyAddress, vpn.FieldText, required, placeholder("10.66.0.2/32")),
 			field(KeyMTU, vpn.FieldNumber, required, defaultValue(DefaultMTU)),
 		),
@@ -32,6 +32,10 @@ func required(f *vpn.Field) { f.Required = true }
 
 func placeholder(text string) fieldOption {
 	return func(f *vpn.Field) { f.Placeholder = text }
+}
+
+func addon(name string) fieldOption {
+	return func(f *vpn.Field) { f.Addon = name }
 }
 
 func defaultValue(value any) fieldOption {

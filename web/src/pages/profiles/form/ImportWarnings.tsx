@@ -40,6 +40,7 @@ export function ImportWarnings({ warnings }: { warnings: ImportWarning[] }) {
                   {severity === 'rejected' && <strong>{t('importWarnings.notImported')}: </strong>}
                   {translateDynamic(t, `importWarnings.code.${warning.code}`, warning.message, {
                     file: warning.file,
+                    count: warning.count,
                   })}
                 </li>
               ))}

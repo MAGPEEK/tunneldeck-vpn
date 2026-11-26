@@ -181,4 +181,10 @@ More detail, including the "No answer from the server" note, is in [`linux.md`, 
 DSM 7.2's kernel 4.4 needs nothing extra: charon runs ESP in user space on the TUN device from section 1, so **no IPsec kernel modules** are loaded and DSM gets no IPsec policies. charon and its plugins add about 2 MB to the image (about 52 MB).
 
 - **DSM VPN Server and port forwards:** charon uses **random local IKE ports**, so it collides neither with the DSM VPN Server (L2TP/IPsec on UDP 500/4500) nor with port forwards of UDP 500/4500 to a LAN IPsec router (section 10). No DSM firewall rule and no port forward on your internet router is needed for the tunnel itself.
+- **Capabilities:** charon starts as root and then drops to the user `ipsec`; for that it needs `SETUID` and `SETGID`, two of Docker's default capabilities. The compose file of section 2 keeps the defaults, so there is nothing to do. If you harden the container with `cap_drop: ALL`, add both back next to `NET_ADMIN`, otherwise charon does not start and IPsec profiles cannot connect:
+
+  ```yaml
+      cap_drop: [ALL]
+      cap_add: [NET_ADMIN, SETUID, SETGID]
+  ```
 - **Gateway setup**, field mapping and the static route for net-to-net mode: [IPsec gateways](ipsec.md). *Check on your NAS:* IPsec has been tested in the end-to-end test and against a real FRITZ!Box user access, not on DSM itself.

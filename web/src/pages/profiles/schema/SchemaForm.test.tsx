@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FormSchema, Profile } from '../../../api/profiles';
 import { OPENVPN_SCHEMA } from '../../../test/fixtures';
 import { SchemaForm } from './SchemaForm';
@@ -79,6 +79,10 @@ const SECRET_SCHEMA: FormSchema = {
 };
 
 describe('SchemaForm', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders sections with translated labels and applies defaults', () => {
     const { submit } = renderHarness();
 
@@ -349,6 +353,105 @@ describe('SchemaForm', () => {
 
     await waitFor(() => expect(screen.getByLabelText('CA certificate')).toHaveValue(pem));
     expect(submit().settings.caCert).toBe(pem);
+  });
+
+  it('keeps both values when two files finish loading at the same time', async () => {
+    const { submit } = renderHarness({ settings: { authMode: 'certificate' } });
+    const ca = '-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----\n';
+    const cert = '-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----\n';
+    const key = '-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----\n';
+    const ta = '-----BEGIN OpenVPN Static key V1-----\n';
+
+    // All four reads are in flight before the first one settles.
+    fireEvent.change(screen.getByLabelText('Load CA certificate from a file'), {
+      target: { files: [new File([ca], 'ca.crt')] },
+    });
+    fireEvent.change(screen.getByLabelText('Load Client certificate from a file'), {
+      target: { files: [new File([cert], 'client.crt')] },
+    });
+    fireEvent.change(screen.getByLabelText('Load Client key from a file'), {
+      target: { files: [new File([key], 'client.key')] },
+    });
+    fireEvent.change(screen.getByLabelText('Load TLS auth key from a file'), {
+      target: { files: [new File([ta], 'ta.key')] },
+    });
+
+    await waitFor(() => expect(screen.getByLabelText('TLS auth key')).toHaveValue(ta));
+    expect(screen.getByLabelText('CA certificate')).toHaveValue(ca);
+    expect(screen.getByLabelText('Client certificate')).toHaveValue(cert);
+    expect(screen.getByLabelText('Client key')).toHaveValue(key);
+    const part = submit();
+    expect(part.settings).toMatchObject({ caCert: ca, clientCert: cert });
+    expect(part.secrets).toEqual({ clientKey: key, tlsAuthKey: ta });
+  });
+
+  it('shows a field error when the chosen file cannot be read', async () => {
+    renderHarness({ schema: SECRET_SCHEMA });
+    const file = new File(['x'], 'ta.key');
+    vi.spyOn(file, 'text').mockRejectedValue(new DOMException('gone', 'NotReadableError'));
+
+    fireEvent.change(screen.getByLabelText('Load TLS auth key from a file'), {
+      target: { files: [file] },
+    });
+
+    const textarea = screen.getByLabelText('TLS auth key');
+    await waitFor(() =>
+      expect(textarea).toHaveAccessibleDescription(
+        expect.stringContaining('The file could not be read.'),
+      ),
+    );
+    expect(textarea).toHaveAttribute('aria-invalid', 'true');
+    expect(textarea).toHaveValue('');
+
+    fireEvent.change(textarea, { target: { value: 'typed' } });
+    expect(screen.queryByText('The file could not be read.')).not.toBeInTheDocument();
+  });
+
+  it('refuses a file larger than 512 KiB without reading it', async () => {
+    renderHarness({ settings: { authMode: 'certificate' } });
+    const file = new File(['x'], 'huge.crt');
+    Object.defineProperty(file, 'size', { value: 512 * 1024 + 1 });
+    const read = vi.spyOn(file, 'text');
+
+    fireEvent.change(screen.getByLabelText('Load CA certificate from a file'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText('The file must be at most 512 KiB.')).toBeInTheDocument();
+    expect(screen.getByLabelText('CA certificate')).toHaveValue('');
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('clears the file error once a file was read', async () => {
+    renderHarness({ settings: { authMode: 'certificate' } });
+    const loader = screen.getByLabelText('Load CA certificate from a file');
+    const huge = new File(['x'], 'huge.crt');
+    Object.defineProperty(huge, 'size', { value: 600 * 1024 });
+    fireEvent.change(loader, { target: { files: [huge] } });
+    await screen.findByText('The file must be at most 512 KiB.');
+
+    fireEvent.change(loader, { target: { files: [new File(['PEM'], 'ca.crt')] } });
+
+    await waitFor(() => expect(screen.getByLabelText('CA certificate')).toHaveValue('PEM'));
+    expect(screen.queryByText('The file must be at most 512 KiB.')).not.toBeInTheDocument();
+  });
+
+  it('clears the picker so that choosing the same file again reads it again', async () => {
+    renderHarness({ schema: SECRET_SCHEMA });
+    const file = new File(['KEY'], 'ta.key');
+    const loader = screen.getByLabelText('Load TLS auth key from a file');
+    const textarea = screen.getByLabelText('TLS auth key');
+    // A browser fires no change event for the same file unless the value was cleared.
+    const setValue = vi.fn();
+    Object.defineProperty(loader, 'value', { configurable: true, get: () => '', set: setValue });
+
+    fireEvent.change(loader, { target: { files: [file] } });
+    await waitFor(() => expect(textarea).toHaveValue('KEY'));
+    expect(setValue).toHaveBeenCalledWith('');
+
+    fireEvent.change(textarea, { target: { value: 'edited' } });
+    fireEvent.change(loader, { target: { files: [file] } });
+    await waitFor(() => expect(textarea).toHaveValue('KEY'));
   });
 
   it('labels the remote networks list', () => {

@@ -10,6 +10,7 @@ TunnelDeck-VPN verbindet sich per IPsec mit Firmen- und Router-Gateways: standar
 - **Ports:** Das Gateway muss UDP 500 und UDP 4500 annehmen. TunnelDeck-VPN nutzt auf seiner Seite zufällige lokale Ports und kommt daher weder einem IPsec-Server auf demselben Host (etwa dem DSM-VPN-Server) noch Portweiterleitungen von UDP 500/4500 an ein LAN-Gerät in die Quere.
 - **NAT-Traversal ist immer aktiv.** ESP läuft im Container im Benutzermodus und wird immer in UDP 4500 verpackt, daher meldet das Gateway stets „remote host is behind NAT“. Das ist so gewollt; reines ESP (IP-Protokoll 50) verlässt TunnelDeck-VPN nie.
 - **Kein Kernel-IPsec auf dem Host.** Der Host braucht keine IPsec-Kernelmodule und erhält keine IPsec-Policies; nötig ist nur das TUN-Gerät aus den Anleitungen für [Linux](linux.de.md) und [Synology](synology.de.md).
+- **Container-Capabilities:** charon wechselt von root zum Benutzer `ipsec` und braucht dafür `SETUID` und `SETGID`, die Docker standardmäßig gewährt. Eine Compose-Datei mit `cap_drop: ALL` muss beide neben `NET_ADMIN` wieder hinzufügen (Abschnitt 12 der Anleitungen für [Linux](linux.de.md#12-ipsecikev2) und [Synology](synology.de.md#12-ipsecikev2)).
 - **Lebenszeichen und Schlüsselwechsel:** Dead Peer Detection alle 30 s; die IKE-SA wird alle 4 h erneuert, die CHILD-SA stündlich, ohne erneute Anmeldung (IKEv1 meldet sich alle 4 h neu an). MOBIKE ist aus.
 
 ## 2. Das Profilformular

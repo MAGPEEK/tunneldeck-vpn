@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SchemaField } from '../../../api/profiles';
 import { Button } from '../../../components/Button';
@@ -97,6 +97,7 @@ interface SecretInputProps {
 
 function SecretInput({ field, label, value, error, onValue, onKeep }: SecretInputProps) {
   const { t } = useTranslation();
+  const [fileError, setFileError] = useState<string>();
   const keep = onKeep && (
     <Button variant="ghost" onClick={onKeep}>
       {t('schemaForm.keepStored')}
@@ -109,12 +110,13 @@ function SecretInput({ field, label, value, error, onValue, onKeep }: SecretInpu
           fieldLabel={label}
           encoding={field.encoding === 'base64' ? 'base64' : 'text'}
           onValue={onValue}
+          onError={setFileError}
         />
         {keep}
       </span>
     );
     return (
-      <Field label={label} error={error} hint={hint}>
+      <Field label={label} error={fileError ?? error} hint={hint}>
         {(control) => (
           <textarea
             {...control}
@@ -125,7 +127,10 @@ function SecretInput({ field, label, value, error, onValue, onKeep }: SecretInpu
             spellCheck={false}
             autoComplete="off"
             rows={5}
-            onChange={(event) => onValue(event.currentTarget.value)}
+            onChange={(event) => {
+              setFileError(undefined);
+              onValue(event.currentTarget.value);
+            }}
           />
         )}
       </Field>
