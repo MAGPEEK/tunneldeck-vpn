@@ -300,6 +300,62 @@ describe('import', () => {
     expect(summary).not.toHaveTextContent('Username');
   });
 
+  it('loads the mdex fixed.IP level 30 file without alarming warnings and asks only for the credentials', async () => {
+    const line = (code: string, severity: string, directive: string, at: number) => ({
+      code,
+      severity,
+      directive,
+      line: at,
+      message: code,
+    });
+    const mdexDraft = {
+      settings: {
+        remoteHost: 'openvpn30.mdex.de',
+        port: 1194,
+        proto: 'udp',
+        authMode: 'password',
+        caCert: '-----BEGIN CERTIFICATE-----',
+        cipher: 'CHACHA20-POLY1305:AES-256-GCM',
+        authDigest: 'none',
+        extraOptions: ['float', 'tls-version-min 1.3', 'explicit-exit-notify 2'],
+      },
+      secrets: {},
+      warnings: [
+        line('duplicate_directive', 'info', 'client', 6),
+        line('duplicate_directive', 'info', 'pull', 7),
+        line('duplicate_directive', 'info', 'tls-client', 8),
+        line('verb_replaced', 'info', 'verb', 13),
+        line('duplicate_directive', 'info', 'nobind', 15),
+        line('script_security_dropped', 'warning', 'script-security', 20),
+        { code: 'credentials_expected', severity: 'info', line: 50, message: 'no credentials' },
+      ],
+      missing: ['username', 'password'],
+    };
+    renderApp(routes({ 'POST /api/profiles/import': { body: mdexDraft } }), '/profiles');
+    await screen.findByRole('cell', { name: 'Office' });
+    chooseFile(
+      ovpnFile('mdex fixed.IP.30 Router.ovpn', 'client\nremote openvpn30.mdex.de 1194 udp'),
+    );
+
+    expect(await screen.findByLabelText('Name')).toHaveValue('mdex fixed.IP.30 Router');
+    const summary = screen.getByText('Still missing from the file').closest('[data-tone]');
+    expect(summary).toHaveTextContent('Username');
+    expect(summary).toHaveTextContent('Password');
+    expect(summary).not.toHaveTextContent('CA certificate');
+    expect(screen.getByLabelText('CA certificate')).not.toHaveAttribute('aria-invalid');
+
+    expect(screen.getByText('6 notes')).toBeInTheDocument();
+    expect(
+      screen.getByText(/The file contains no client certificate and no username and password/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('1 directive dropped or changed').closest('[data-tone]'),
+    ).toHaveTextContent('script-security only allows scripts; TunnelDeck-VPN runs none');
+    expect(screen.queryByText(/not imported/i)).not.toBeInTheDocument();
+    expect(document.querySelector('[data-tone="danger"]')).toBeNull();
+    expect(screen.queryByText('Traffic is not encrypted')).not.toBeInTheDocument();
+  });
+
   it('decodes a Latin-1 file instead of garbling it', async () => {
     const { fetchMock } = renderApp(
       routes({ 'POST /api/profiles/import': { body: providerDraft } }),

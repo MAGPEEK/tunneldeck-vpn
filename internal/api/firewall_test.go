@@ -29,7 +29,8 @@ func TestGetFirewall(t *testing.T) {
 	env := newTestEnv(t)
 	body := strings.TrimSpace(env.do(t, http.MethodGet, "/api/firewall", "").Body.String())
 	want := `{"rules":[],"settings":{"dropInvalid":false,"mssClamp":false,"synFloodProtection":false,"pingLimit":false},` +
-		`"hostAddress":"192.168.2.10","hostAddresses":["192.168.2.10"],"lanSubnets":["192.168.2.0/24"],"ipForward":true,"counters":{},"countersAvailable":true}`
+		`"hostAddress":"192.168.2.10","hostAddresses":["192.168.2.10"],"lanSubnets":["192.168.2.0/24"],"ipForward":true,"counters":{},"countersAvailable":true,` +
+		`"protectionsAvailable":{"synFlood":"full","ping":"full","mssClamp":"full","ruleCounters":true}}`
 	if body != want {
 		t.Errorf("body = %s\nwant %s", body, want)
 	}
@@ -403,4 +404,40 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func TestGetFirewallProtections(t *testing.T) {
+	tests := []struct {
+		name    string
+		support domain.ProtectionSupport
+		err     error
+		want    string
+	}{
+		{
+			name: "every protection", support: fullProtectionSupport,
+			want: `"protectionsAvailable":{"synFlood":"full","ping":"full","mssClamp":"full","ruleCounters":true}`,
+		},
+		{
+			name: "kernel without hashlimit, TCPMSS and comment",
+			support: domain.ProtectionSupport{
+				SYNFlood: domain.ProtectionGlobal, Ping: domain.ProtectionFull, MSSClamp: domain.ProtectionNone,
+			},
+			want: `"protectionsAvailable":{"synFlood":"global","ping":"full","mssClamp":"none","ruleCounters":false}`,
+		},
+		{
+			name: "detection fails", err: errBoom,
+			want: `"protectionsAvailable":{"synFlood":"none","ping":"none","mssClamp":"none","ruleCounters":false}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			env.firewall.support, env.firewall.supportErr = tt.support, tt.err
+			rec := env.do(t, http.MethodGet, "/api/firewall", "")
+			assertStatus(t, rec, http.StatusOK)
+			if body := rec.Body.String(); !strings.Contains(body, tt.want) || strings.Contains(body, "boom") {
+				t.Errorf("body = %s, want %s and no error", body, tt.want)
+			}
+		})
+	}
 }

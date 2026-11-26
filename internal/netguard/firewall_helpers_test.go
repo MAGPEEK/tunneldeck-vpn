@@ -255,3 +255,23 @@ func withDefaultSettings(f domain.Firewall) domain.Firewall {
 	f.FirewallSettings = domain.DefaultFirewallSettings()
 	return f
 }
+
+// capsWithout is a kernel with every optional extension but missing.
+func capsWithout(missing ...extension) capabilities {
+	has := make(map[extension]bool, len(extensionProbes))
+	for _, probe := range extensionProbes {
+		has[probe.ext] = !slices.Contains(missing, probe.ext)
+	}
+	return capabilities{backend: "iptables-legacy", has: has}
+}
+
+// fullSupport is a kernel with every optional extension; limitOnlySupport
+// lacks hashlimit and TCPMSS (capsWithout(extHashlimit, extTCPMSS)).
+var (
+	fullSupport = domain.ProtectionSupport{
+		SYNFlood: domain.ProtectionFull, Ping: domain.ProtectionFull, MSSClamp: domain.ProtectionFull, RuleCounters: true,
+	}
+	limitOnlySupport = domain.ProtectionSupport{
+		SYNFlood: domain.ProtectionGlobal, Ping: domain.ProtectionFull, MSSClamp: domain.ProtectionNone, RuleCounters: true,
+	}
+)

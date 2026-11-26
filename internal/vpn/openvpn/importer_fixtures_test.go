@@ -47,7 +47,7 @@ func TestImportRealisticProfiles(t *testing.T) {
 			name: "cloud service", file: "cloudconnexa.ovpn", golden: "import_cloudconnexa.golden",
 			wantWarnings: []string{
 				"client:duplicate_directive", "remote:additional_remote", "nobind:duplicate_directive",
-				"verb:duplicate_directive", "pull-filter:routing_handled",
+				"verb:verb_replaced", "pull-filter:routing_handled",
 			},
 			wantMissing: []string{},
 			wantSettings: map[string]any{
@@ -92,7 +92,7 @@ func TestImportRealisticProfiles(t *testing.T) {
 
 var accessServerWarnings = []string{
 	"setenv:setenv_ignored", "client:duplicate_directive", "nobind:duplicate_directive",
-	"remote:additional_remote", "remote:additional_remote", "verb:duplicate_directive",
+	"remote:additional_remote", "remote:additional_remote", "verb:verb_replaced",
 	"setenv:setenv_ignored", "setenv:setenv_ignored", "pull-filter:routing_handled",
 }
 
@@ -214,7 +214,7 @@ func TestImportLongLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportOVPN: %v", err)
 	}
-	if got, want := warningCodes(result.Warnings), []string{":line_too_long"}; !slices.Equal(got, want) {
+	if got, want := warningCodes(result.Warnings), []string{":line_too_long", ":credentials_expected"}; !slices.Equal(got, want) {
 		t.Errorf("warnings = %v, want %v", got, want)
 	}
 }

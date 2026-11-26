@@ -32,7 +32,7 @@ func TestSelfCheck(t *testing.T) {
 			name:   "all pass",
 			root:   withTun(charDevice),
 			script: func(*fakeRunner) {},
-			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true, CheckIPForward: true, CheckLAN: true, CheckCounters: true},
+			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true, CheckIPForward: true, CheckLAN: true, CheckCounters: true, CheckSYNFlood: true, CheckPingLimit: true, CheckMSSClamp: true, CheckReject: true},
 			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
@@ -43,7 +43,7 @@ func TestSelfCheck(t *testing.T) {
 			name:   "leftover probe chain is only deleted",
 			root:   withTun(charDevice),
 			script: func(f *fakeRunner) { f.on(legacy+"-N TUNNELDECK-PROBE", fail("iptables: Chain already exists.")) },
-			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true, CheckIPForward: true, CheckLAN: true, CheckCounters: true},
+			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: true, CheckIPForward: true, CheckLAN: true, CheckCounters: true, CheckSYNFlood: true, CheckPingLimit: true, CheckMSSClamp: true, CheckReject: true},
 			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
@@ -57,7 +57,7 @@ func TestSelfCheck(t *testing.T) {
 				f.on(ruleShow, fail("exec: \"ip\": executable file not found in $PATH")).
 					on(legacy+"-N TUNNELDECK-PROBE", fail(noPermission))
 			},
-			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: false, CheckNetAdmin: false, CheckIPForward: false, CheckLAN: true, CheckCounters: true},
+			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: false, CheckNetAdmin: false, CheckIPForward: false, CheckLAN: true, CheckCounters: true, CheckSYNFlood: true, CheckPingLimit: true, CheckMSSClamp: true, CheckReject: true},
 			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
@@ -69,7 +69,7 @@ func TestSelfCheck(t *testing.T) {
 			script: func(f *fakeRunner) {
 				f.on(legacy+"-X TUNNELDECK-PROBE", fail(noPermission))
 			},
-			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: false, CheckIPForward: true, CheckLAN: true, CheckCounters: true},
+			wantOK: map[string]bool{CheckTunDevice: false, CheckIptables: true, CheckIPTool: true, CheckNetAdmin: false, CheckIPForward: true, CheckLAN: true, CheckCounters: true, CheckSYNFlood: true, CheckPingLimit: true, CheckMSSClamp: true, CheckReject: true},
 			wantCalls: slices.Concat(detectLegacy, []string{
 				ruleShow,
 				legacy + "-N TUNNELDECK-PROBE",
@@ -83,7 +83,7 @@ func TestSelfCheck(t *testing.T) {
 				f.on("iptables-legacy -w -t filter -S", fail(noPermission), fail(noPermission), fail(noPermission)).
 					on("iptables -V", ok(nftVersion), ok(nftVersion), ok(nftVersion))
 			},
-			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: false, CheckIPTool: true, CheckNetAdmin: false, CheckIPForward: true, CheckLAN: true, CheckCounters: false},
+			wantOK: map[string]bool{CheckTunDevice: true, CheckIptables: false, CheckIPTool: true, CheckNetAdmin: false, CheckIPForward: true, CheckLAN: true, CheckCounters: false, CheckSYNFlood: false, CheckPingLimit: false, CheckMSSClamp: false, CheckReject: false},
 			wantCalls: []string{
 				"iptables-legacy -w -t filter -S", "iptables -V",
 				ruleShow,
@@ -112,13 +112,13 @@ func TestSelfCheck(t *testing.T) {
 				if r.OK != (r.Hint == "") {
 					t.Errorf("%s: hint %q must be set exactly when the check fails", r.ID, r.Hint)
 				}
-				if r.Warning != (r.ID == CheckCounters && !r.OK) {
-					t.Errorf("%s: warning = %v; only a failed counter check is a warning", r.ID, r.Warning)
+				if r.Warning != (slices.Contains(extensionChecks, r.ID) && !r.OK) {
+					t.Errorf("%s: warning = %v; only a failed extension check is a warning", r.ID, r.Warning)
 				}
 			}
 			counterCalls := tt.counterCalls
 			if counterCalls == nil {
-				counterCalls = probeComments
+				counterCalls = probeCalls
 			}
 			assertCalls(t, f.calls, slices.Concat(tt.wantCalls, []string{addrShow}, counterCalls))
 		})
@@ -135,7 +135,7 @@ func TestSelfCheckForwardingAndLAN(t *testing.T) {
 	}{
 		{
 			name: "forwarding on, LAN found", ipForward: "1\n", lan: ok(lanListing),
-			wantIDs:  map[string]bool{CheckIPForward: true, CheckLAN: true, CheckCounters: true},
+			wantIDs:  map[string]bool{CheckIPForward: true, CheckLAN: true, CheckCounters: true, CheckSYNFlood: true, CheckPingLimit: true, CheckMSSClamp: true, CheckReject: true},
 			wantText: map[string]string{CheckLAN: "192.168.2.0/24 (eth0)"},
 		},
 		{
@@ -174,7 +174,7 @@ func TestSelfCheckForwardingAndLAN(t *testing.T) {
 
 func TestSelfCheckWithoutTheCommentMatch(t *testing.T) {
 	f := newFakeRunner()
-	f.on(probeTagged, fail(commentMissing))
+	f.on(probeComment, fail(commentMissing))
 	g := newLegacyGuard(f)
 	g.root = withTun(charDevice)
 	for _, r := range g.SelfCheck(context.Background()) {

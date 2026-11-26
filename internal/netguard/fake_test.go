@@ -111,17 +111,27 @@ const (
 // detectLegacy is the detection of newLegacyGuard.
 var detectLegacy = []string{"iptables-legacy -w -t filter -S", "iptables-legacy -w -t nat -S"}
 
-// probeComments is the probe of the comment match, which passes.
-var probeComments = []string{
-	"iptables-legacy -w -N TUNNELDECK-COMMENT-PROBE",
-	"iptables-legacy -w -A TUNNELDECK-COMMENT-PROBE -m comment --comment tdfixed:probe -j RETURN",
-	"iptables-legacy -w -F TUNNELDECK-COMMENT-PROBE",
-	"iptables-legacy -w -X TUNNELDECK-COMMENT-PROBE",
+// Probe lines of the optional extensions, as appended to the probe chain.
+const (
+	probeComment   = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -m comment --comment tdfixed:probe -j RETURN"
+	probeHashlimit = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 " +
+		"--hashlimit-mode srcip --hashlimit-name td-probe -j RETURN"
+	probeLimit  = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -m limit --limit 25/sec --limit-burst 50 -j RETURN"
+	probeTCPMSS = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+	probeReject = "iptables-legacy -w -A TUNNELDECK-EXT-PROBE -p tcp -j REJECT --reject-with tcp-reset"
+)
+
+// probeCalls is the probe of the optional extensions, which all pass.
+var probeCalls = []string{
+	"iptables-legacy -w -N TUNNELDECK-EXT-PROBE",
+	probeComment, probeHashlimit, probeLimit, probeTCPMSS, probeReject,
+	"iptables-legacy -w -F TUNNELDECK-EXT-PROBE",
+	"iptables-legacy -w -X TUNNELDECK-EXT-PROBE",
 }
 
 // detectInstall is the detection of the first installation by
-// newLegacyGuard: the backend, then the comment match.
-var detectInstall = append(slices.Clone(detectLegacy), probeComments...)
+// newLegacyGuard: the backend, then the optional extensions.
+var detectInstall = append(slices.Clone(detectLegacy), probeCalls...)
 
 func assertCalls(t *testing.T, got, want []string) {
 	t.Helper()

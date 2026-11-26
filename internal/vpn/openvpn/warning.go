@@ -5,7 +5,8 @@ type Severity string
 
 // Warning severities.
 const (
-	// SeverityInfo: a value was mapped or added; nothing was lost.
+	// SeverityInfo: a value was mapped or added, or a directive was
+	// dropped that TunnelDeck renders itself; nothing was lost.
 	SeverityInfo Severity = "info"
 	// SeverityWarning: a directive was dropped because TunnelDeck handles
 	// it or OpenVPN ignores it.
@@ -41,6 +42,9 @@ const (
 	CodeServerCertUsageAdded   = "server_cert_usage_added"
 	CodeStaticKeyUnsupported   = "static_key_unsupported"
 	CodeSetenvIgnored          = "setenv_ignored"
+	CodeScriptSecurityDropped  = "script_security_dropped"
+	CodeVerbReplaced           = "verb_replaced"
+	CodeCredentialsExpected    = "credentials_expected"
 )
 
 // Warning reports a directive that was dropped, rejected or mapped while

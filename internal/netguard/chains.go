@@ -24,7 +24,7 @@ const maxDuplicateRules = 64
 type chainSpec struct {
 	table  table
 	name   string
-	parent string     // built-in chain holding the jumps
+	parent string     // built-in chain holding the jumps; "" for none
 	jumps  [][]string // match of each jump, in order from position 1
 	// sealed chains end with DROP at all times, and their jumps are moved
 	// behind DROP guards. Only filter chains can be sealed: the nat table
@@ -162,7 +162,11 @@ func (g *Guard) ensureChain(ctx context.Context, spec chainSpec, exists bool, li
 // ensureJumps leaves exactly the spec's jumps, once each, at the top of the
 // parent chain, in spec order, and removes any other jump to the chain.
 // For sealed chains guard rules drop the jumps' traffic while they move.
+// A chain without a parent has no jumps: other chains' lines reach it.
 func (g *Guard) ensureJumps(ctx context.Context, spec chainSpec) error {
+	if spec.parent == "" {
+		return nil
+	}
 	rules, err := g.listRules(ctx, spec.table, spec.parent)
 	if err != nil {
 		return err
@@ -254,6 +258,9 @@ func (g *Guard) deleteListedJumps(ctx context.Context, spec chainSpec, listing, 
 // removeChainAndJumps deletes every jump to spec's chain, then the chain.
 // Objects that are already absent are skipped.
 func (g *Guard) removeChainAndJumps(ctx context.Context, spec chainSpec) error {
+	if spec.parent == "" {
+		return g.removeChain(ctx, spec.table, spec.name)
+	}
 	listing, err := g.listRules(ctx, spec.table, spec.parent)
 	if err != nil {
 		return err

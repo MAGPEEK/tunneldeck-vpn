@@ -20,6 +20,10 @@ import (
 // every TCP port; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
 // forwards on the LAN side and outbound traffic on the tunnel. The global
 // settings add their rules at the top of the filter chains (buildRuleset).
+// A protection whose kernel module is missing never fails the
+// installation (capabilities.go): the rate limits fall back from hashlimit
+// to one global limit in TUNNELDECK-LIMIT, which the filter chains' SYN
+// and ping lines jump to, or are left out like MSS clamping.
 // Rules are installed in list order. Every content line carries a comment
 // tag (tags.go). Calling it again with the same configuration yields the
 // same state and leaves every chain whose content is unchanged untouched,
@@ -97,10 +101,7 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	if g.remoteAccessPort != 0 && g.remoteAccessPort == uiPort {
 		return uiPortConflict()
 	}
-	if _, err := g.detectBackend(ctx); err != nil {
-		return fmt.Errorf("install firewall: %w", err)
-	}
-	tagged, err := g.detectComments(ctx)
+	caps, err := g.detectCapabilities(ctx)
 	if err != nil {
 		return fmt.Errorf("install firewall: %w", err)
 	}
@@ -111,15 +112,7 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	if err := domain.CheckInboundDestinations(firewall.Rules, hostNetwork(lan)); err != nil {
 		return err
 	}
-	var errs []error
-	for _, chain := range buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, lan).chainContent() {
-		content := chain.content
-		if !tagged {
-			content = untaggedContent(content)
-		}
-		errs = append(errs, g.installChain(ctx, chain.spec, content, tagged))
-	}
-	if err := errors.Join(errs...); err != nil {
+	if err := g.installRuleset(ctx, buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, lan, caps), caps); err != nil {
 		return err
 	}
 	g.installed = &installation{firewall: cloneFirewall(firewall), uiPort: uiPort}
@@ -130,6 +123,28 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 		return fmt.Errorf("install firewall: update policy routing: %w", err)
 	}
 	return nil
+}
+
+// installRuleset installs every chain of rs, untagged without the comment
+// match, and then removes TUNNELDECK-LIMIT when the kernel would use it
+// but rs no longer does; its jumps are gone by then. All chains are
+// attempted; the errors are joined.
+func (g *Guard) installRuleset(ctx context.Context, rs ruleset, caps capabilities) error {
+	tagged := caps.has[extComment]
+	var errs []error
+	for _, chain := range rs.chainContent() {
+		content := chain.content
+		if !tagged {
+			content = untaggedContent(content)
+		}
+		errs = append(errs, g.installChain(ctx, chain.spec, content, tagged))
+	}
+	if rs.limit == nil && usesLimitChain(caps) {
+		if err := g.removeChain(ctx, limitSpec.table, limitSpec.name); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s: %w", limitSpec.name, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // syncInstalledPolicy brings the policy rules of a routed tunnel in line
@@ -146,13 +161,14 @@ func (g *Guard) syncInstalledPolicy(ctx context.Context, lan []lanAddress) error
 	return g.syncPolicyRules(ctx, listing.owned, want)
 }
 
-// RemoveFirewall deletes every jump to the four chains, then the chains.
-// Objects that are already absent are skipped.
+// RemoveFirewall deletes every jump to the four chains, then the chains,
+// and last TUNNELDECK-LIMIT, which their lines may reach. Objects that are
+// already absent are skipped.
 func (g *Guard) RemoveFirewall(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.installed = nil
-	for _, spec := range allChainSpecs(nil) {
+	for _, spec := range append(allChainSpecs(nil), limitSpec) {
 		if err := g.removeChainAndJumps(ctx, spec); err != nil {
 			return fmt.Errorf("remove firewall: %w", err)
 		}

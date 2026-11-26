@@ -15,6 +15,9 @@ const (
 	forwardChain     = "TUNNELDECK-FORWARD"
 	preroutingChain  = "TUNNELDECK-PREROUTING"
 	postroutingChain = "TUNNELDECK-POSTROUTING"
+	// limitChain drops SYNs and pings above their global rate while the
+	// kernel has the limit match but not the hashlimit match.
+	limitChain = "TUNNELDECK-LIMIT"
 )
 
 // Connection-tracking states used in rules.
@@ -24,13 +27,37 @@ const (
 	ctDNAT        = "DNAT"
 )
 
-// Limits of the global protections (SPEC §16.1a). hashlimit names are at
-// most 15 characters.
+// rateLimit is the rate of a global protection (SPEC §16.1a), counted per
+// source address when perSource is set.
+type rateLimit struct {
+	rate, burst string
+	perSource   bool
+}
+
 var (
-	synFloodLimit = []string{"-m", "hashlimit", "--hashlimit-above", "25/sec", "--hashlimit-burst", "50",
-		"--hashlimit-mode", "srcip"}
-	pingLimit = []string{"-m", "hashlimit", "--hashlimit-above", "5/sec", "--hashlimit-burst", "10"}
+	synFloodRate = rateLimit{rate: "25/sec", burst: "50", perSource: true}
+	pingRate     = rateLimit{rate: "5/sec", burst: "10"}
 )
+
+// hashlimitAbove matches the packets above r; name (at most 15
+// characters) tells its table apart from the other rules'.
+func (r rateLimit) hashlimitAbove(name string) []string {
+	match := []string{"-m", "hashlimit", "--hashlimit-above", r.rate, "--hashlimit-burst", r.burst}
+	if r.perSource {
+		match = append(match, "--hashlimit-mode", "srcip")
+	}
+	return append(match, "--hashlimit-name", name)
+}
+
+// limitWithin matches the packets within r, counted together whatever
+// their source: the limit match cannot invert, count per source or be
+// named.
+func (r rateLimit) limitWithin() []string {
+	return []string{"-m", "limit", "--limit", r.rate, "--limit-burst", r.burst}
+}
+
+// mssClampRule clamps the MSS of TCP SYNs to the path MTU.
+var mssClampRule = []string{"-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"}
 
 // ipProtocolNumbers are the IANA numbers of the protocols a rule can name.
 // iptables gets names for tcp, udp and icmp, whose port and type options
@@ -53,6 +80,9 @@ var (
 		table: natTable, name: postroutingChain, parent: "POSTROUTING",
 		jumps: [][]string{{}},
 	}
+	// limitSpec is reached only from the lines of TUNNELDECK-INPUT and
+	// TUNNELDECK-FORWARD that send SYNs and pings to it (rateRules).
+	limitSpec = chainSpec{table: filterTable, name: limitChain, sealed: true}
 )
 
 // forwardSpec jumps to TUNNELDECK-FORWARD for traffic in or out of the
@@ -74,17 +104,25 @@ func allChainSpecs(killSwitch [][]string) []chainSpec {
 // ruleset is the content of every chain for one firewall configuration.
 type ruleset struct {
 	input, forward, prerouting, postrouting [][]string
+	// limit is the content of TUNNELDECK-LIMIT, nil while no protection
+	// needs it.
+	limit [][]string
 	// killSwitch holds the matches of the extra FORWARD jumps.
 	killSwitch [][]string
 }
 
-// chainContent pairs each chain with its content, in installation order.
+// chainContent pairs each chain with its content, in installation order:
+// TUNNELDECK-LIMIT, when needed, before the chains that jump to it.
 func (rs ruleset) chainContent() []struct {
 	spec    chainSpec
 	content [][]string
 } {
 	specs := allChainSpecs(rs.killSwitch)
 	contents := [][][]string{rs.input, rs.forward, rs.prerouting, rs.postrouting}
+	if rs.limit != nil {
+		specs = append([]chainSpec{limitSpec}, specs...)
+		contents = append([][][]string{rs.limit}, contents...)
+	}
 	out := make([]struct {
 		spec    chainSpec
 		content [][]string
@@ -106,8 +144,10 @@ type hostPorts struct {
 // enabled rules install anything, in list order. Each line is tagged with
 // its rule or its fixed purpose. lan are the host's LAN addresses: an
 // inbound rule to one of them is a rule to the host, any other a port
-// forward.
-func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress) ruleset {
+// forward. caps are the optional extensions of the kernel: a protection
+// it cannot provide falls back or is left out, and reject rules drop
+// without the REJECT target.
+func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress, caps capabilities) ruleset {
 	var enabled []parsedRule
 	host := hostAddresses(lan)
 	for _, rule := range firewall.Rules {
@@ -115,13 +155,58 @@ func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []lanAddress
 			enabled = append(enabled, parseRule(rule, host))
 		}
 	}
+	opts := renderOptions(firewall.FirewallSettings, caps)
 	return ruleset{
-		input:       inputContent(firewall.FirewallSettings, enabled, reserved),
-		forward:     forwardContent(firewall.FirewallSettings, enabled, subnets(lan)),
+		input:       inputContent(opts, enabled, reserved),
+		forward:     forwardContent(opts, enabled, subnets(lan)),
 		prerouting:  preroutingContent(enabled, reserved),
 		postrouting: postroutingContent(enabled),
+		limit:       limitContent(opts),
 		killSwitch:  killSwitchJumps(enabled),
 	}
+}
+
+// rateMatch is the match a rate-limited protection is rendered with.
+type rateMatch int
+
+const (
+	notLimited    rateMatch = iota // off, or no module for it
+	viaHashlimit                   // in place, per source where the rate says so
+	viaLimitChain                  // through TUNNELDECK-LIMIT, one global rate
+)
+
+// options are the global protections to install, each as far as the
+// kernel provides it, and whether reject rules can use REJECT.
+type options struct {
+	dropInvalid, mssClamp, reject bool
+	synFlood, ping                rateMatch
+}
+
+func renderOptions(settings domain.FirewallSettings, caps capabilities) options {
+	rate := func(on bool) rateMatch {
+		switch {
+		case !on:
+			return notLimited
+		case caps.has[extHashlimit]:
+			return viaHashlimit
+		case caps.has[extLimit]:
+			return viaLimitChain
+		}
+		return notLimited
+	}
+	return options{
+		dropInvalid: settings.DropInvalid,
+		mssClamp:    settings.MSSClamp && caps.has[extTCPMSS],
+		reject:      caps.has[extReject],
+		synFlood:    rate(settings.SYNFloodProtection),
+		ping:        rate(settings.PingLimit),
+	}
+}
+
+// usesLimitChain reports whether the rate limits fall back to
+// TUNNELDECK-LIMIT with caps, so that chain may exist.
+func usesLimitChain(caps capabilities) bool {
+	return !caps.has[extHashlimit] && caps.has[extLimit]
 }
 
 // parsedRule is a validated rule with its addresses parsed and its target
@@ -159,16 +244,16 @@ func (r parsedRule) withTag(rule []string) []string { return tagged(ruleTagPrefi
 
 // inputContent drops TCP to the web UI port before anything else, so no
 // rule, not even one for every port, can open it to the tunnel.
-func inputContent(settings domain.FirewallSettings, rules []parsedRule, reserved hostPorts) [][]string {
+func inputContent(p options, rules []parsedRule, reserved hostPorts) [][]string {
 	var out [][]string
 	if reserved.ui != 0 {
 		out = append(out, fixedRule(fixedUIPort, tcpPortRule(reserved.ui, "DROP")))
 	}
-	if settings.DropInvalid {
+	if p.dropInvalid {
 		out = append(out, fixedRule(fixedInvalid, ctRule(ctInvalid, "DROP")))
 	}
 	out = append(out, fixedRule(fixedEstablished, ctRule(ctEstablished, "ACCEPT")))
-	out = append(out, floodRules(settings, nil, "in")...)
+	out = append(out, floodRules(p, nil, "in")...)
 	for _, rule := range rules {
 		if !rule.isHostRule() {
 			continue
@@ -176,7 +261,7 @@ func inputContent(settings domain.FirewallSettings, rules []parsedRule, reserved
 		for _, proto := range rule.Protocol.Protocols() {
 			match := slices.Concat(protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort),
 				icmpMatch(rule), prefixMatch("-s", rule.source))
-			out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto)...)))
+			out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto, p.reject)...)))
 		}
 	}
 	if reserved.remoteAccess != 0 {
@@ -189,23 +274,23 @@ func tcpPortRule(port int, target string) []string {
 	return []string{"-p", "tcp", "--dport", strconv.Itoa(port), "-j", target}
 }
 
-func forwardContent(settings domain.FirewallSettings, rules []parsedRule, lan []netip.Prefix) [][]string {
+func forwardContent(p options, rules []parsedRule, lan []netip.Prefix) [][]string {
 	out := lanReturns(rules, lan)
 	out = append(out, fixedRule(fixedKillSwitch, []string{"!", "-i", DeviceName, "!", "-o", DeviceName, "-j", "DROP"}))
-	if settings.DropInvalid {
+	if p.dropInvalid {
 		out = append(out, fixedRule(fixedInvalid, ctRule(ctInvalid, "DROP")))
 	}
-	if settings.MSSClamp {
-		out = append(out, fixedRule(fixedMSSClamp, []string{"-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"}))
+	if p.mssClamp {
+		out = append(out, fixedRule(fixedMSSClamp, mssClampRule))
 	}
 	out = append(out, fixedRule(fixedEstablished, ctRule(ctEstablished, "ACCEPT")))
-	out = append(out, floodRules(settings, []string{"-i", DeviceName}, "fwd")...)
+	out = append(out, floodRules(p, []string{"-i", DeviceName}, "fwd")...)
 	for _, rule := range rules {
 		switch {
 		case rule.isPortForward():
 			out = append(out, portForwardAccepts(rule)...)
 		case rule.Direction == domain.DirectionOutbound:
-			out = append(out, outboundRules(rule)...)
+			out = append(out, outboundRules(rule, p.reject)...)
 		}
 	}
 	return append(out, []string{"-j", "DROP"})
@@ -231,21 +316,49 @@ func lanReturns(rules []parsedRule, lan []netip.Prefix) [][]string {
 	return out
 }
 
+// Matches of the packets the rate-limited protections count.
+var (
+	synMatch  = []string{"-p", "tcp", "--syn"}
+	pingMatch = []string{"-p", "icmp", "--icmp-type", "echo-request"}
+)
+
 // floodRules are the SYN flood protection and the ping limit for traffic
 // matching iface; name tells the hashlimit tables of each chain apart.
-func floodRules(settings domain.FirewallSettings, iface []string, name string) [][]string {
+func floodRules(p options, iface []string, name string) [][]string {
 	var out [][]string
-	if settings.SYNFloodProtection {
-		rule := slices.Concat(iface, []string{"-p", "tcp", "--syn"}, synFloodLimit,
-			[]string{"--hashlimit-name", "td-syn-" + name, "-j", "DROP"})
-		out = append(out, fixedRule(fixedSYNFlood, rule))
+	out = append(out, rateRules(p.synFlood, fixedSYNFlood, slices.Concat(iface, synMatch), synFloodRate, "td-syn-"+name)...)
+	return append(out, rateRules(p.ping, fixedPingLimit, slices.Concat(iface, pingMatch), pingRate, "td-ping-"+name)...)
+}
+
+// rateRules drop the packets of match above rate: in place with the
+// hashlimit match, or by sending them to TUNNELDECK-LIMIT, whose limit
+// match counts the packets of both filter chains together. Nothing while
+// omitted.
+func rateRules(how rateMatch, purpose string, match []string, rate rateLimit, name string) [][]string {
+	switch how {
+	case viaHashlimit:
+		return [][]string{fixedRule(purpose, slices.Concat(match, rate.hashlimitAbove(name), []string{"-j", "DROP"}))}
+	case viaLimitChain:
+		return [][]string{fixedRule(purpose, slices.Concat(match, []string{"-j", limitChain}))}
 	}
-	if settings.PingLimit {
-		rule := slices.Concat(iface, []string{"-p", "icmp", "--icmp-type", "echo-request"}, pingLimit,
-			[]string{"--hashlimit-name", "td-ping-" + name, "-j", "DROP"})
-		out = append(out, fixedRule(fixedPingLimit, rule))
+	return nil
+}
+
+// limitContent lets the SYNs and pings within their global rate return to
+// the chain that sent them and drops the rest; nil while no protection
+// uses the limit match. Only SYNs and pings ever enter the chain.
+func limitContent(p options) [][]string {
+	var out [][]string
+	if p.synFlood == viaLimitChain {
+		out = append(out, fixedRule(fixedSYNFlood, slices.Concat([]string{"-p", "tcp"}, synFloodRate.limitWithin(), []string{"-j", "RETURN"})))
 	}
-	return out
+	if p.ping == viaLimitChain {
+		out = append(out, fixedRule(fixedPingLimit, slices.Concat([]string{"-p", "icmp"}, pingRate.limitWithin(), []string{"-j", "RETURN"})))
+	}
+	if out == nil {
+		return nil
+	}
+	return append(out, []string{"-j", "DROP"})
 }
 
 // portForwardAccepts accepts DNATed traffic to the target, matching the
@@ -260,12 +373,12 @@ func portForwardAccepts(rule parsedRule) [][]string {
 	return out
 }
 
-func outboundRules(rule parsedRule) [][]string {
+func outboundRules(rule parsedRule, reject bool) [][]string {
 	var out [][]string
 	for _, proto := range rule.Protocol.Protocols() {
 		match := slices.Concat([]string{"-o", DeviceName, "-s", rule.source.String()}, prefixMatch("-d", rule.destination),
 			protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort), icmpMatch(rule))
-		out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto)...)))
+		out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto, reject)...)))
 	}
 	return out
 }
@@ -393,9 +506,11 @@ func prefixMatch(option string, prefix netip.Prefix) []string {
 	return []string{option, prefix.String()}
 }
 
-func actionTarget(action domain.FirewallAction, proto domain.FirewallProtocol) []string {
+// actionTarget is the target of action; reject is DROP without the REJECT
+// target (reject false).
+func actionTarget(action domain.FirewallAction, proto domain.FirewallProtocol, reject bool) []string {
 	switch {
-	case action == domain.ActionDrop:
+	case action == domain.ActionDrop, action == domain.ActionReject && !reject:
 		return []string{"-j", "DROP"}
 	case action == domain.ActionReject && proto == domain.ProtocolTCP:
 		return []string{"-j", "REJECT", "--reject-with", "tcp-reset"}

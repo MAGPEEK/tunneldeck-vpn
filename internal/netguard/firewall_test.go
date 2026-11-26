@@ -431,7 +431,7 @@ func TestInboundRulesFollowTheHostAddress(t *testing.T) {
 	ssh := hostRule(domain.ProtocolTCP, domain.SinglePort(22))
 	firewall := rulesOnly(ssh, hostAccess("", domain.ProtocolUDP, 161, "", true))
 	at := func(listing string) ruleset {
-		return buildRuleset(firewall, hostPorts{}, parseLANAddresses(listing))
+		return buildRuleset(firewall, hostPorts{}, parseLANAddresses(listing), capsWithout())
 	}
 	rs := at(lanListing)
 	if !slices.ContainsFunc(rs.input, hasTag("r1")) || !slices.ContainsFunc(rs.input, hasTag("r2")) || len(rs.prerouting) != 0 {
@@ -475,7 +475,7 @@ func TestInstallFirewallChecksTheLAN(t *testing.T) {
 		t.Fatalf("err = %v, want the LAN detection failure", err)
 	}
 	if slices.ContainsFunc(f.calls, func(c string) bool {
-		return strings.Contains(c, "TUNNELDECK") && !strings.Contains(c, commentProbeChain)
+		return strings.Contains(c, "TUNNELDECK") && !strings.Contains(c, extensionProbeChain)
 	}) {
 		t.Errorf("chains touched without LAN subnets: %v", f.calls)
 	}
@@ -649,7 +649,7 @@ func TestRemoveFirewall(t *testing.T) {
 				"-D POSTROUTING -j TUNNELDECK-POSTROUTING",
 				"-F TUNNELDECK-POSTROUTING",
 				"-X TUNNELDECK-POSTROUTING",
-			)),
+			), prefixed(legacy, "-F TUNNELDECK-LIMIT", "-X TUNNELDECK-LIMIT")),
 		},
 		{
 			name: "already absent",
@@ -657,11 +657,13 @@ func TestRemoveFirewall(t *testing.T) {
 				f.on(legacy+"-F TUNNELDECK-INPUT", fail(noChain)).
 					on(legacy+"-F TUNNELDECK-FORWARD", fail(noChain)).
 					on(natPrefix+"-F TUNNELDECK-PREROUTING", fail(noChain)).
-					on(natPrefix+"-F TUNNELDECK-POSTROUTING", fail(noChain))
+					on(natPrefix+"-F TUNNELDECK-POSTROUTING", fail(noChain)).
+					on(legacy+"-F TUNNELDECK-LIMIT", fail(noChain))
 			},
 			want: slices.Concat(detectLegacy,
 				prefixed(legacy, "-S INPUT", "-F TUNNELDECK-INPUT", "-S FORWARD", "-F TUNNELDECK-FORWARD"),
-				prefixed(natPrefix, "-S PREROUTING", "-F TUNNELDECK-PREROUTING", "-S POSTROUTING", "-F TUNNELDECK-POSTROUTING")),
+				prefixed(natPrefix, "-S PREROUTING", "-F TUNNELDECK-PREROUTING", "-S POSTROUTING", "-F TUNNELDECK-POSTROUTING"),
+				prefixed(legacy, "-F TUNNELDECK-LIMIT")),
 		},
 	}
 	for _, tt := range tests {

@@ -255,6 +255,32 @@ func DefaultFirewallSettings() FirewallSettings {
 	return FirewallSettings{DropInvalid: true, MSSClamp: true, SYNFloodProtection: true, PingLimit: true}
 }
 
+// ProtectionLevel is how far the host's kernel supports a global
+// protection: minimal kernels lack some iptables modules.
+type ProtectionLevel string
+
+// Protection levels.
+const (
+	// ProtectionFull works as SPEC §16.1a describes it.
+	ProtectionFull ProtectionLevel = "full"
+	// ProtectionGlobal enforces one shared rate instead of one per source.
+	ProtectionGlobal ProtectionLevel = "global"
+	// ProtectionNone is not installed at all.
+	ProtectionNone ProtectionLevel = "none"
+)
+
+// ProtectionSupport tells which global protections, and whether the hit
+// counters, work on the host's kernel. The settings stay as stored; a
+// protection the kernel cannot provide is left out of the firewall.
+type ProtectionSupport struct {
+	SYNFlood ProtectionLevel `json:"synFlood"`
+	// Ping is never ProtectionGlobal: the ping limit is one global rate
+	// anyway. MSSClamp is never ProtectionGlobal either.
+	Ping         ProtectionLevel `json:"ping"`
+	MSSClamp     ProtectionLevel `json:"mssClamp"`
+	RuleCounters bool            `json:"ruleCounters"`
+}
+
 // ParseIPv4Prefix parses an IPv4 network in CIDR notation or a bare IPv4
 // address, which stands for that single address (/32). Host bits must not
 // be set.

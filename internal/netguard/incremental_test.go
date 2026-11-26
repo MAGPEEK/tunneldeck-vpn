@@ -89,7 +89,7 @@ func TestUnchangedChainsAreLeftAlone(t *testing.T) {
 func assertNoChange(t *testing.T, calls []string) {
 	t.Helper()
 	for _, call := range calls {
-		if strings.Contains(call, commentProbeChain) {
+		if strings.Contains(call, extensionProbeChain) {
 			continue
 		}
 		for _, change := range []string{" -A ", " -D ", " -I ", " -N ", " -F ", " -X "} {
@@ -192,27 +192,36 @@ func TestEveryContentLineIsTagged(t *testing.T) {
 		changed(portForward(domain.ProtocolTCPUDP, "192.168.2.5", domain.PortRange{}), func(r *domain.FirewallRule) { r.ID = "all" }),
 		changed(outboundRule(domain.ProtocolAny, "192.168.2.2", "0.0.0.0/0"), func(r *domain.FirewallRule) { r.ID = "out" }),
 	}}
-	rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, parseLANAddresses(lanListing))
-	for _, chain := range rs.chainContent() {
-		for i, rule := range chain.content {
-			tag := ruleTag(rule)
-			last := i == len(chain.content)-1
-			switch {
-			case chain.spec.sealed && last:
-				if tag != "" {
-					t.Errorf("%s: the sealing DROP carries %q", chain.spec.name, tag)
-				}
-			case !strings.HasPrefix(tag, ruleTagPrefix) && !strings.HasPrefix(tag, fixedTagPrefix):
-				t.Errorf("%s: line %q has no tag", chain.spec.name, strings.Join(rule, " "))
-			}
-			if at := slices.Index(rule, "comment"); tag != "" && rule[at+3] != "-j" {
-				t.Errorf("%s: the comment of %q is not right before the target", chain.spec.name, strings.Join(rule, " "))
+	for _, caps := range []capabilities{capsWithout(), capsWithout(extHashlimit, extTCPMSS)} {
+		rs := buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: 8443}, parseLANAddresses(lanListing), caps)
+		for _, chain := range rs.chainContent() {
+			assertTagged(t, chain.spec, chain.content)
+		}
+		for _, id := range []string{"ssh", "all", "out"} {
+			if !slices.ContainsFunc(rs.input, hasTag(id)) && !slices.ContainsFunc(rs.forward, hasTag(id)) {
+				t.Errorf("no filter line of rule %q", id)
 			}
 		}
 	}
-	for _, id := range []string{"ssh", "all", "out"} {
-		if !slices.ContainsFunc(rs.input, hasTag(id)) && !slices.ContainsFunc(rs.forward, hasTag(id)) {
-			t.Errorf("no filter line of rule %q", id)
+}
+
+// assertTagged checks that every line of content but the sealing DROP
+// carries a tag right before its target.
+func assertTagged(t *testing.T, spec chainSpec, content [][]string) {
+	t.Helper()
+	for i, rule := range content {
+		tag := ruleTag(rule)
+		last := i == len(content)-1
+		switch {
+		case spec.sealed && last:
+			if tag != "" {
+				t.Errorf("%s: the sealing DROP carries %q", spec.name, tag)
+			}
+		case !strings.HasPrefix(tag, ruleTagPrefix) && !strings.HasPrefix(tag, fixedTagPrefix):
+			t.Errorf("%s: line %q has no tag", spec.name, strings.Join(rule, " "))
+		}
+		if at := slices.Index(rule, "comment"); tag != "" && rule[at+3] != "-j" {
+			t.Errorf("%s: the comment of %q is not right before the target", spec.name, strings.Join(rule, " "))
 		}
 	}
 }
@@ -253,7 +262,7 @@ func untagLines(lines []string) []string {
 func TestWithoutTheCommentMatchEveryChainIsRefilledUntagged(t *testing.T) {
 	input, forward := untagLines(testInput), untagLines(testForward)
 	f := newFakeRunner()
-	f.on(probeTagged, fail(commentMissing))
+	f.on(probeComment, fail(commentMissing))
 	g := newLegacyGuard(f)
 	for run := range 2 {
 		// Even chains that already hold the content are refilled, as
@@ -273,7 +282,7 @@ func TestWithoutTheCommentMatchEveryChainIsRefilledUntagged(t *testing.T) {
 		calls := f.takeCalls()
 		assertCalls(t, calls, want)
 		for _, call := range calls {
-			if strings.Contains(call, "--comment") && !strings.Contains(call, commentProbeChain) {
+			if strings.Contains(call, "--comment") && !strings.Contains(call, extensionProbeChain) {
 				t.Errorf("a tagged rule was installed without the comment match: %q", call)
 			}
 		}

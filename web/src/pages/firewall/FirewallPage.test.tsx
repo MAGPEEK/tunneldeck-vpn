@@ -71,6 +71,7 @@ function state(overrides: Partial<FirewallState> = {}): FirewallState {
     ipForward: true,
     counters: { a: { packets: 12, bytes: 720 }, b: { packets: 1, bytes: 60 } },
     countersAvailable: true,
+    protectionsAvailable: { synFlood: 'full', ping: 'full', mssClamp: 'full', ruleCounters: true },
     ...overrides,
   };
 }

@@ -46,6 +46,9 @@ type firewallResponse struct {
 	// CountersAvailable is false, and Counters null, when the counters
 	// cannot be read, for example without the iptables comment match.
 	CountersAvailable bool `json:"countersAvailable"`
+	// ProtectionsAvailable tells how far the host's kernel supports each
+	// global protection; all "none" when that cannot be detected.
+	ProtectionsAvailable domain.ProtectionSupport `json:"protectionsAvailable"`
 }
 
 // deviceResponse is one entry of GET /api/firewall/devices.
@@ -248,6 +251,7 @@ func (s *Server) firewallState(ctx context.Context, firewall domain.Firewall) fi
 		response.Rules = append(response.Rules, rule.WithHostAddress(network.Address()))
 	}
 	response.Counters, response.CountersAvailable = s.ruleCounters(ctx)
+	response.ProtectionsAvailable = s.protectionSupport(ctx)
 	if address := network.Address(); address.IsValid() {
 		response.HostAddress = address.String()
 	}
@@ -286,6 +290,17 @@ func (s *Server) ruleCounters(ctx context.Context) (map[string]domain.RuleCounte
 		counters = map[string]domain.RuleCounters{}
 	}
 	return counters, true
+}
+
+// protectionSupport detects which global protections the kernel
+// supports; a failure is logged and counts as none.
+func (s *Server) protectionSupport(ctx context.Context) domain.ProtectionSupport {
+	support, err := s.deps.Firewall.ProtectionSupport(ctx)
+	if err != nil {
+		slog.Warn("detect the supported firewall protections", "error", err)
+		return domain.ProtectionSupport{SYNFlood: domain.ProtectionNone, Ping: domain.ProtectionNone, MSSClamp: domain.ProtectionNone}
+	}
+	return support
 }
 
 // getDevices lists the host's LAN devices for the device picker (SPEC

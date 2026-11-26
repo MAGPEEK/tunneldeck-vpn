@@ -37,8 +37,6 @@ const (
 // match when the kernel lacks xt_comment.
 const commentMissing = "iptables v1.8.7 (legacy): Couldn't load match `comment':No such file or directory"
 
-const probeTagged = legacy + "-A TUNNELDECK-COMMENT-PROBE -m comment --comment tdfixed:probe -j RETURN"
-
 func TestRuleCounters(t *testing.T) {
 	f := newFakeRunner()
 	f.on(legacy+"-L TUNNELDECK-INPUT -v -x -n", ok(legacyInputListing)).
@@ -74,7 +72,7 @@ func TestRuleCountersOfMissingChains(t *testing.T) {
 
 func TestRuleCountersWithoutTheCommentMatch(t *testing.T) {
 	f := newFakeRunner()
-	f.on(probeTagged, fail(commentMissing))
+	f.on(probeComment, fail(commentMissing))
 	g := newLegacyGuard(f)
 	for range 2 {
 		counters, available, err := g.RuleCounters(context.Background())
@@ -93,8 +91,8 @@ func TestRuleCountersFailures(t *testing.T) {
 		wantErr string
 	}{
 		{"listing a chain", legacy + "-L TUNNELDECK-INPUT -v -x -n", "read counters of TUNNELDECK-INPUT"},
-		{"creating the probe chain", legacy + "-N TUNNELDECK-COMMENT-PROBE", "probe the comment match"},
-		{"deleting the probe chain", legacy + "-X TUNNELDECK-COMMENT-PROBE", "probe the comment match"},
+		{"creating the probe chain", legacy + "-N TUNNELDECK-EXT-PROBE", "probe the iptables extensions"},
+		{"deleting the probe chain", legacy + "-X TUNNELDECK-EXT-PROBE", "probe the iptables extensions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,7 +108,7 @@ func TestRuleCountersFailures(t *testing.T) {
 
 func TestCommentProbeReusesALeftoverChain(t *testing.T) {
 	f := newFakeRunner()
-	f.on(legacy+"-N TUNNELDECK-COMMENT-PROBE", fail("iptables: Chain already exists."))
+	f.on(legacy+"-N TUNNELDECK-EXT-PROBE", fail("iptables: Chain already exists."))
 	if _, available, err := newLegacyGuard(f).RuleCounters(context.Background()); err != nil || !available {
 		t.Fatalf("RuleCounters = %v, %v", available, err)
 	}

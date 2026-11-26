@@ -90,10 +90,11 @@ func (a *adviser) hasExtra(name string) bool {
 }
 
 // dataChannel checks the cipher list and the digest. An empty cipher
-// negotiates OpenVPN's AEAD defaults.
+// negotiates OpenVPN's AEAD defaults. The digest only matters next to a
+// cipher without AEAD: AEAD ciphers authenticate the packets themselves.
 func (a *adviser) dataChannel() {
 	ciphers := cipherNames(a.str(KeyCipher))
-	if slices.ContainsFunc(ciphers, isCipherNone) {
+	if leavesTrafficUnencrypted(ciphers) {
 		a.add(AdvisoryUnencryptedDataChannel, vpn.AdvisoryDanger, KeyCipher)
 	}
 	legacy := slices.ContainsFunc(ciphers, isLegacyCipher)
@@ -115,12 +116,25 @@ func cipherNames(list string) []string {
 
 func isCipherNone(name string) bool { return strings.EqualFold(name, cipherNone) }
 
+// leavesTrafficUnencrypted reports a cipher list that offers "none" and no
+// AEAD cipher as an alternative, such as "none" or "none:BF-CBC". The
+// profile value "none" (rendered as "none:CHACHA20-POLY1305") counts: it
+// selects the unencrypted channel. A list such as
+// "CHACHA20-POLY1305:none" encrypts whenever the server supports the AEAD
+// cipher.
+func leavesTrafficUnencrypted(ciphers []string) bool {
+	return slices.ContainsFunc(ciphers, isCipherNone) && !slices.ContainsFunc(ciphers, isAEADCipher)
+}
+
+func isAEADCipher(name string) bool {
+	upper := strings.ToUpper(name)
+	return strings.HasSuffix(upper, "-GCM") || upper == "CHACHA20-POLY1305"
+}
+
 // isLegacyCipher reports a real cipher without AEAD, such as BF-CBC or
 // AES-256-CBC.
 func isLegacyCipher(name string) bool {
-	upper := strings.ToUpper(name)
-	aead := strings.HasSuffix(upper, "-GCM") || upper == "CHACHA20-POLY1305"
-	return !aead && !isCipherNone(name)
+	return !isAEADCipher(name) && !isCipherNone(name)
 }
 
 func (a *adviser) compression() {

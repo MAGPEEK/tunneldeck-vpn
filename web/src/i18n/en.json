@@ -248,7 +248,7 @@
       "runs_code": "runs programs or scripts, which TunnelDeck-VPN does not allow.",
       "escapes_sandbox": "would change files or the process, which TunnelDeck-VPN does not allow.",
       "routing_handled": "is handled by TunnelDeck-VPN.",
-      "duplicate_directive": "appears more than once; only one is kept.",
+      "duplicate_directive": "is set by TunnelDeck-VPN itself.",
       "managed_by_field": "is set through a profile field.",
       "deprecated_ignored": "is deprecated and ignored by OpenVPN.",
       "ignored_for_tcp": "has no effect over TCP.",
@@ -268,7 +268,10 @@
       "ns_cert_type_mapped": "was replaced by the server certificate check.",
       "server_cert_usage_added": "The server certificate check was switched on.",
       "static_key_unsupported": "uses static-key mode, which is insecure and deprecated; use certificates or username and password instead.",
-      "setenv_ignored": "sets a variable that only scripts and VPN apps use; it is not needed."
+      "setenv_ignored": "sets a variable that only scripts and VPN apps use; it is not needed.",
+      "script_security_dropped": "only allows scripts; TunnelDeck-VPN runs none, so it is not needed.",
+      "verb_replaced": "was replaced by the log level of TunnelDeck-VPN.",
+      "credentials_expected": "The file contains no client certificate and no username and password. Sign-in with username and password is selected: enter the access data from your provider."
     }
   },
   "firewall": {
@@ -377,7 +380,9 @@
       "synFloodProtection": "SYN flood protection",
       "synFloodProtectionHint": "Limits new TCP connections from the tunnel to 25 per second per source.",
       "pingLimit": "Ping limit",
-      "pingLimitHint": "Limits pings from the tunnel to 5 per second."
+      "pingLimitHint": "Limits pings from the tunnel to 5 per second.",
+      "globalOnly": "Global limit only",
+      "notAvailable": "Not available on this system"
     },
     "rulesTitle": "Rules",
     "listLabel": "Rules in evaluation order",
@@ -530,7 +535,11 @@
       "net-admin": "NET_ADMIN capability",
       "ip-forward": "IP forwarding",
       "lan-subnets": "LAN subnets",
-      "rule-counters": "Hit counters"
+      "rule-counters": "Hit counters",
+      "syn-flood-protection": "SYN flood protection",
+      "ping-limit": "Ping limit",
+      "mss-clamp": "TCP MSS clamping",
+      "reject-target": "REJECT target"
     },
     "hint": {
       "tun-device": "Pass the TUN device into the container (devices: /dev/net/tun).",
@@ -539,7 +548,11 @@
       "net-admin": "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN).",
       "ip-forward": "Enable IPv4 forwarding on the host (sysctl net.ipv4.ip_forward=1, persisted in /etc/sysctl.conf); Docker hosts normally have it on. Without it, rules to other devices and outbound rules forward nothing.",
       "lan-subnets": "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface.",
-      "rule-counters": "Load the comment match on the host (modprobe xt_comment), or use the nft backend (TUNNELDECK_IPTABLES=nft), then restart the container. The firewall works without it; only the hit counters are off."
+      "rule-counters": "Load the comment match on the host (modprobe xt_comment), or use the nft backend (TUNNELDECK_IPTABLES=nft), then restart the container. The firewall works without it; only the hit counters are off.",
+      "syn-flood-protection": "Load the hashlimit match on the host (modprobe xt_hashlimit; the limit match, xt_limit, allows a global limit), then restart the container. Some NAS kernels do not ship these modules; the firewall works without them.",
+      "ping-limit": "Load the hashlimit match on the host (modprobe xt_hashlimit; the limit match, xt_limit, allows a global limit), then restart the container. Some NAS kernels do not ship these modules; the firewall works without them.",
+      "mss-clamp": "Load the TCPMSS target on the host (modprobe xt_TCPMSS), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but large transfers through the tunnel may stall.",
+      "reject-target": "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently."
     }
   },
   "remoteAccess": {

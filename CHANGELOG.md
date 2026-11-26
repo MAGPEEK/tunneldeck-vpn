@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Fixed
+
+- OpenVPN import of provider files such as mdex fixed.IP level 30: `script-security` is dropped with the warning `script_security_dropped` instead of being reported as "not imported" (directives that run a script, such as `up`, stay rejected); `verb` is replaced by TunnelDeck-VPN's log level (`verb_replaced`, note); `client`, `pull`, `tls-client`, `nobind` and the other directives TunnelDeck-VPN renders itself are notes instead of warnings, with a corrected text ("is set by TunnelDeck-VPN itself"). A file without client certificate, key, PKCS#12 bundle or `auth-user-pass` selects the password sign-in, marks username and password as missing and adds the note `credentials_expected`; a commented-out `<auth-user-pass>` block only points the note at its line and is never read.
+- The advisory `unencrypted_data_channel` ("Traffic is not encrypted") is only shown when the cipher list offers `none` without an AEAD alternative (for example `none` or `none:BF-CBC`), no longer for lists such as `AES-256-GCM:none`.
+- Firewall on kernels without optional iptables modules (e.g. Synology DSM 7.2, Linux 4.4, no `xt_hashlimit`): the installation no longer fails. netguard probes `comment`, `hashlimit`, `limit`, `TCPMSS` and `REJECT` once per backend on a temporary chain (`TUNNELDECK-EXT-PROBE`). Without `hashlimit` the SYN flood protection falls back to one global rate with the same numbers and the ping limit, global anyway, keeps working (`limit` match, in the new chain `TUNNELDECK-LIMIT` that the SYN and ping lines of `TUNNELDECK-INPUT` and `TUNNELDECK-FORWARD` jump to); without `limit` as well both are left out; without `TCPMSS` MSS clamping is left out; without `REJECT` rules with the action reject are installed as `DROP`. The settings stay as stored. New self-checks `syn-flood-protection`, `ping-limit`, `mss-clamp` and `reject-target` warn (`warning: true`) with the missing module, the active fallback and a hint; `GET /api/firewall` returns `protectionsAvailable` (`synFlood`: `full`/`global`/`none`; `ping`, `mssClamp`: `full`/`none`; `ruleCounters`), and the Firewall page notes "Global limit only" or "Not available on this system" next to the affected switch.
+
 ## [0.2.0-alpha.4] - 2026-11-26
 
 ### Changed

@@ -119,6 +119,9 @@ type importer struct {
 	tlsAuth       bool
 	verifySeen    bool
 	staticKeySeen bool
+	// commentedCredentialsLine is the line of the first commented-out
+	// <auth-user-pass> opener, 0 if none. It is a hint, never data.
+	commentedCredentialsLine int
 	// content: the file has a line or block that is not blank or a comment.
 	content bool
 	// recognized: the file has at least one OpenVPN directive or key block.
@@ -160,6 +163,8 @@ var directiveHandlers = map[string]directiveHandler{
 	"auth-user-pass":   (*importer).authUserPassDirective,
 	"remote-cert-tls":  (*importer).remoteCertTLS,
 	"ns-cert-type":     (*importer).nsCertType,
+	"script-security":  (*importer).scriptSecurity,
+	"verb":             (*importer).verb,
 	directiveStaticKey: (*importer).staticKey,
 }
 
@@ -170,6 +175,7 @@ func (im *importer) line(raw string, number int) {
 	im.recognized = im.recognized || (status == lineKept && (known || isOpenVPNDirective(d)))
 	switch {
 	case status == lineBlank:
+		im.noteCommentedCredentials(raw, number)
 	case status == lineRemoved:
 		im.warn(v.warning(d, number))
 	case known:
@@ -440,6 +446,55 @@ func (im *importer) nsCertType(d directive, number int) {
 	})
 }
 
+// scriptSecurity drops script-security: it only permits scripts, and
+// TunnelDeck runs none, so it is not needed. Directives that would run a
+// script stay rejected.
+func (im *importer) scriptSecurity(d directive, number int) {
+	im.warn(Warning{
+		Code: CodeScriptSecurityDropped, Severity: SeverityWarning, Directive: d.name, Line: number,
+		Message: "dropped: TunnelDeck-VPN runs no scripts, so it is not needed",
+	})
+}
+
+// verb is replaced by the log level TunnelDeck renders.
+func (im *importer) verb(d directive, number int) {
+	im.warn(Warning{
+		Code: CodeVerbReplaced, Severity: SeverityInfo, Directive: d.name, Line: number,
+		Message: "replaced by the log level of TunnelDeck-VPN",
+	})
+}
+
+// noteCommentedCredentials remembers a commented-out <auth-user-pass>
+// opener such as ";<auth-user-pass>". Providers ship it as a template for
+// the credentials; its content is never read.
+func (im *importer) noteCommentedCredentials(raw string, number int) {
+	line := strings.TrimSpace(raw)
+	if im.commentedCredentialsLine != 0 || line == "" || !isComment(line[0]) {
+		return
+	}
+	if strings.TrimSpace(strings.TrimLeft(line, "#;")) == "<auth-user-pass>" {
+		im.commentedCredentialsLine = number
+	}
+}
+
+// expectCredentials reports a file without any client identity: neither
+// a certificate, key or PKCS#12 bundle nor auth-user-pass. Such a client
+// can only sign in with username and password, so the password sign-in is
+// selected and the user is told that the file does not contain them.
+func (im *importer) expectCredentials() {
+	if im.certificate || im.authUserPass || im.staticKeySeen {
+		return
+	}
+	message := "the file contains no client certificate and no username and password; " +
+		"a password sign-in is selected, enter the credentials from the provider"
+	if im.commentedCredentialsLine != 0 {
+		message += "; the commented-out <auth-user-pass> block shows that the provider expects them"
+	}
+	im.warn(Warning{
+		Code: CodeCredentialsExpected, Severity: SeverityInfo, Line: im.commentedCredentialsLine, Message: message,
+	})
+}
+
 // staticKey rejects static-key mode (SPEC §17) once per file, whether it
 // is selected by the directive, its inline block or both.
 func (im *importer) staticKey(d directive, number int) {
@@ -483,6 +538,7 @@ func (im *importer) result() ImportResult {
 	s.SetBool(KeyVerifyServerCertUsage, true)
 	s.SetStringList(KeyExtraOptions, im.extras)
 	im.applyCipher()
+	im.expectCredentials()
 	missing := im.missing(s)
 	if !im.verifySeen {
 		im.warn(Warning{

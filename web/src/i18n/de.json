@@ -248,7 +248,7 @@
       "runs_code": "startet Programme oder Skripte; das lässt TunnelDeck-VPN nicht zu.",
       "escapes_sandbox": "würde Dateien oder den Prozess verändern; das lässt TunnelDeck-VPN nicht zu.",
       "routing_handled": "übernimmt TunnelDeck-VPN selbst.",
-      "duplicate_directive": "kommt mehrfach vor; nur eine wird übernommen.",
+      "duplicate_directive": "setzt TunnelDeck-VPN selbst.",
       "managed_by_field": "wird über ein Profilfeld gesetzt.",
       "deprecated_ignored": "ist veraltet und wird von OpenVPN ignoriert.",
       "ignored_for_tcp": "hat über TCP keine Wirkung.",
@@ -268,7 +268,10 @@
       "ns_cert_type_mapped": "wurde durch die Prüfung des Serverzertifikats ersetzt.",
       "server_cert_usage_added": "Die Prüfung des Serverzertifikats wurde eingeschaltet.",
       "static_key_unsupported": "nutzt den Static-Key-Modus, der unsicher und veraltet ist; verwenden Sie stattdessen Zertifikate oder Benutzername und Passwort.",
-      "setenv_ignored": "setzt eine Variable, die nur Skripte und VPN-Apps nutzen; sie wird nicht gebraucht."
+      "setenv_ignored": "setzt eine Variable, die nur Skripte und VPN-Apps nutzen; sie wird nicht gebraucht.",
+      "script_security_dropped": "erlaubt nur Skripte; TunnelDeck-VPN startet keine, daher wird sie nicht gebraucht.",
+      "verb_replaced": "wurde durch die Protokollstufe von TunnelDeck-VPN ersetzt.",
+      "credentials_expected": "Die Datei enthält kein Client-Zertifikat und weder Benutzername noch Passwort. Die Anmeldung mit Benutzername und Passwort ist gewählt: Geben Sie die Zugangsdaten Ihres Anbieters ein."
     }
   },
   "firewall": {
@@ -377,7 +380,9 @@
       "synFloodProtection": "Schutz vor SYN-Flut",
       "synFloodProtectionHint": "Begrenzt neue TCP-Verbindungen aus dem Tunnel auf 25 pro Sekunde und Quelle.",
       "pingLimit": "Ping-Begrenzung",
-      "pingLimitHint": "Begrenzt Pings aus dem Tunnel auf 5 pro Sekunde."
+      "pingLimitHint": "Begrenzt Pings aus dem Tunnel auf 5 pro Sekunde.",
+      "globalOnly": "Nur globales Limit",
+      "notAvailable": "Auf diesem System nicht verfügbar"
     },
     "rulesTitle": "Regeln",
     "listLabel": "Regeln in Auswertungsreihenfolge",
@@ -530,7 +535,11 @@
       "net-admin": "NET_ADMIN-Berechtigung",
       "ip-forward": "IP-Weiterleitung",
       "lan-subnets": "LAN-Subnetze",
-      "rule-counters": "Trefferzähler"
+      "rule-counters": "Trefferzähler",
+      "syn-flood-protection": "Schutz vor SYN-Flut",
+      "ping-limit": "Ping-Begrenzung",
+      "mss-clamp": "TCP-MSS-Anpassung",
+      "reject-target": "REJECT-Ziel"
     },
     "hint": {
       "tun-device": "Reichen Sie das TUN-Gerät in den Container durch (devices: /dev/net/tun).",
@@ -539,7 +548,11 @@
       "net-admin": "Geben Sie dem Container die Berechtigung NET_ADMIN (cap_add: NET_ADMIN).",
       "ip-forward": "Schalten Sie die IPv4-Weiterleitung auf dem Host ein (sysctl net.ipv4.ip_forward=1, dauerhaft in /etc/sysctl.conf); auf Docker-Hosts ist sie meist schon an. Ohne sie leiten Regeln an andere Geräte und ausgehende Regeln nichts weiter.",
       "lan-subnets": "Starten Sie den Container mit network_mode: host auf einem Host, der eine IPv4-Adresse an seiner LAN-Schnittstelle hat.",
-      "rule-counters": "Das Comment-Match auf dem Host laden (modprobe xt_comment) oder das nft-Backend verwenden (TUNNELDECK_IPTABLES=nft) und den Container neu starten. Die Firewall funktioniert auch ohne; nur die Trefferzähler fehlen."
+      "rule-counters": "Das Comment-Match auf dem Host laden (modprobe xt_comment) oder das nft-Backend verwenden (TUNNELDECK_IPTABLES=nft) und den Container neu starten. Die Firewall funktioniert auch ohne; nur die Trefferzähler fehlen.",
+      "syn-flood-protection": "Das Hashlimit-Match auf dem Host laden (modprobe xt_hashlimit; mit dem Limit-Match, xt_limit, ist ein globales Limit möglich) und den Container neu starten. Manche NAS-Kernel enthalten diese Module nicht; die Firewall funktioniert auch ohne.",
+      "ping-limit": "Das Hashlimit-Match auf dem Host laden (modprobe xt_hashlimit; mit dem Limit-Match, xt_limit, ist ein globales Limit möglich) und den Container neu starten. Manche NAS-Kernel enthalten diese Module nicht; die Firewall funktioniert auch ohne.",
+      "mss-clamp": "Das TCPMSS-Ziel auf dem Host laden (modprobe xt_TCPMSS) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, große Übertragungen durch den Tunnel können dann aber hängen.",
+      "reject-target": "Das REJECT-Ziel auf dem Host laden (modprobe ipt_REJECT) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, Ablehnen-Regeln verwerfen dann aber stillschweigend."
     }
   },
   "remoteAccess": {

@@ -1,8 +1,6 @@
 package netguard
 
 import (
-	"context"
-	"fmt"
 	"regexp"
 	"slices"
 )
@@ -77,47 +75,6 @@ func lineTag(line string) string {
 		return m[1]
 	}
 	return ""
-}
-
-// commentSupport is whether the backend has the comment match (xt_comment
-// for iptables-legacy).
-type commentSupport int
-
-const (
-	commentsUnknown commentSupport = iota // not probed yet
-	commentsAvailable
-	commentsMissing
-)
-
-// commentProbeChain is created, given one tagged rule and deleted to probe
-// the comment match.
-const commentProbeChain = "TUNNELDECK-COMMENT-PROBE"
-
-// detectComments probes the comment match once per backend: on a
-// temporary chain, like the connection-tracking detection. A probe chain
-// left over from a crash is reused and deleted. Only a failing tagged rule
-// counts as "missing"; failing to create or delete the chain is an error.
-func (g *Guard) detectComments(ctx context.Context) (bool, error) {
-	switch g.comments {
-	case commentsAvailable:
-		return true, nil
-	case commentsMissing:
-		return false, nil
-	}
-	if _, err := g.iptables(ctx, filterTable, "-N", commentProbeChain); err != nil && !isAlreadyExists(err) {
-		return false, fmt.Errorf("probe the comment match: %w", err)
-	}
-	probe := fixedRule("probe", []string{"-j", "RETURN"})
-	_, appendErr := g.iptables(ctx, filterTable, append([]string{"-A", commentProbeChain}, probe...)...)
-	if err := g.removeChain(ctx, filterTable, commentProbeChain); err != nil {
-		return false, fmt.Errorf("probe the comment match: %w", err)
-	}
-	if appendErr != nil {
-		g.comments = commentsMissing
-		return false, nil
-	}
-	g.comments = commentsAvailable
-	return true, nil
 }
 
 // untaggedContent returns content without comment matches, for a backend

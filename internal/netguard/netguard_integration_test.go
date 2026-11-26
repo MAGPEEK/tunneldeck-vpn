@@ -152,6 +152,60 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	}
 }
 
+// TestIntegrationProtectionsOnMinimalKernels hides extensions from the
+// probed capabilities, as on a kernel without their modules: without
+// hashlimit the rate limits go through TUNNELDECK-LIMIT, without limit as
+// well they and the chain are left out, without TCPMSS MSS clamping is;
+// every installation succeeds.
+func TestIntegrationProtectionsOnMinimalKernels(t *testing.T) {
+	ctx := context.Background()
+	runner := ExecRunner{}
+	mustRun(t, runner, "ip", "link", "add", DeviceName, "type", "dummy")
+	t.Cleanup(func() { _, _ = runner.Run(ctx, "ip", "link", "del", DeviceName) })
+	g := New(runner)
+	t.Cleanup(func() { _ = g.RemoveFirewall(ctx) })
+	caps, err := g.detectCapabilities(ctx)
+	if err != nil || !caps.has[extLimit] {
+		t.Skipf("capabilities = %+v, %v; the limit match is needed", caps, err)
+	}
+	firewall := domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(),
+		Rules: []domain.FirewallRule{hostAccess("ssh", domain.ProtocolTCP, 22, "", true)}}
+
+	g.caps.has[extHashlimit] = false
+	for range 2 {
+		if err := g.InstallFirewall(ctx, firewall, 8080); err != nil {
+			t.Fatalf("InstallFirewall without hashlimit: %v", err)
+		}
+	}
+	limit := listRulesOrFail(t, g, filterTable, limitChain)
+	if len(limit) != 3 || !containsFragment(limit, "-m limit --limit 25/sec") || limit[2] != "-A TUNNELDECK-LIMIT -j DROP" {
+		t.Errorf("TUNNELDECK-LIMIT = %q", limit)
+	}
+	input := listRulesOrFail(t, g, filterTable, inputChain)
+	forward := listRulesOrFail(t, g, filterTable, forwardChain)
+	for name, chain := range map[string][]string{inputChain: input, forwardChain: forward} {
+		if countJumps(chain, limitChain) != 2 || containsFragment(chain, "hashlimit") {
+			t.Errorf("%s = %q, want the SYN and ping jumps to TUNNELDECK-LIMIT", name, chain)
+		}
+	}
+
+	g.caps.has[extLimit], g.caps.has[extTCPMSS] = false, false
+	if err := g.InstallFirewall(ctx, firewall, 8080); err != nil {
+		t.Fatalf("InstallFirewall without rate limits and TCPMSS: %v", err)
+	}
+	forward = listRulesOrFail(t, g, filterTable, forwardChain)
+	if containsFragment(forward, "TCPMSS") || countJumps(forward, limitChain) != 0 || forward[len(forward)-1] != "-A TUNNELDECK-FORWARD -j DROP" {
+		t.Errorf("TUNNELDECK-FORWARD = %q, want neither MSS clamping nor rate limits", forward)
+	}
+
+	if err := g.RemoveFirewall(ctx); err != nil {
+		t.Fatalf("RemoveFirewall: %v", err)
+	}
+	if _, err := g.listRules(ctx, filterTable, limitChain); !isAbsent(err) {
+		t.Errorf("%s still present: %v", limitChain, err)
+	}
+}
+
 // integrationFirewall covers every chain: host rules, a shifted TCP range
 // and ESP forwarded to target, an outbound rule for target and every
 // global protection.

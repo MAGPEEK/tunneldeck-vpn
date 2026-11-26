@@ -306,7 +306,11 @@ export function FirewallEditor({ saved }: { saved: FirewallState }) {
             )}
           </div>
         </Card>
-        <ProtectionCard settings={settings} onChange={setSettings} />
+        <ProtectionCard
+          settings={settings}
+          support={saved.protectionsAvailable}
+          onChange={setSettings}
+        />
       </div>
     </Page>
   );

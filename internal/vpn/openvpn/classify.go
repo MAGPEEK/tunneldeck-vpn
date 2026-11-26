@@ -35,7 +35,7 @@ var (
 		message: "dropped: routing is handled by TunnelDeck-VPN",
 	}
 	verdictDuplicate = verdict{
-		code: CodeDuplicateDirective, severity: SeverityWarning,
+		code: CodeDuplicateDirective, severity: SeverityInfo,
 		message: "dropped: TunnelDeck-VPN always emits this directive",
 	}
 	verdictManagedByField = verdict{

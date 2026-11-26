@@ -52,6 +52,22 @@ export interface FirewallState {
   /** Hits per rule ID; null when the counters cannot be read. */
   counters: Record<string, RuleCounters> | null;
   countersAvailable: boolean;
+  /** How far the host's kernel supports each global protection. */
+  protectionsAvailable: ProtectionSupport;
+}
+
+/**
+ * Support of a global protection: "full" as specified, "global" one shared rate
+ * instead of one per sender, "none" left out because the kernel lacks the module.
+ */
+export type ProtectionLevel = 'full' | 'global' | 'none';
+
+export interface ProtectionSupport {
+  synFlood: ProtectionLevel;
+  /** The ping limit is one global rate anyway, so it is never "global". */
+  ping: Exclude<ProtectionLevel, 'global'>;
+  mssClamp: Exclude<ProtectionLevel, 'global'>;
+  ruleCounters: boolean;
 }
 
 /** Hits of one rule: packets counts the new connections it matched. */

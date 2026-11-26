@@ -54,7 +54,7 @@ The compose file gives the container host networking, `NET_ADMIN` and `/dev/net/
 
 1. Open `http://<NAS-IP>:8194`. TunnelDeck-VPN listens on the address of the interface that holds the default route; set `TUNNELDECK_LISTEN` to choose another address or port (example `192.168.1.10:9000`). The UI is never reachable through the VPN tunnel; remote access over the VPN is HTTPS only (System page, default port 8443, freely selectable).
 2. Create the admin account (password of at least 12 characters).
-3. Open **System** and check that every self-check passes: TUN device, iptables, `ip`, `NET_ADMIN`, IP forwarding and the LAN subnets (section 10). Each failed check shows a hint.
+3. Open **System** and check that every self-check passes: TUN device, iptables, `ip`, `NET_ADMIN`, IP forwarding and the LAN subnets (section 10). Each failed check shows a hint. Warnings about missing iptables modules only reduce a protection (section 10, "Protections the DSM kernel may lack").
 
 The container's health status in Container Manager shows whether the web server answers. It does not show whether the tunnel is up; the dashboard shows that.
 
@@ -132,6 +132,20 @@ If it is `0`: Control Panel > Task Scheduler > Create > Triggered Task > User-de
 ### DSM firewall and forwarded traffic
 
 The DSM firewall filters traffic to the NAS itself. TunnelDeck-VPN's chains are first in `INPUT` and `FORWARD` for tunnel traffic, so its rules decide there. *Check on your NAS:* that forwarded traffic between the tunnel and the LAN is not blocked by DSM's own rules (`sudo iptables -S FORWARD | head -5` should show the `TUNNELDECK-FORWARD` jumps first); restart the container after changing DSM firewall settings.
+
+### Protections the DSM kernel may lack
+
+DSM kernels (DSM 7.2 on the DS723+ runs Linux 4.4) do not ship every iptables module. TunnelDeck-VPN tests the optional ones once at start and installs the firewall in any case; only the affected protection is reduced. The rules themselves, the kill switch and "everything else is dropped" always work.
+
+| Missing module | Effect | System page | Firewall page |
+| --- | --- | --- | --- |
+| `xt_hashlimit` | SYN flood protection uses one global rate with the same numbers (25/s) for all senders instead of one per sender; the ping limit (one global 5/s anyway) keeps working | warning **syn-flood-protection** | "Global limit only" at SYN flood protection |
+| `xt_hashlimit` and `xt_limit` | SYN flood protection and ping limit are left out | warnings **syn-flood-protection**, **ping-limit** | "Not available on this system" |
+| `xt_TCPMSS` | MSS clamping is left out; large transfers through the tunnel may stall if the path MTU is small | warning **mss-clamp** | "Not available on this system" |
+| `ipt_REJECT` | Rules with the action **reject** drop instead and send no answer | warning **reject-target** | none |
+| `xt_comment` | No hit counters | warning **rule-counters** | no hit counts |
+
+The switches stay as you set them, so the protection works as soon as the module is there. Each warning names the missing module and the fallback in use. *Check on your NAS:* `sudo modprobe xt_hashlimit` (likewise `xt_limit`, `xt_TCPMSS`, `ipt_REJECT`); if the module does not exist on DSM, the warning stays and the firewall keeps working without that protection. After loading a module, restart the container.
 
 ### An IPsec router in the local LAN
 

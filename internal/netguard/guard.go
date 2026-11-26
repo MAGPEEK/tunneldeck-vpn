@@ -30,9 +30,8 @@ type Guard struct {
 	// lifetime; nil until detected.
 	backend *Backend
 	ct      ctMatchKind // detected connection-tracking match
-	// comments tells whether the backend has the comment match, which the
-	// rule tags and so the counters need.
-	comments commentSupport
+	// caps are the optional extensions of the backend, nil until probed.
+	caps *capabilities
 	// remoteAccessPort is the TCP port of the HTTPS listener that tunnel
 	// traffic may reach, 0 while remote access is off.
 	remoteAccessPort int

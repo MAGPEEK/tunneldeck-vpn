@@ -411,10 +411,23 @@ type fakeFirewall struct {
 	countersErr error
 	// noCounters reports the counters as unavailable.
 	noCounters bool
+	support    domain.ProtectionSupport
+	supportErr error
 }
 
 func newFakeFirewall() *fakeFirewall {
-	return &fakeFirewall{network: testHostNetwork}
+	return &fakeFirewall{network: testHostNetwork, support: fullProtectionSupport}
+}
+
+// fullProtectionSupport is a kernel with every optional iptables extension.
+var fullProtectionSupport = domain.ProtectionSupport{
+	SYNFlood: domain.ProtectionFull, Ping: domain.ProtectionFull, MSSClamp: domain.ProtectionFull, RuleCounters: true,
+}
+
+func (f *fakeFirewall) ProtectionSupport(context.Context) (domain.ProtectionSupport, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.support, f.supportErr
 }
 
 func (f *fakeFirewall) InstallFirewall(_ context.Context, firewall domain.Firewall, uiPort int) error {

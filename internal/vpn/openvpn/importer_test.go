@@ -25,7 +25,7 @@ func TestImportRenderGolden(t *testing.T) {
 			wantWarnings: []string{
 				"client:duplicate_directive", "nobind:duplicate_directive", "persist-key:deprecated_ignored",
 				"persist-tun:duplicate_directive", "fast-io:deprecated_ignored",
-				"redirect-gateway:routing_handled", "verb:duplicate_directive", "cipher:cipher_mapped",
+				"redirect-gateway:routing_handled", "verb:verb_replaced", "cipher:cipher_mapped",
 			},
 		},
 		{
@@ -33,12 +33,12 @@ func TestImportRenderGolden(t *testing.T) {
 			wantWarnings: []string{
 				"client:duplicate_directive", "nobind:duplicate_directive", "persist-key:deprecated_ignored",
 				"persist-tun:duplicate_directive", "fast-io:deprecated_ignored",
-				"redirect-gateway:routing_handled", "verb:duplicate_directive", "cipher:cipher_mapped",
+				"redirect-gateway:routing_handled", "verb:verb_replaced", "cipher:cipher_mapped",
 			},
 		},
 		{
 			file: "mdex_level30.ovpn", golden: "import_level30.golden", addLogin: true,
-			wantWarnings: []string{"client:duplicate_directive", "nobind:duplicate_directive", "script-security:runs_code"},
+			wantWarnings: []string{"client:duplicate_directive", "nobind:duplicate_directive", "script-security:script_security_dropped"},
 		},
 		{
 			file: "pkcs12.ovpn", golden: "import_pkcs12.golden",
@@ -217,6 +217,9 @@ func TestRenderImportRenderIsStable(t *testing.T) {
 	}
 }
 
+// TestImportDirectives checks how single directives are mapped. The
+// credentials_expected note, which most of these minimal files trigger, is
+// covered by TestImportExpectsCredentials.
 func TestImportDirectives(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -349,6 +352,12 @@ func TestImportDirectives(t *testing.T) {
 			text:       "#<auth-user-pass>\n#user\n#pass\n#</auth-user-pass>\nremote-cert-tls server",
 			wantExtras: []string{},
 		},
+		{
+			name:         "script-security and verb are replaced, not rejected",
+			text:         "script-security 2\nverb 5\nremote-cert-tls server",
+			wantExtras:   []string{},
+			wantWarnings: []string{"script-security:script_security_dropped", "verb:verb_replaced"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -363,7 +372,8 @@ func TestImportDirectives(t *testing.T) {
 					t.Errorf("extras = %q, want %q", extras, tt.wantExtras)
 				}
 			}
-			if got := warningCodes(result.Warnings); !slices.Equal(got, tt.wantWarnings) {
+			warnings := slices.DeleteFunc(result.Warnings, func(w Warning) bool { return w.Code == CodeCredentialsExpected })
+			if got := warningCodes(warnings); !slices.Equal(got, tt.wantWarnings) {
 				t.Errorf("warnings = %v, want %v", got, tt.wantWarnings)
 			}
 		})

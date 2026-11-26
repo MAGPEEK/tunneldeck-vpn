@@ -22,8 +22,8 @@ import (
 func (g *Guard) RuleCounters(ctx context.Context) (counters map[string]domain.RuleCounters, available bool, err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	tagged, err := g.detectComments(ctx)
-	if err != nil || !tagged {
+	caps, err := g.detectCapabilities(ctx)
+	if err != nil || !caps.has[extComment] {
 		return nil, false, err
 	}
 	counters = make(map[string]domain.RuleCounters)

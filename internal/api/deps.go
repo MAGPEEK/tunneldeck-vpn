@@ -119,13 +119,17 @@ type FirewallStore interface {
 	SetFirewall(firewall domain.Firewall) (domain.Firewall, error)
 }
 
-// Firewall applies the firewall, reads its counters per rule ID and
-// detects the host's network; *netguard.Guard implements it.
+// Firewall applies the firewall, reads its counters per rule ID, tells
+// which protections the kernel supports and detects the host's network;
+// *netguard.Guard implements it.
 type Firewall interface {
 	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
 	// RuleCounters reports available = false when the backend cannot tag
 	// rules, so there are no counters.
 	RuleCounters(ctx context.Context) (counters map[string]domain.RuleCounters, available bool, err error)
+	// ProtectionSupport tells which global protections the host's kernel
+	// supports; one it lacks is left out of the firewall.
+	ProtectionSupport(ctx context.Context) (domain.ProtectionSupport, error)
 	HostNetwork(ctx context.Context) (domain.HostNetwork, error)
 }
 

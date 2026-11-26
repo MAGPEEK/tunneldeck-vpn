@@ -54,7 +54,7 @@ Die Compose-Datei gibt dem Container das Host-Netzwerk, `NET_ADMIN` und `/dev/ne
 
 1. `http://<NAS-IP>:8194` öffnen. TunnelDeck-VPN lauscht auf der Adresse der Schnittstelle mit der Standardroute; andere Adresse und Port setzt `TUNNELDECK_LISTEN` (Beispiel `192.168.1.10:9000`). Durch den VPN-Tunnel ist die Oberfläche nie erreichbar; Fernzugriff über das VPN gibt es nur per HTTPS (Seite System, Standardport 8443, frei wählbar).
 2. Das Admin-Konto anlegen (Passwort mit mindestens 12 Zeichen).
-3. **System** öffnen und prüfen, ob alle Selbsttests bestanden sind: TUN-Gerät, iptables, `ip`, `NET_ADMIN`, IP-Weiterleitung und die LAN-Subnetze (Abschnitt 10). Jeder fehlgeschlagene Test zeigt einen Hinweis.
+3. **System** öffnen und prüfen, ob alle Selbsttests bestanden sind: TUN-Gerät, iptables, `ip`, `NET_ADMIN`, IP-Weiterleitung und die LAN-Subnetze (Abschnitt 10). Jeder fehlgeschlagene Test zeigt einen Hinweis. Warnungen zu fehlenden iptables-Modulen schränken nur eine Schutzfunktion ein (Abschnitt 10, „Schutzfunktionen, die dem DSM-Kernel fehlen können“).
 
 Der Integritätsstatus im Container Manager zeigt, ob der Webserver antwortet. Ob der Tunnel steht, zeigt er nicht; das zeigt das Dashboard.
 
@@ -132,6 +132,20 @@ Steht sie auf `0`: Systemsteuerung > Aufgabenplaner > Erstellen > Ausgelöste Au
 ### DSM-Firewall und weitergeleiteter Verkehr
 
 Die DSM-Firewall filtert Verkehr an die NAS selbst. Die Ketten von TunnelDeck-VPN stehen für Tunnelverkehr an erster Stelle in `INPUT` und `FORWARD`, dort entscheiden also seine Regeln. *Auf der NAS prüfen:* dass DSMs eigene Regeln weitergeleiteten Verkehr zwischen Tunnel und LAN nicht sperren (`sudo iptables -S FORWARD | head -5` sollte zuerst die Sprünge nach `TUNNELDECK-FORWARD` zeigen); nach Änderungen an der DSM-Firewall den Container neu starten.
+
+### Schutzfunktionen, die dem DSM-Kernel fehlen können
+
+DSM-Kernel (DSM 7.2 auf der DS723+ läuft mit Linux 4.4) enthalten nicht jedes iptables-Modul. TunnelDeck-VPN prüft die optionalen einmal beim Start und installiert die Firewall in jedem Fall; nur die betroffene Schutzfunktion wird eingeschränkt. Die Regeln selbst, der Kill-Switch und „alles andere wird verworfen“ funktionieren immer.
+
+| Fehlendes Modul | Wirkung | Seite System | Seite Firewall |
+| --- | --- | --- | --- |
+| `xt_hashlimit` | Der Schutz vor SYN-Flut nutzt ein globales Limit mit denselben Werten (25/s) für alle Absender statt eines pro Absender; die Ping-Begrenzung (ohnehin global 5/s) funktioniert weiter | Warnung **syn-flood-protection** | „Nur globales Limit“ beim Schutz vor SYN-Flut |
+| `xt_hashlimit` und `xt_limit` | Schutz vor SYN-Flut und Ping-Begrenzung entfallen | Warnungen **syn-flood-protection**, **ping-limit** | „Auf diesem System nicht verfügbar“ |
+| `xt_TCPMSS` | Die MSS-Anpassung entfällt; große Übertragungen durch den Tunnel können bei kleiner Pfad-MTU hängen | Warnung **mss-clamp** | „Auf diesem System nicht verfügbar“ |
+| `ipt_REJECT` | Regeln mit der Aktion **Ablehnen** verwerfen stattdessen und antworten nicht | Warnung **reject-target** | keine |
+| `xt_comment` | Keine Trefferzähler | Warnung **rule-counters** | keine Trefferzahlen |
+
+Die Schalter bleiben so, wie Sie sie gesetzt haben; die Schutzfunktion greift, sobald das Modul vorhanden ist. Jede Warnung nennt das fehlende Modul und den aktiven Ersatz. *Auf der NAS prüfen:* `sudo modprobe xt_hashlimit` (ebenso `xt_limit`, `xt_TCPMSS`, `ipt_REJECT`); gibt es das Modul auf DSM nicht, bleibt die Warnung, und die Firewall arbeitet ohne diese Schutzfunktion weiter. Nach dem Laden eines Moduls den Container neu starten.
 
 ### Ein IPsec-Router im lokalen LAN
 
