@@ -111,6 +111,18 @@ const (
 // detectLegacy is the detection of newLegacyGuard.
 var detectLegacy = []string{"iptables-legacy -w -t filter -S", "iptables-legacy -w -t nat -S"}
 
+// probeComments is the probe of the comment match, which passes.
+var probeComments = []string{
+	"iptables-legacy -w -N TUNNELDECK-COMMENT-PROBE",
+	"iptables-legacy -w -A TUNNELDECK-COMMENT-PROBE -m comment --comment tdfixed:probe -j RETURN",
+	"iptables-legacy -w -F TUNNELDECK-COMMENT-PROBE",
+	"iptables-legacy -w -X TUNNELDECK-COMMENT-PROBE",
+}
+
+// detectInstall is the detection of the first installation by
+// newLegacyGuard: the backend, then the comment match.
+var detectInstall = append(slices.Clone(detectLegacy), probeComments...)
+
 func assertCalls(t *testing.T, got, want []string) {
 	t.Helper()
 	if slices.Equal(got, want) {

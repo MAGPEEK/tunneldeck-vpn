@@ -35,6 +35,27 @@ var (
 	errCertExpired     = errors.New("has expired")
 )
 
+// uploadIssues are the stable codes of the upload problems.
+var uploadIssues = map[error]string{
+	errKeyNotPEM:       "remote_access_key_not_pem",
+	errKeyEncrypted:    "remote_access_key_encrypted",
+	errKeyUnsupported:  "remote_access_key_unsupported",
+	errKeyUnparseable:  "remote_access_key_unparseable",
+	errKeyMismatch:     "remote_access_key_mismatch",
+	errCertNotYetValid: "remote_access_certificate_not_yet_valid",
+	errCertExpired:     "remote_access_certificate_expired",
+}
+
+// uploadError records problem for field, with its code when it is one of
+// the upload errors.
+func uploadError(v *domain.ValidationError, field string, problem error) {
+	if code, ok := uploadIssues[problem]; ok {
+		v.AddIssue(field, domain.Issue(code), problem.Error())
+		return
+	}
+	v.Add(field, problem.Error())
+}
+
 // ParseUpload validates an uploaded PEM certificate chain (leaf first) and
 // private key (RFC 7468): the key must be RSA ≥ 2048 bits, ECDSA P-256/P-384
 // or Ed25519, unencrypted, and belong to the leaf, which must be valid at
@@ -45,19 +66,19 @@ func ParseUpload(certificatePEM, keyPEM string, now time.Time) (domain.KeyPair, 
 	v := &domain.ValidationError{}
 	chain, err := parseChain(certificatePEM)
 	if err != nil {
-		v.Add(fieldCertificate, "must be a PEM certificate chain, leaf first")
+		v.AddIssue(fieldCertificate, domain.Issue("remote_access_certificate_invalid"), "must be a PEM certificate chain, leaf first")
 	} else if err := checkValidity(chain[0], now); err != nil {
-		v.Add(fieldCertificate, err.Error())
+		uploadError(v, fieldCertificate, err)
 	}
 	key, err := parseKey(keyPEM)
 	if err != nil {
-		v.Add(fieldKey, err.Error())
+		uploadError(v, fieldKey, err)
 	}
 	if len(v.Fields) > 0 {
 		return domain.KeyPair{}, v
 	}
 	if !publicKeysEqual(chain[0].PublicKey, key.Public()) {
-		return domain.KeyPair{}, domain.NewValidationError(fieldKey, errKeyMismatch.Error())
+		return domain.KeyPair{}, keyError(errKeyMismatch)
 	}
 	return encodePair(chain, key)
 }
@@ -137,14 +158,20 @@ func publicKeysEqual(certificateKey, key crypto.PublicKey) bool {
 func encodePair(chain []*x509.Certificate, key crypto.Signer) (domain.KeyPair, error) {
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		return domain.KeyPair{}, domain.NewValidationError(fieldKey, errKeyUnsupported.Error())
+		return domain.KeyPair{}, keyError(errKeyUnsupported)
 	}
 	pair := domain.KeyPair{
 		CertificatePEM: encodeChain(chain),
 		KeyPEM:         string(pem.EncodeToMemory(&pem.Block{Type: pemPrivateKey, Bytes: der})),
 	}
 	if _, err := tls.X509KeyPair([]byte(pair.CertificatePEM), []byte(pair.KeyPEM)); err != nil {
-		return domain.KeyPair{}, domain.NewValidationError(fieldKey, errKeyMismatch.Error())
+		return domain.KeyPair{}, keyError(errKeyMismatch)
 	}
 	return pair, nil
+}
+
+func keyError(problem error) *domain.ValidationError {
+	v := &domain.ValidationError{}
+	uploadError(v, fieldKey, problem)
+	return v
 }

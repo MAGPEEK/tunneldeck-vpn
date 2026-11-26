@@ -41,24 +41,27 @@ const (
 	ctState                        // -m state --state, for kernels without xt_conntrack
 )
 
-// installChain refills spec's chain with content ("append, then trim"):
-// the new content is appended behind the old one, then the old rules are
-// deleted from the top. A sealed chain ends with DROP before its jumps
-// exist, and its old trailing DROP shadows the new rules until it is
-// deleted, so tunnel traffic is never accepted by a partial chain.
-func (g *Guard) installChain(ctx context.Context, spec chainSpec, content [][]string) error {
-	oldCount, err := g.ensureChain(ctx, spec)
-	if err == nil {
+// installChain brings spec's chain to content. With keepCurrent, a chain
+// that holds exactly content already is left alone (chainCurrent), so its
+// counters survive; only its jumps are checked. Without it (no comment
+// match, so no tags and no counters to keep) and for any other chain, the
+// chain is refilled ("append, then trim"): the new content is appended
+// behind the old one, then the old rules are deleted from the top. A sealed
+// chain ends with DROP before its jumps exist, and its old trailing DROP
+// shadows the new rules until it is deleted, so tunnel traffic is never
+// accepted by a partial chain.
+func (g *Guard) installChain(ctx context.Context, spec chainSpec, content [][]string, keepCurrent bool) error {
+	listing, err := g.listRules(ctx, spec.table, spec.name)
+	exists := err == nil
+	if isAbsent(err) {
+		err = nil
+	}
+	switch {
+	case err != nil:
+	case keepCurrent && exists && g.chainCurrent(ctx, spec, listing, content):
 		err = g.ensureJumps(ctx, spec)
-	}
-	for _, rule := range content {
-		if err != nil {
-			break
-		}
-		err = g.appendRule(ctx, spec.table, spec.name, rule)
-	}
-	if err == nil {
-		err = g.deleteLeadingRules(ctx, spec.table, spec.name, oldCount)
+	default:
+		err = g.refillChain(ctx, spec, exists, listing, content)
 	}
 	if err != nil {
 		return fmt.Errorf("install %s: %w", spec.name, err)
@@ -66,25 +69,94 @@ func (g *Guard) installChain(ctx context.Context, spec chainSpec, content [][]st
 	return nil
 }
 
-// ensureChain creates the chain if missing; a sealed chain also gets a
-// trailing DROP if it lacks one. It returns the number of rules now in the
-// chain.
-func (g *Guard) ensureChain(ctx context.Context, spec chainSpec) (int, error) {
-	rules, err := g.listRules(ctx, spec.table, spec.name)
-	if isAbsent(err) {
+func (g *Guard) refillChain(ctx context.Context, spec chainSpec, exists bool, listing []string, content [][]string) error {
+	oldCount, err := g.ensureChain(ctx, spec, exists, listing)
+	if err == nil {
+		err = g.ensureJumps(ctx, spec)
+	}
+	for _, rule := range content {
+		if err != nil {
+			return err
+		}
+		err = g.appendRule(ctx, spec.table, spec.name, rule)
+	}
+	if err != nil {
+		return err
+	}
+	return g.deleteLeadingRules(ctx, spec.table, spec.name, oldCount)
+}
+
+// chainCurrent reports whether listing, the -S lines of spec's chain,
+// holds exactly content: the same tags in the same order, and every line
+// of content present (iptables -C, which compares rules as the kernel
+// holds them and so ignores how -S prints them). With as many lines as
+// content and no line of content twice, every listed line is one of
+// content. Lines of one rule are not checked for their order among each
+// other; netguard always renders them in the same order.
+func (g *Guard) chainCurrent(ctx context.Context, spec chainSpec, listing []string, content [][]string) bool {
+	if len(listing) != len(content) {
+		return false
+	}
+	for i, rule := range content {
+		if lineTag(listing[i]) != ruleTag(rule) {
+			return false
+		}
+	}
+	for _, rule := range content {
+		if !g.ruleExists(ctx, spec.table, spec.name, rule) {
+			return false
+		}
+	}
+	return true
+}
+
+// ruleExists reports whether chain holds rule, in the connection-tracking
+// match appendRule would use. While that match is unknown, both are tried,
+// and the one found becomes the detected match.
+func (g *Guard) ruleExists(ctx context.Context, t table, chain string, rule []string) bool {
+	if !usesConntrack(rule) {
+		return g.check(ctx, t, chain, rule)
+	}
+	switch g.ct {
+	case ctConntrack:
+		return g.check(ctx, t, chain, rule)
+	case ctState:
+		return g.check(ctx, t, chain, stateVariant(rule))
+	}
+	if g.check(ctx, t, chain, rule) {
+		g.ct = ctConntrack
+		return true
+	}
+	if g.check(ctx, t, chain, stateVariant(rule)) {
+		g.ct = ctState
+		return true
+	}
+	return false
+}
+
+// check runs iptables -C; any failure counts as "not there", since the
+// refill that follows reports real errors.
+func (g *Guard) check(ctx context.Context, t table, chain string, rule []string) bool {
+	_, err := g.iptables(ctx, t, append([]string{"-C", chain}, rule...)...)
+	return err == nil
+}
+
+// ensureChain creates the chain unless it exists; a sealed chain also gets
+// a trailing DROP if it lacks one. listing holds the -S lines of an
+// existing chain. It returns the number of rules now in the chain.
+func (g *Guard) ensureChain(ctx context.Context, spec chainSpec, exists bool, listing []string) (int, error) {
+	if !exists {
 		if _, err := g.iptables(ctx, spec.table, "-N", spec.name); err != nil {
 			return 0, err
 		}
-	} else if err != nil {
-		return 0, err
 	}
-	if !spec.sealed || (len(rules) > 0 && rules[len(rules)-1] == "-A "+spec.name+" -j DROP") {
-		return len(rules), nil
+	if !spec.sealed || (len(listing) > 0 && listing[len(listing)-1] == "-A "+spec.name+" -j DROP") {
+		return len(listing), nil
 	}
 	if err := g.appendRaw(ctx, spec.table, spec.name, []string{"-j", "DROP"}); err != nil {
 		return 0, err
 	}
-	return len(rules) + 1, nil
+	return len(listing) + 1, nil
 }
 
 // ensureJumps leaves exactly the spec's jumps, once each, at the top of the

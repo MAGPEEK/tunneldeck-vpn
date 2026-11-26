@@ -263,11 +263,11 @@ func wantedPolicyRules(firewall domain.Firewall, lan []lanAddress) []policyRule 
 // overlaps the LAN is refused, as routing it into the tunnel would cut the
 // host off from that part of its LAN.
 func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan []lanAddress) ([]policyRule, error) {
-	for _, network := range remoteNetworks {
+	for i, network := range remoteNetworks {
 		for _, addr := range lan {
 			if network.Overlaps(addr.subnet()) {
-				return nil, domain.NewValidationError("remoteNetworks",
-					network.String()+" overlaps a LAN subnet of this device: "+describeLAN(lan))
+				return nil, remoteNetworkError(i, "remote_network_overlaps_lan",
+					"overlaps a LAN subnet of this device: "+describeLAN(lan), lan)
 			}
 		}
 	}
@@ -281,12 +281,33 @@ func policyRulesFor(firewall domain.Firewall, remoteNetworks []netip.Prefix, lan
 // checkRemoteNetworks accepts IPv4 networks in canonical form that do not
 // cover every address.
 func checkRemoteNetworks(networks []netip.Prefix) error {
-	for _, network := range networks {
-		if !network.Addr().Is4() || network != network.Masked() || network.Bits() == 0 {
-			return domain.NewValidationError("remoteNetworks", "must be IPv4 networks of a prefix length from 1 to 32")
+	for i, network := range networks {
+		switch {
+		case !network.Addr().Is4():
+			return remoteNetworkError(i, "remote_network_not_cidr", "must be an IPv4 network", nil)
+		case network != network.Masked():
+			return remoteNetworkError(i, "remote_network_not_canonical", "must be written as the network address with its prefix length", nil)
+		case network.Bits() == 0:
+			return remoteNetworkError(i, "remote_network_everything", "must not cover every address", nil)
 		}
 	}
 	return nil
+}
+
+// remoteNetworkError reports a problem of the remote network at index with
+// the codes of the profile setting: the 1-based "entry" and, when lan is
+// given, its "subnets".
+func remoteNetworkError(index int, code, message string, lan []lanAddress) *domain.ValidationError {
+	entry := strconv.Itoa(index + 1)
+	issue := domain.Issue(code, "entry", entry)
+	if len(lan) > 0 {
+		listed := make([]string, 0, len(lan))
+		for _, subnet := range subnets(lan) {
+			listed = append(listed, subnet.String())
+		}
+		issue.Params["subnets"] = strings.Join(listed, ", ")
+	}
+	return domain.NewFieldError("remoteNetworks", issue, "entry "+entry+" "+message)
 }
 
 func replyRules(rule parsedRule) []policyRule {

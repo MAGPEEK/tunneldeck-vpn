@@ -22,7 +22,7 @@ import (
 // VPN IP can change. The main routing table is never touched. IPv4 only.
 func (g *Guard) RouteThroughTunnel(ctx context.Context, vpnIP netip.Addr, remoteNetworks []netip.Prefix) error {
 	if !vpnIP.Is4() {
-		return domain.NewValidationError("vpnIp", "must be an IPv4 address")
+		return domain.NewFieldError("vpnIp", domain.Issue("vpn_address_invalid"), "must be an IPv4 address")
 	}
 	if err := checkRemoteNetworks(remoteNetworks); err != nil {
 		return err

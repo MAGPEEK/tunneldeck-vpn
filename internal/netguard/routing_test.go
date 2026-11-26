@@ -134,7 +134,7 @@ func TestRouteThroughTunnelRejectsNonIPv4(t *testing.T) {
 		f := newFakeRunner()
 		err := New(f).RouteThroughTunnel(context.Background(), addr, nil)
 		var v *domain.ValidationError
-		if !errors.As(err, &v) || v.Fields["vpnIp"] == "" {
+		if !errors.As(err, &v) || v.Fields["vpnIp"] == "" || v.Issues["vpnIp"].Code != "vpn_address_invalid" {
 			t.Errorf("%v: err = %v, want a validation error on vpnIp", addr, err)
 		}
 		if len(f.calls) != 0 {

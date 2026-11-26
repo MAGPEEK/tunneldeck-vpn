@@ -16,6 +16,7 @@ import (
 	"tunneldeck/internal/auth"
 	"tunneldeck/internal/config"
 	"tunneldeck/internal/control"
+	"tunneldeck/internal/devices"
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/netguard"
 	"tunneldeck/internal/remoteaccess"
@@ -211,6 +212,7 @@ func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 	return api.Deps{
 		Auth: authAdapter{a.auth}, Cookies: sessionCookies{}, Profiles: a.store, Drivers: registry,
 		Importer: profileImporter{}, Connection: a.manager, FirewallStore: a.store, Firewall: a.guard,
+		Devices: devices.New(a.guard, net.DefaultResolver, time.Now),
 		System: api.System{
 			Version: version, ListenAddress: a.listen, UIPort: a.uiPort, TimeZone: a.cfg.TimeZone,
 			Checks: func() []api.CheckResult { return a.checks },

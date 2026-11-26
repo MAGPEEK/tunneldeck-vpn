@@ -33,6 +33,15 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	if err != nil || len(lan) == 0 {
 		t.Fatalf("LANSubnets = %v, %v; want the container's network", lan, err)
 	}
+	neighbours, err := g.LANNeighbours(ctx)
+	if err != nil {
+		t.Fatalf("LANNeighbours: %v", err)
+	}
+	for _, device := range neighbours {
+		if !device.Address.Is4() || device.MAC == "" || device.State == "" {
+			t.Errorf("neighbour %+v lacks an address, MAC or state", device)
+		}
+	}
 	target := lanTarget(t, lan[0])
 	firewall := integrationFirewall(target)
 	for range 2 {
@@ -49,7 +58,7 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	assertJumpsOnTop(t, g, natTable, "POSTROUTING", "-A POSTROUTING -j TUNNELDECK-POSTROUTING")
 
 	input := listRulesOrFail(t, g, filterTable, inputChain)
-	if len(input) != 10 || !strings.Contains(input[4], "--dport 22") || input[len(input)-1] != "-A TUNNELDECK-INPUT -j DROP" {
+	if len(input) != 11 || !strings.Contains(input[5], "--dport 22") || lineTag(input[5]) != "tdrule:ssh" || input[len(input)-1] != "-A TUNNELDECK-INPUT -j DROP" {
 		t.Errorf("TUNNELDECK-INPUT = %q", input)
 	}
 	forward := listRulesOrFail(t, g, filterTable, forwardChain)
@@ -69,7 +78,7 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 	if err := g.InstallFirewall(ctx, domain.Firewall{Rules: firewall.Rules[:1]}, 8080); err != nil {
 		t.Fatalf("InstallFirewall with changed rules: %v", err)
 	}
-	if chain := listRulesOrFail(t, g, filterTable, inputChain); len(chain) != 3 {
+	if chain := listRulesOrFail(t, g, filterTable, inputChain); len(chain) != 4 {
 		t.Errorf("TUNNELDECK-INPUT after rule change = %q", chain)
 	}
 	assertJumpsOnTop(t, g, filterTable, "FORWARD",
@@ -149,18 +158,18 @@ func TestIntegrationFirewallAndRouting(t *testing.T) {
 func integrationFirewall(target string) domain.Firewall {
 	destination := domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: target}
 	return domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{
-		hostAccess("", domain.ProtocolTCP, 22, "", true),
-		{Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
+		hostAccess("ssh", domain.ProtocolTCP, 22, "", true),
+		{ID: "wg", Name: "WireGuard", Direction: domain.DirectionInbound, Protocol: domain.ProtocolUDP, Source: "192.168.1.0/24",
 			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(51820), Enabled: true},
-		{Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",
+		{ID: "ping", Name: "Ping", Direction: domain.DirectionInbound, Protocol: domain.ProtocolICMP, ICMPType: "echo-request",
 			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, Enabled: true},
-		{Name: "Range", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: destination,
+		{ID: "range", Name: "Range", Direction: domain.DirectionInbound, Protocol: domain.ProtocolTCP, Destination: destination,
 			DestinationPort: domain.PortRange{From: 9000, To: 9010}, PublicPort: domain.PortRange{From: 8000, To: 8010}, Enabled: true},
-		{Name: "ESP", Direction: domain.DirectionInbound, Protocol: domain.ProtocolESP, Destination: destination,
+		{ID: "esp", Name: "ESP", Direction: domain.DirectionInbound, Protocol: domain.ProtocolESP, Destination: destination,
 			KeepSourceAddress: true, Enabled: true},
-		{Name: "Out", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny, Source: target,
+		{ID: "out", Name: "Out", Direction: domain.DirectionOutbound, Protocol: domain.ProtocolAny, Source: target,
 			Destination: domain.FirewallDestination{Kind: domain.DestinationAddress, CIDR: "0.0.0.0/0"}, Enabled: true},
-		{Name: "Reject telnet", Direction: domain.DirectionInbound, Action: domain.ActionReject, Protocol: domain.ProtocolTCPUDP,
+		{ID: "telnet", Name: "Reject telnet", Direction: domain.DirectionInbound, Action: domain.ActionReject, Protocol: domain.ProtocolTCPUDP,
 			Destination: domain.FirewallDestination{Kind: domain.DestinationHost}, DestinationPort: domain.SinglePort(23), Enabled: true},
 	}}
 }

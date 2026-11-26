@@ -147,6 +147,7 @@ func TestPutRemoteAccess(t *testing.T) {
 				if tt.wantField != "" && p.Fields[tt.wantField] == "" {
 					t.Errorf("fields = %v, want %s", p.Fields, tt.wantField)
 				}
+				assertEveryFieldCoded(t, p)
 				if len(env.listener.calls()) != 0 || env.remote.RemoteAccess() != domain.DefaultRemoteAccess() {
 					t.Error("an invalid request was stored or applied")
 				}
@@ -261,6 +262,7 @@ func TestUploadCertificateRejects(t *testing.T) {
 			if tt.wantField != "" && p.Fields[tt.wantField] == "" {
 				t.Errorf("fields = %v, want %s", p.Fields, tt.wantField)
 			}
+			assertEveryFieldCoded(t, p)
 			assertNoKey(t, rec, pair, other)
 			if _, ok := env.remote.pair(domain.CertificateUploaded); ok {
 				t.Error("rejected certificate stored")

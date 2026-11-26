@@ -15,6 +15,7 @@ const (
 	CheckNetAdmin  = "net-admin"
 	CheckIPForward = "ip-forward"
 	CheckLAN       = "lan-subnets"
+	CheckCounters  = "rule-counters"
 )
 
 // Stable English hints for failed checks.
@@ -25,7 +26,9 @@ const (
 	hintNetAdmin  = "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN)."
 	hintIPForward = "Enable IPv4 forwarding on the host (sysctl net.ipv4.ip_forward=1, persisted in /etc/sysctl.conf); " +
 		"Docker hosts normally have it on. Without it, rules to other devices and outbound rules forward nothing."
-	hintLAN = "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface."
+	hintLAN      = "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface."
+	hintCounters = "Load the comment match on the host (modprobe xt_comment), or use the nft backend (TUNNELDECK_IPTABLES=nft), " +
+		"then restart the container. The firewall works without it; only the hit counters are off."
 )
 
 // Paths relative to Guard.root, which is "/" outside tests.
@@ -38,17 +41,20 @@ const (
 const probeChain = "TUNNELDECK-PROBE"
 
 // CheckResult is one line of the startup self-check. Hint is set only when
-// the check failed.
+// the check failed; Warning marks a failed check that only turns a feature
+// off.
 type CheckResult struct {
-	ID     string `json:"id"`
-	OK     bool   `json:"ok"`
-	Detail string `json:"detail"`
-	Hint   string `json:"hint,omitempty"`
+	ID      string `json:"id"`
+	OK      bool   `json:"ok"`
+	Warning bool   `json:"warning,omitempty"`
+	Detail  string `json:"detail"`
+	Hint    string `json:"hint,omitempty"`
 }
 
 // SelfCheck verifies the prerequisites of SPEC §6 and §16.1: the TUN
 // device, a usable iptables backend, the ip tool, an effective NET_ADMIN
-// capability, IPv4 forwarding and at least one LAN subnet.
+// capability, IPv4 forwarding and at least one LAN subnet, and, as a
+// warning, the comment match the hit counters need.
 func (g *Guard) SelfCheck(ctx context.Context) []CheckResult {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -59,6 +65,7 @@ func (g *Guard) SelfCheck(ctx context.Context) []CheckResult {
 		g.checkNetAdmin(ctx),
 		g.checkIPForward(),
 		g.checkLAN(ctx),
+		g.checkCounters(ctx),
 	}
 }
 
@@ -134,10 +141,30 @@ func (g *Guard) checkLAN(ctx context.Context) CheckResult {
 	return passed(CheckLAN, "LAN subnets: "+describeLAN(addrs))
 }
 
+// checkCounters probes the comment match that tags the rules; without it
+// the firewall works, but there are no hit counters.
+func (g *Guard) checkCounters(ctx context.Context) CheckResult {
+	if _, err := g.detectBackend(ctx); err != nil {
+		return warning(CheckCounters, "cannot be verified without iptables: "+err.Error(), hintCounters)
+	}
+	tagged, err := g.detectComments(ctx)
+	switch {
+	case err != nil:
+		return warning(CheckCounters, err.Error(), hintCounters)
+	case !tagged:
+		return warning(CheckCounters, "the iptables comment match is unavailable, so hit counters are off", hintCounters)
+	}
+	return passed(CheckCounters, "the iptables comment match is available")
+}
+
 func passed(id, detail string) CheckResult {
 	return CheckResult{ID: id, OK: true, Detail: detail}
 }
 
 func failed(id, detail, hint string) CheckResult {
 	return CheckResult{ID: id, OK: false, Detail: detail, Hint: hint}
+}
+
+func warning(id, detail, hint string) CheckResult {
+	return CheckResult{ID: id, OK: false, Warning: true, Detail: detail, Hint: hint}
 }

@@ -130,14 +130,14 @@ func (s *Server) validateRemoteAccess(settings domain.RemoteAccess) error {
 		v.Merge("", fields)
 	}
 	if settings.Port == s.deps.System.UIPort {
-		v.Add("port", "must not be the web UI port")
+		v.AddIssue("port", domain.Issue("remote_access_ui_port"), "must not be the web UI port")
 	}
 	if settings.Enabled && s.usedByFirewall(settings.Port) {
-		v.Add("port", "is opened by an enabled firewall rule")
+		v.AddIssue("port", domain.Issue("remote_access_port_in_firewall"), "is opened by an enabled firewall rule")
 	}
 	if settings.CertificateSource == domain.CertificateUploaded {
 		if _, ok := s.deps.RemoteAccess.RemoteAccessCertificate(domain.CertificateUploaded); !ok {
-			v.Add("certificateSource", "upload a certificate first")
+			v.AddIssue("certificateSource", domain.Issue("remote_access_certificate_missing"), "upload a certificate first")
 		}
 	}
 	return v.OrNil()

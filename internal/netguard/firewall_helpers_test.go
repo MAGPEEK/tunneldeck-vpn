@@ -33,9 +33,29 @@ func hostAccess(id string, proto domain.FirewallProtocol, port int, source strin
 	}
 }
 
+// rulesOnly is a firewall with every protection off; rules without an ID
+// get "r<position>", starting at r1, so their lines carry "tdrule:r<n>".
 func rulesOnly(rules ...domain.FirewallRule) domain.Firewall {
+	for i := range rules {
+		if rules[i].ID == "" {
+			rules[i].ID = fmt.Sprintf("r%d", i+1)
+		}
+	}
 	return domain.Firewall{Rules: rules}
 }
+
+// tagLine inserts the comment match with tag before the target of line,
+// as netguard renders it.
+func tagLine(tag, line string) string {
+	before, after, found := strings.Cut(line, "-j ")
+	if !found {
+		return line + " -m comment --comment " + tag
+	}
+	return before + "-m comment --comment " + tag + " -j " + after
+}
+
+// onRule tags line with "tdrule:r<n>", the rule at position n of rulesOnly.
+func onRule(n int, line string) string { return tagLine(fmt.Sprintf("tdrule:r%d", n), line) }
 
 // Rule builders; each returns a valid, enabled rule.
 func hostRule(proto domain.FirewallProtocol, ports domain.PortRange) domain.FirewallRule {
@@ -69,12 +89,12 @@ func ports(from, to int) domain.PortRange { return domain.PortRange{From: from, 
 
 // Content lines as appended (without "-A <chain> ").
 const (
-	established    = "-m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
-	invalidDrop    = "-m conntrack --ctstate INVALID -j DROP"
-	killSwitchDrop = "! -i tdvpn0 ! -o tdvpn0 -j DROP"
+	established    = "-m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment tdfixed:established -j ACCEPT"
+	invalidDrop    = "-m conntrack --ctstate INVALID -m comment --comment tdfixed:invalid -j DROP"
+	killSwitchDrop = "! -i tdvpn0 ! -o tdvpn0 -m comment --comment tdfixed:kill-switch -j DROP"
 	dropAll        = "-j DROP"
 	// uiPortDrop keeps the web UI port (uiPort) closed to the tunnel.
-	uiPortDrop = "-p tcp --dport 8080 -j DROP"
+	uiPortDrop = "-p tcp --dport 8080 -m comment --comment tdfixed:ui-port -j DROP"
 )
 
 // inputWith is TUNNELDECK-INPUT with every protection off.
@@ -90,7 +110,8 @@ func forwardWith(rules ...string) []string {
 
 // Content of the rules in testFirewall.
 var (
-	testInput   = inputWith("-p tcp --dport 22 -j ACCEPT", "-p udp --dport 51820 -s 192.168.1.0/24 -j ACCEPT")
+	testInput = inputWith("-p tcp --dport 22 -m comment --comment tdrule:ssh -j ACCEPT",
+		"-p udp --dport 51820 -s 192.168.1.0/24 -m comment --comment tdrule:wg -j ACCEPT")
 	testForward = forwardWith()
 )
 
@@ -156,7 +177,7 @@ func scriptFresh(f *fakeRunner) {
 
 // freshCalls is a fresh installation with the given chain contents.
 func freshCalls(input, forward, prerouting, postrouting []string) []string {
-	return slices.Concat(detectLegacy, []string{addrShow},
+	return slices.Concat(detectInstall, []string{addrShow},
 		prefixed(legacy,
 			"-S TUNNELDECK-INPUT",
 			"-N TUNNELDECK-INPUT",
@@ -226,4 +247,9 @@ func appends(prefix, chain string, content []string) []string {
 		calls[i] = prefix + "-A " + chain + " " + rule
 	}
 	return calls
+}
+
+func withDefaultSettings(f domain.Firewall) domain.Firewall {
+	f.FirewallSettings = domain.DefaultFirewallSettings()
+	return f
 }

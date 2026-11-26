@@ -24,6 +24,7 @@ var privateEndpoints = []struct{ method, path string }{
 	{http.MethodGet, "/api/firewall"},
 	{http.MethodPut, "/api/firewall"},
 	{http.MethodPost, "/api/firewall/templates/ipsec"},
+	{http.MethodGet, "/api/firewall/devices"},
 	{http.MethodGet, "/api/system"},
 }
 

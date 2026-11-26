@@ -115,6 +115,9 @@ func TestParseUploadRejects(t *testing.T) {
 			if !strings.Contains(v.Fields[tt.field], tt.message) {
 				t.Fatalf("fields = %v, want %s containing %q", v.Fields, tt.field, tt.message)
 			}
+			if code := v.Issues[tt.field].Code; !strings.HasPrefix(code, "remote_access_") {
+				t.Errorf("code of %s = %q, want a remote_access_ code", tt.field, code)
+			}
 			if strings.Contains(err.Error(), "BEGIN") || strings.Contains(err.Error(), "MII") {
 				t.Errorf("error quotes the upload: %v", err)
 			}

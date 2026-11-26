@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -191,11 +192,11 @@ func (s *Service) checkCredentials(username, password string) (bool, error) {
 func validateCredentials(username, password string) error {
 	v := &domain.ValidationError{}
 	if !validUsername(username) {
-		v.Add("username", fmt.Sprintf("must be %d to %d characters: letters, digits, dot, underscore or hyphen",
+		v.AddIssue("username", domain.Issue("username_invalid", "min", strconv.Itoa(UsernameMinLength), "max", strconv.Itoa(UsernameMaxLength)), fmt.Sprintf("must be %d to %d characters: letters, digits, dot, underscore or hyphen",
 			UsernameMinLength, UsernameMaxLength))
 	}
 	if length := utf8.RuneCountInString(password); length < PasswordMinLength || length > PasswordMaxLength {
-		v.Add("password", fmt.Sprintf("must be between %d and %d characters", PasswordMinLength, PasswordMaxLength))
+		v.AddIssue("password", domain.Issue("length_between", "min", strconv.Itoa(PasswordMinLength), "max", strconv.Itoa(PasswordMaxLength)), fmt.Sprintf("must be between %d and %d characters", PasswordMinLength, PasswordMaxLength))
 	}
 	return v.OrNil()
 }

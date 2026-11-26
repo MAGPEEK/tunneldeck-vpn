@@ -12,6 +12,10 @@ import (
 // MaxFirewallRuleNameLength is the longest rule name in characters.
 const MaxFirewallRuleNameLength = 64
 
+// ruleIDPattern limits rule IDs to what an iptables comment tag carries
+// unquoted and unambiguously (SPEC §16.4); generated IDs are 32 hex digits.
+var ruleIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 // icmpTypeNames are the ICMP type names iptables understands that make
 // sense in a rule; numeric "type" or "type/code" is accepted as well.
 var icmpTypeNames = map[string]bool{
@@ -221,7 +225,10 @@ func ValidateFirewallRules(rules []FirewallRule) error {
 		prefix := fmt.Sprintf("rules[%d].", i)
 		ruleErr := asValidationError(rule.Validate())
 		v.Merge(prefix, ruleErr)
-		if rule.ID != "" && seenID[rule.ID] {
+		switch {
+		case rule.ID != "" && !ruleIDPattern.MatchString(rule.ID):
+			v.AddIssue(prefix+"id", Issue("firewall_id_invalid"), "must be 1 to 64 letters, digits, underscores or hyphens")
+		case rule.ID != "" && seenID[rule.ID]:
 			v.AddIssue(prefix+"id", Issue("firewall_duplicate_id"), "is used by another rule")
 		}
 		seenID[rule.ID] = true

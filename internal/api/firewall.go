@@ -29,14 +29,32 @@ type firewallRequest struct {
 	Settings *firewallSettingsRequest `json:"settings"`
 }
 
-// firewallResponse is the stored configuration plus read-only facts about
-// the host's network for the UI; those are empty when detection fails.
+// firewallResponse is the stored configuration plus read-only facts for
+// the UI: the host's network, empty when detection fails, and the hits of
+// the installed rules by rule ID.
 type firewallResponse struct {
-	Rules       []domain.FirewallRule   `json:"rules"`
-	Settings    domain.FirewallSettings `json:"settings"`
-	HostAddress string                  `json:"hostAddress"`
-	LANSubnets  []string                `json:"lanSubnets"`
-	IPForward   bool                    `json:"ipForward"`
+	Rules       []domain.FirewallRule          `json:"rules"`
+	Settings    domain.FirewallSettings        `json:"settings"`
+	HostAddress string                         `json:"hostAddress"`
+	LANSubnets  []string                       `json:"lanSubnets"`
+	IPForward   bool                           `json:"ipForward"`
+	Counters    map[string]domain.RuleCounters `json:"counters"`
+	// CountersAvailable is false, and Counters null, when the counters
+	// cannot be read, for example without the iptables comment match.
+	CountersAvailable bool `json:"countersAvailable"`
+}
+
+// deviceResponse is one entry of GET /api/firewall/devices.
+type deviceResponse struct {
+	Address string `json:"address"`
+	MAC     string `json:"mac"`
+	Name    string `json:"name,omitempty"`
+	State   string `json:"state"`
+	OnLAN   bool   `json:"onLan"`
+}
+
+type devicesResponse struct {
+	Devices []deviceResponse `json:"devices"`
 }
 
 type ipsecTemplateRequest struct {
@@ -221,6 +239,7 @@ func (s *Server) firewallState(ctx context.Context, firewall domain.Firewall) fi
 		LANSubnets: make([]string, 0, len(network.Subnets)),
 		IPForward:  network.IPForward,
 	}
+	response.Counters, response.CountersAvailable = s.ruleCounters(ctx)
 	if network.Address.IsValid() {
 		response.HostAddress = network.Address.String()
 	}
@@ -239,4 +258,38 @@ func (s *Server) hostNetwork(ctx context.Context) domain.HostNetwork {
 		return domain.HostNetwork{}
 	}
 	return network
+}
+
+// ruleCounters reads the hits of the installed rules and whether there
+// are any to read; a failure is logged and counts as unavailable.
+func (s *Server) ruleCounters(ctx context.Context) (map[string]domain.RuleCounters, bool) {
+	counters, available, err := s.deps.Firewall.RuleCounters(ctx)
+	if err != nil {
+		slog.Warn("read the firewall counters", "error", err)
+		return nil, false
+	}
+	if !available {
+		return nil, false
+	}
+	if counters == nil {
+		counters = map[string]domain.RuleCounters{}
+	}
+	return counters, true
+}
+
+// getDevices lists the host's LAN devices for the device picker (SPEC
+// §16.4).
+func (s *Server) getDevices(w http.ResponseWriter, r *http.Request) {
+	devices, err := s.deps.Devices.Devices(r.Context())
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	response := devicesResponse{Devices: make([]deviceResponse, 0, len(devices))}
+	for _, device := range devices {
+		response.Devices = append(response.Devices, deviceResponse{
+			Address: device.Address.String(), MAC: device.MAC, Name: device.Name, State: device.State, OnLAN: device.OnLAN,
+		})
+	}
+	writeJSON(w, http.StatusOK, response)
 }

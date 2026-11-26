@@ -96,7 +96,7 @@ func (s *Store) CreateAdminAccount(account domain.AdminAccount) error {
 		return fmt.Errorf("store: create admin account: %w", domain.ErrSetupAlreadyDone)
 	}
 	if account.Username == "" || account.PasswordHash == "" {
-		return domain.NewValidationError("admin", "username and password hash are required")
+		return domain.NewFieldError("admin", domain.Issue("required"), "username and password hash are required")
 	}
 	next := s.settings.clone()
 	next.Admin = &account
@@ -126,7 +126,7 @@ func (s *Store) Language() domain.Language {
 // SetLanguage changes the default UI language.
 func (s *Store) SetLanguage(language domain.Language) error {
 	if !language.Valid() {
-		return domain.NewValidationError("language", "must be de or en")
+		return domain.NewFieldError("language", domain.Issue("one_of", "values", "de, en"), "must be de or en")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

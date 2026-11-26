@@ -107,10 +107,10 @@ func (s *Store) RemoteAccessKeyPair(source domain.CertificateSource) (domain.Key
 // encrypted. Checking that the pair is usable is the caller's job.
 func (s *Store) SetRemoteAccessKeyPair(source domain.CertificateSource, pair domain.KeyPair) error {
 	if !source.Valid() {
-		return domain.NewValidationError("certificateSource", "must be selfSigned or uploaded")
+		return domain.NewFieldError("certificateSource", domain.Issue("one_of", "values", "selfSigned, uploaded"), "must be selfSigned or uploaded")
 	}
 	if pair.CertificatePEM == "" || pair.KeyPEM == "" {
-		return domain.NewValidationError("certificate", "certificate and key are required")
+		return domain.NewFieldError("certificate", domain.Issue("required"), "certificate and key are required")
 	}
 	key, err := s.cipher.Encrypt(pair.KeyPEM)
 	if err != nil {

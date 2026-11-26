@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestGetFirewall(t *testing.T) {
 	env := newTestEnv(t)
 	body := strings.TrimSpace(env.do(t, http.MethodGet, "/api/firewall", "").Body.String())
 	want := `{"rules":[],"settings":{"dropInvalid":false,"mssClamp":false,"synFloodProtection":false,"pingLimit":false},` +
-		`"hostAddress":"192.168.2.10","lanSubnets":["192.168.2.0/24"],"ipForward":true}`
+		`"hostAddress":"192.168.2.10","lanSubnets":["192.168.2.0/24"],"ipForward":true,"counters":{},"countersAvailable":true}`
 	if body != want {
 		t.Errorf("body = %s\nwant %s", body, want)
 	}
@@ -297,5 +298,63 @@ func TestIPsecTemplateRejects(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetFirewallCounters(t *testing.T) {
+	tests := []struct {
+		name        string
+		counters    map[string]domain.RuleCounters
+		unavailable bool
+		err         error
+		want        string
+	}{
+		{
+			name:     "counters by rule ID",
+			counters: map[string]domain.RuleCounters{"r1": {Packets: 12, Bytes: 3456}},
+			want:     `"counters":{"r1":{"packets":12,"bytes":3456}},"countersAvailable":true`,
+		},
+		{name: "none installed", counters: nil, want: `"counters":{},"countersAvailable":true`},
+		{name: "no comment match", unavailable: true, want: `"counters":null,"countersAvailable":false`},
+		{name: "reading fails", err: errBoom, want: `"counters":null,"countersAvailable":false`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			env.firewall.counters, env.firewall.countersErr, env.firewall.noCounters = tt.counters, tt.err, tt.unavailable
+			rec := env.do(t, http.MethodGet, "/api/firewall", "")
+			assertStatus(t, rec, http.StatusOK)
+			if body := rec.Body.String(); !strings.Contains(body, tt.want) || strings.Contains(body, "boom") {
+				t.Errorf("body = %s, want %s and no error", body, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetDevices(t *testing.T) {
+	env := newTestEnv(t)
+	env.devices.devices = []domain.LANDevice{
+		{Address: netip.MustParseAddr("192.168.2.30"), MAC: "3c:a6:2f:00:00:30", Name: "nas.fritz.box", State: "REACHABLE", OnLAN: true},
+		{Address: netip.MustParseAddr("192.168.5.1"), MAC: "3c:a6:2f:00:00:01", State: "STALE"},
+	}
+	rec := env.do(t, http.MethodGet, "/api/firewall/devices", "")
+	assertStatus(t, rec, http.StatusOK)
+	want := `{"devices":[` +
+		`{"address":"192.168.2.30","mac":"3c:a6:2f:00:00:30","name":"nas.fritz.box","state":"REACHABLE","onLan":true},` +
+		`{"address":"192.168.5.1","mac":"3c:a6:2f:00:00:01","state":"STALE","onLan":false}]}`
+	if body := strings.TrimSpace(rec.Body.String()); body != want {
+		t.Errorf("body = %s\nwant %s", body, want)
+	}
+
+	env.devices.devices = nil
+	if body := strings.TrimSpace(env.do(t, http.MethodGet, "/api/firewall/devices", "").Body.String()); body != `{"devices":[]}` {
+		t.Errorf("body without devices = %s", body)
+	}
+
+	env.devices.err = errBoom
+	rec = env.do(t, http.MethodGet, "/api/firewall/devices", "")
+	assertProblem(t, rec, http.StatusInternalServerError, CodeInternal)
+	if strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("body = %s, want no internal detail", rec.Body.String())
 	}
 }

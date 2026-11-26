@@ -116,11 +116,20 @@ type FirewallStore interface {
 	SetFirewall(firewall domain.Firewall) (domain.Firewall, error)
 }
 
-// Firewall applies the firewall and detects the host's network;
-// *netguard.Guard implements it.
+// Firewall applies the firewall, reads its counters per rule ID and
+// detects the host's network; *netguard.Guard implements it.
 type Firewall interface {
 	InstallFirewall(ctx context.Context, firewall domain.Firewall, uiPort int) error
+	// RuleCounters reports available = false when the backend cannot tag
+	// rules, so there are no counters.
+	RuleCounters(ctx context.Context) (counters map[string]domain.RuleCounters, available bool, err error)
 	HostNetwork(ctx context.Context) (domain.HostNetwork, error)
+}
+
+// Devices lists the host's LAN devices for the device picker;
+// *devices.Finder implements it.
+type Devices interface {
+	Devices(ctx context.Context) ([]domain.LANDevice, error)
 }
 
 // RemoteAccessSettings persists the remote-access setting and its
@@ -144,10 +153,12 @@ type RemoteAccessListener interface {
 
 // CheckResult is one line of the startup self-check.
 type CheckResult struct {
-	ID     string `json:"id"`
-	OK     bool   `json:"ok"`
-	Detail string `json:"detail"`
-	Hint   string `json:"hint,omitempty"`
+	ID string `json:"id"`
+	OK bool   `json:"ok"`
+	// Warning marks a failed check that only turns a feature off.
+	Warning bool   `json:"warning,omitempty"`
+	Detail  string `json:"detail"`
+	Hint    string `json:"hint,omitempty"`
 }
 
 // System describes the running server.

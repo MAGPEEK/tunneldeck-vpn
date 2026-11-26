@@ -396,13 +396,17 @@ var testHostNetwork = domain.HostNetwork{
 // fakeFirewall records installs; failOnce fails the next one, err every
 // one.
 type fakeFirewall struct {
-	mu         sync.Mutex
-	err        error
-	failOnce   error
-	applied    []domain.Firewall
-	uiPort     int
-	network    domain.HostNetwork
-	networkErr error
+	mu          sync.Mutex
+	err         error
+	failOnce    error
+	applied     []domain.Firewall
+	uiPort      int
+	network     domain.HostNetwork
+	networkErr  error
+	counters    map[string]domain.RuleCounters
+	countersErr error
+	// noCounters reports the counters as unavailable.
+	noCounters bool
 }
 
 func newFakeFirewall() *fakeFirewall {
@@ -428,6 +432,28 @@ func (f *fakeFirewall) HostNetwork(context.Context) (domain.HostNetwork, error) 
 		return domain.HostNetwork{}, f.networkErr
 	}
 	return f.network, nil
+}
+
+func (f *fakeFirewall) RuleCounters(context.Context) (map[string]domain.RuleCounters, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.countersErr != nil {
+		return nil, false, f.countersErr
+	}
+	if f.noCounters {
+		return nil, false, nil
+	}
+	return maps.Clone(f.counters), true, nil
+}
+
+// fakeDevices answers GET /api/firewall/devices.
+type fakeDevices struct {
+	devices []domain.LANDevice
+	err     error
+}
+
+func (f *fakeDevices) Devices(context.Context) ([]domain.LANDevice, error) {
+	return slices.Clone(f.devices), f.err
 }
 
 func (f *fakeFirewall) installs() []domain.Firewall {

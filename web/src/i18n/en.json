@@ -410,7 +410,8 @@
       "ip": "ip tool",
       "net-admin": "NET_ADMIN capability",
       "ip-forward": "IP forwarding",
-      "lan-subnets": "LAN subnets"
+      "lan-subnets": "LAN subnets",
+      "rule-counters": "Hit counters"
     },
     "hint": {
       "tun-device": "Pass the TUN device into the container (devices: /dev/net/tun).",
@@ -418,7 +419,8 @@
       "ip": "Install iproute2 in the image.",
       "net-admin": "Grant the container the NET_ADMIN capability (cap_add: NET_ADMIN).",
       "ip-forward": "Enable IPv4 forwarding on the host (sysctl net.ipv4.ip_forward=1, persisted in /etc/sysctl.conf); Docker hosts normally have it on. Without it, rules to other devices and outbound rules forward nothing.",
-      "lan-subnets": "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface."
+      "lan-subnets": "Run the container with network_mode: host on a host that has an IPv4 address on its LAN interface.",
+      "rule-counters": "Load the comment match on the host (modprobe xt_comment), or use the nft backend (TUNNELDECK_IPTABLES=nft), then restart the container. The firewall works without it; only the hit counters are off."
     }
   },
   "remoteAccess": {
@@ -522,6 +524,20 @@
     "remote_network_everything": "Entry {{entry}} must not cover every address.",
     "remote_network_duplicate": "Entry {{entry}} is listed twice.",
     "remote_network_contains_server": "Entry {{entry}} contains the server address, which must stay outside the tunnel.",
-    "remote_network_overlaps_lan": "Entry {{entry}} overlaps a LAN subnet of the host ({{subnets}})."
+    "remote_network_overlaps_lan": "Entry {{entry}} overlaps a LAN subnet of the host ({{subnets}}).",
+    "firewall_id_invalid": "Must be 1 to 64 letters, digits, underscores or hyphens.",
+    "remote_access_ui_port": "Must not be the port of the web UI.",
+    "remote_access_port_in_firewall": "An enabled firewall rule uses this port.",
+    "remote_access_certificate_missing": "Upload a certificate first.",
+    "remote_access_certificate_invalid": "Must be a PEM certificate chain, the server certificate first.",
+    "remote_access_certificate_not_yet_valid": "The certificate is not valid yet.",
+    "remote_access_certificate_expired": "The certificate has expired.",
+    "remote_access_key_not_pem": "Must contain exactly one PEM private key.",
+    "remote_access_key_encrypted": "The private key must not be encrypted.",
+    "remote_access_key_unsupported": "Must be an RSA key of at least 2048 bits, an ECDSA P-256 or P-384 key, or an Ed25519 key.",
+    "remote_access_key_unparseable": "The private key cannot be read.",
+    "remote_access_key_mismatch": "The private key does not belong to the certificate.",
+    "username_invalid": "{{min}} to {{max}} characters: letters, digits, dot, underscore or hyphen.",
+    "vpn_address_invalid": "The VPN did not assign a valid IPv4 address."
   }
 }

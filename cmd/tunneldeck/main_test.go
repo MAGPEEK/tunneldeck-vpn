@@ -193,8 +193,10 @@ func TestProfileImporter(t *testing.T) {
 }
 
 func TestToCheckResults(t *testing.T) {
-	got := toCheckResults([]netguard.CheckResult{{ID: "ip", OK: false, Detail: "missing", Hint: "install"}})
-	if len(got) != 1 || got[0] != (api.CheckResult{ID: "ip", OK: false, Detail: "missing", Hint: "install"}) {
+	got := toCheckResults([]netguard.CheckResult{{ID: "ip", OK: false, Detail: "missing", Hint: "install"},
+		{ID: "rule-counters", OK: false, Warning: true, Detail: "off", Hint: "load"}})
+	if len(got) != 2 || got[0] != (api.CheckResult{ID: "ip", OK: false, Detail: "missing", Hint: "install"}) ||
+		got[1] != (api.CheckResult{ID: "rule-counters", OK: false, Warning: true, Detail: "off", Hint: "load"}) {
 		t.Errorf("checks = %+v", got)
 	}
 }

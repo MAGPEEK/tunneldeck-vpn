@@ -53,7 +53,7 @@ type DesiredConnection struct {
 // Validate checks that a wanted connection names a profile.
 func (d DesiredConnection) Validate() error {
 	if d.WantConnected && d.ActiveProfileID == "" {
-		return NewValidationError("activeProfileId", "is required when wantConnected is true")
+		return NewFieldError("activeProfileId", Issue("required"), "is required when wantConnected is true")
 	}
 	return nil
 }

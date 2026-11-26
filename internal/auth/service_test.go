@@ -88,6 +88,9 @@ func TestSetupValidation(t *testing.T) {
 				if _, ok := verr.Fields[field]; !ok {
 					t.Fatalf("fields = %v, missing %q", verr.Fields, field)
 				}
+				if want := map[string]string{"username": "username_invalid", "password": "length_between"}[field]; verr.Issues[field].Code != want {
+					t.Errorf("issue of %s = %+v, want code %q", field, verr.Issues[field], want)
+				}
 			}
 			if tt.password != "" && strings.Contains(err.Error(), tt.password) {
 				t.Fatal("error contains the password")

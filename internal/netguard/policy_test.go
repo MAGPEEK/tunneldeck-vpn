@@ -139,7 +139,7 @@ func TestKillSwitchWhileDisconnected(t *testing.T) {
 	}
 	for _, want := range []string{
 		legacy + "-A TUNNELDECK-FORWARD " + killSwitchDrop,
-		legacy + "-A TUNNELDECK-FORWARD -o tdvpn0 -s 192.168.2.2/32 -j ACCEPT",
+		legacy + "-A TUNNELDECK-FORWARD -o tdvpn0 -s 192.168.2.2/32 -m comment --comment tdrule:r3 -j ACCEPT",
 		legacy + "-A TUNNELDECK-FORWARD -j DROP",
 	} {
 		if !slices.Contains(calls, want) {
@@ -372,6 +372,9 @@ func TestRouteThroughTunnelRefusesRemoteNetworks(t *testing.T) {
 			var v *domain.ValidationError
 			if !errors.As(err, &v) || v.Fields["remoteNetworks"] == "" {
 				t.Fatalf("err = %v, want a validation error on remoteNetworks", err)
+			}
+			if issue := v.Issues["remoteNetworks"]; !strings.HasPrefix(issue.Code, "remote_network_") || issue.Params["entry"] != "1" {
+				t.Errorf("issue = %+v, want a remote_network_ code for entry 1", issue)
 			}
 			if got := len(f.calls) > 0; got != tt.commands {
 				t.Errorf("commands run = %q", f.calls)

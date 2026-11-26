@@ -86,7 +86,7 @@ SPEC §17 "Adopt": profile setting `remoteNetworks` (form field, validation, `ip
 
 # Firewall usability (0.2.0)
 
-## [ ] 21. Devices and hit counters — careful — after: any-port change
+## [x] 21. Devices and hit counters — careful — after: any-port change
 
 SPEC §16.4 "Device picker" and "Hit counters": `GET /api/firewall/devices` (LAN neighbours from `ip -4 neigh` plus host-visible names, through `CommandRunner`; no new privileges); per-rule counters in `GET /api/firewall`, tagged rules (`-m comment --comment tdrule:<id>`), incremental apply so unchanged rules keep their counters while the DROP-safe refill guarantee holds. Tests with the fake runner; integration test for counter persistence across re-apply.
 

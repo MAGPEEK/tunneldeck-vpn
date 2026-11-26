@@ -35,10 +35,10 @@ func DefaultRemoteAccess() RemoteAccess {
 func (r RemoteAccess) Validate() error {
 	v := &ValidationError{}
 	if r.Port < MinPort || r.Port > MaxPort {
-		v.Add("port", "must be between 1 and 65535")
+		v.AddIssue("port", Issue("port_invalid"), "must be between 1 and 65535")
 	}
 	if !r.CertificateSource.Valid() {
-		v.Add("certificateSource", "must be selfSigned or uploaded")
+		v.AddIssue("certificateSource", Issue("one_of", "values", "selfSigned, uploaded"), "must be selfSigned or uploaded")
 	}
 	return v.OrNil()
 }

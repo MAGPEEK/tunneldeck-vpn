@@ -103,8 +103,8 @@ type hostPorts struct {
 }
 
 // buildRuleset renders the chains for firewall (SPEC §16.1, §16.1a). Only
-// enabled rules install anything, in list order. lan are the host's LAN
-// subnets.
+// enabled rules install anything, in list order. Each line is tagged with
+// its rule or its fixed purpose. lan are the host's LAN subnets.
 func buildRuleset(firewall domain.Firewall, reserved hostPorts, lan []netip.Prefix) ruleset {
 	var enabled []parsedRule
 	for _, rule := range firewall.Rules {
@@ -147,17 +147,20 @@ func (r parsedRule) isOutboundAccept() bool {
 	return r.Direction == domain.DirectionOutbound && r.EffectiveAction() == domain.ActionAccept
 }
 
+// withTag tags a line of the rule with "tdrule:<id>".
+func (r parsedRule) withTag(rule []string) []string { return tagged(ruleTagPrefix+r.ID, rule) }
+
 // inputContent drops TCP to the web UI port before anything else, so no
 // rule, not even one for every port, can open it to the tunnel.
 func inputContent(settings domain.FirewallSettings, rules []parsedRule, reserved hostPorts) [][]string {
 	var out [][]string
 	if reserved.ui != 0 {
-		out = append(out, tcpPortRule(reserved.ui, "DROP"))
+		out = append(out, fixedRule(fixedUIPort, tcpPortRule(reserved.ui, "DROP")))
 	}
 	if settings.DropInvalid {
-		out = append(out, ctRule(ctInvalid, "DROP"))
+		out = append(out, fixedRule(fixedInvalid, ctRule(ctInvalid, "DROP")))
 	}
-	out = append(out, ctRule(ctEstablished, "ACCEPT"))
+	out = append(out, fixedRule(fixedEstablished, ctRule(ctEstablished, "ACCEPT")))
 	out = append(out, floodRules(settings, nil, "in")...)
 	for _, rule := range rules {
 		if !rule.isHostRule() {
@@ -166,11 +169,11 @@ func inputContent(settings domain.FirewallSettings, rules []parsedRule, reserved
 		for _, proto := range rule.Protocol.Protocols() {
 			match := slices.Concat(protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort),
 				icmpMatch(rule), prefixMatch("-s", rule.source))
-			out = append(out, append(match, actionTarget(rule.EffectiveAction(), proto)...))
+			out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto)...)))
 		}
 	}
 	if reserved.remoteAccess != 0 {
-		out = append(out, tcpPortRule(reserved.remoteAccess, "ACCEPT"))
+		out = append(out, fixedRule(fixedRemoteAccess, tcpPortRule(reserved.remoteAccess, "ACCEPT")))
 	}
 	return append(out, []string{"-j", "DROP"})
 }
@@ -181,14 +184,14 @@ func tcpPortRule(port int, target string) []string {
 
 func forwardContent(settings domain.FirewallSettings, rules []parsedRule, lan []netip.Prefix) [][]string {
 	out := lanReturns(rules, lan)
-	out = append(out, []string{"!", "-i", DeviceName, "!", "-o", DeviceName, "-j", "DROP"})
+	out = append(out, fixedRule(fixedKillSwitch, []string{"!", "-i", DeviceName, "!", "-o", DeviceName, "-j", "DROP"}))
 	if settings.DropInvalid {
-		out = append(out, ctRule(ctInvalid, "DROP"))
+		out = append(out, fixedRule(fixedInvalid, ctRule(ctInvalid, "DROP")))
 	}
 	if settings.MSSClamp {
-		out = append(out, []string{"-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"})
+		out = append(out, fixedRule(fixedMSSClamp, []string{"-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"}))
 	}
-	out = append(out, ctRule(ctEstablished, "ACCEPT"))
+	out = append(out, fixedRule(fixedEstablished, ctRule(ctEstablished, "ACCEPT")))
 	out = append(out, floodRules(settings, []string{"-i", DeviceName}, "fwd")...)
 	for _, rule := range rules {
 		switch {
@@ -215,7 +218,7 @@ func lanReturns(rules []parsedRule, lan []netip.Prefix) [][]string {
 				continue
 			}
 			ret := []string{"!", "-i", DeviceName, "!", "-o", DeviceName, "-s", rule.source.String(), "-d", subnet.String(), "-j", "RETURN"}
-			out = appendUnique(out, ret)
+			out = appendUnique(out, fixedRule(fixedLANReturn, ret))
 		}
 	}
 	return out
@@ -228,12 +231,12 @@ func floodRules(settings domain.FirewallSettings, iface []string, name string) [
 	if settings.SYNFloodProtection {
 		rule := slices.Concat(iface, []string{"-p", "tcp", "--syn"}, synFloodLimit,
 			[]string{"--hashlimit-name", "td-syn-" + name, "-j", "DROP"})
-		out = append(out, rule)
+		out = append(out, fixedRule(fixedSYNFlood, rule))
 	}
 	if settings.PingLimit {
 		rule := slices.Concat(iface, []string{"-p", "icmp", "--icmp-type", "echo-request"}, pingLimit,
 			[]string{"--hashlimit-name", "td-ping-" + name, "-j", "DROP"})
-		out = append(out, rule)
+		out = append(out, fixedRule(fixedPingLimit, rule))
 	}
 	return out
 }
@@ -245,7 +248,7 @@ func portForwardAccepts(rule parsedRule) [][]string {
 	for _, proto := range rule.Protocol.Protocols() {
 		match := slices.Concat([]string{"-i", DeviceName, "-d", rule.destination.String()}, protocolMatch(rule, proto),
 			portMatch("--dport", rule.DestinationPort), prefixMatch("-s", rule.source))
-		out = append(out, slices.Concat(match, ctMatch(ctDNAT), []string{"-j", "ACCEPT"}))
+		out = append(out, rule.withTag(slices.Concat(match, ctMatch(ctDNAT), []string{"-j", "ACCEPT"})))
 	}
 	return out
 }
@@ -255,7 +258,7 @@ func outboundRules(rule parsedRule) [][]string {
 	for _, proto := range rule.Protocol.Protocols() {
 		match := slices.Concat([]string{"-o", DeviceName, "-s", rule.source.String()}, prefixMatch("-d", rule.destination),
 			protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort), icmpMatch(rule))
-		out = append(out, append(match, actionTarget(rule.EffectiveAction(), proto)...))
+		out = append(out, rule.withTag(append(match, actionTarget(rule.EffectiveAction(), proto)...)))
 	}
 	return out
 }
@@ -268,7 +271,7 @@ func preroutingContent(rules []parsedRule, reserved hostPorts) [][]string {
 	if forwardsEveryTCPPort(rules) {
 		for _, port := range []int{reserved.ui, reserved.remoteAccess} {
 			if port != 0 {
-				out = append(out, tcpPortRule(port, "RETURN"))
+				out = append(out, fixedRule(fixedHostPort, tcpPortRule(port, "RETURN")))
 			}
 		}
 	}
@@ -279,7 +282,7 @@ func preroutingContent(rules []parsedRule, reserved hostPorts) [][]string {
 		for _, proto := range rule.Protocol.Protocols() {
 			match := slices.Concat(protocolMatch(rule, proto), portMatch("--dport", rule.PublicPorts()),
 				prefixMatch("-s", rule.source))
-			out = append(out, append(match, "-j", "DNAT", "--to-destination", dnatTarget(rule)))
+			out = append(out, rule.withTag(append(match, "-j", "DNAT", "--to-destination", dnatTarget(rule))))
 		}
 	}
 	return out
@@ -317,12 +320,12 @@ func postroutingContent(rules []parsedRule) [][]string {
 			for _, proto := range rule.Protocol.Protocols() {
 				match := slices.Concat([]string{"!", "-o", DeviceName, "-d", rule.destination.String()},
 					protocolMatch(rule, proto), portMatch("--dport", rule.DestinationPort))
-				out = append(out, slices.Concat(match, ctMatch(ctDNAT), []string{"-j", "MASQUERADE"}))
+				out = append(out, rule.withTag(slices.Concat(match, ctMatch(ctDNAT), []string{"-j", "MASQUERADE"})))
 			}
 		case rule.isOutboundAccept():
 			masquerade := slices.Concat([]string{"-o", DeviceName, "-s", rule.source.String()},
 				prefixMatch("-d", rule.destination), []string{"-j", "MASQUERADE"})
-			out = appendUnique(out, masquerade)
+			out = appendUnique(out, rule.withTag(masquerade))
 		}
 	}
 	return out
@@ -395,9 +398,11 @@ func actionTarget(action domain.FirewallAction, proto domain.FirewallProtocol) [
 	return []string{"-j", "ACCEPT"}
 }
 
+// appendUnique appends item unless list holds the same line already; tags
+// are ignored, so a line shared by several rules keeps the first tag.
 func appendUnique(list [][]string, item []string) [][]string {
 	for _, existing := range list {
-		if slices.Equal(existing, item) {
+		if slices.Equal(untagged(existing), untagged(item)) {
 			return list
 		}
 	}

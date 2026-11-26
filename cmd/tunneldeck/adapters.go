@@ -67,7 +67,7 @@ func (profileImporter) Import(protocol domain.Protocol, text string) (api.Import
 func toCheckResults(results []netguard.CheckResult) []api.CheckResult {
 	checks := make([]api.CheckResult, len(results))
 	for i, r := range results {
-		checks[i] = api.CheckResult{ID: r.ID, OK: r.OK, Detail: r.Detail, Hint: r.Hint}
+		checks[i] = api.CheckResult{ID: r.ID, OK: r.OK, Warning: r.Warning, Detail: r.Detail, Hint: r.Hint}
 	}
 	return checks
 }

@@ -20,8 +20,10 @@ import (
 // every TCP port; TUNNELDECK-POSTROUTING (nat POSTROUTING) masquerades port
 // forwards on the LAN side and outbound traffic on the tunnel. The global
 // settings add their rules at the top of the filter chains (buildRuleset).
-// Rules are installed in list order. Calling it again with the same
-// configuration yields the same state.
+// Rules are installed in list order. Every content line carries a comment
+// tag (tags.go). Calling it again with the same configuration yields the
+// same state and leaves every chain whose content is unchanged untouched,
+// so its counters persist (RuleCounters).
 //
 // Refill strategy ("append, then trim", installChain): every filter chain
 // always ends with DROP before its jumps exist, and misplaced jumps are
@@ -50,7 +52,7 @@ func (g *Guard) InstallFirewall(ctx context.Context, firewall domain.Firewall, u
 // of an enabled inbound TCP rule.
 func (g *Guard) SetRemoteAccessPort(ctx context.Context, port int) error {
 	if port != 0 && (port < domain.MinPort || port > domain.MaxPort) {
-		return domain.NewValidationError("remoteAccess.port", "must be between 1 and 65535")
+		return domain.NewFieldError("remoteAccess.port", domain.Issue("port_invalid"), "must be between 1 and 65535")
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -59,7 +61,7 @@ func (g *Guard) SetRemoteAccessPort(ctx context.Context, port int) error {
 		return nil
 	}
 	if port != 0 && port == g.installed.uiPort {
-		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
+		return uiPortConflict()
 	}
 	if err := domain.CheckReservedPorts(g.installed.firewall.Rules, 0, port); err != nil {
 		return err
@@ -91,9 +93,13 @@ func validateFirewall(rules []domain.FirewallRule, uiPort, remoteAccessPort int)
 // caller holds g.mu and has validated the rules.
 func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort int) error {
 	if g.remoteAccessPort != 0 && g.remoteAccessPort == uiPort {
-		return domain.NewValidationError("remoteAccess.port", "must not be the web UI port")
+		return uiPortConflict()
 	}
 	if _, err := g.detectBackend(ctx); err != nil {
+		return fmt.Errorf("install firewall: %w", err)
+	}
+	tagged, err := g.detectComments(ctx)
+	if err != nil {
 		return fmt.Errorf("install firewall: %w", err)
 	}
 	lan, err := g.detectLAN(ctx)
@@ -105,7 +111,11 @@ func (g *Guard) install(ctx context.Context, firewall domain.Firewall, uiPort in
 	}
 	var errs []error
 	for _, chain := range buildRuleset(firewall, hostPorts{ui: uiPort, remoteAccess: g.remoteAccessPort}, subnets(lan)).chainContent() {
-		errs = append(errs, g.installChain(ctx, chain.spec, chain.content))
+		content := chain.content
+		if !tagged {
+			content = untaggedContent(content)
+		}
+		errs = append(errs, g.installChain(ctx, chain.spec, content, tagged))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err
@@ -151,4 +161,9 @@ func (g *Guard) RemoveFirewall(ctx context.Context) error {
 func cloneFirewall(f domain.Firewall) domain.Firewall {
 	f.Rules = append([]domain.FirewallRule(nil), f.Rules...)
 	return f
+}
+
+// uiPortConflict reports a remote-access port equal to the web UI port.
+func uiPortConflict() error {
+	return domain.NewFieldError("remoteAccess.port", domain.Issue("remote_access_ui_port"), "must not be the web UI port")
 }

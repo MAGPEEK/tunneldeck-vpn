@@ -19,6 +19,7 @@ type Deps struct {
 	Connection    Connection
 	FirewallStore FirewallStore
 	Firewall      Firewall
+	Devices       Devices
 	System        System
 
 	RemoteAccess         RemoteAccessSettings
@@ -106,6 +107,7 @@ func (s *Server) routes() {
 	s.private("GET /api/firewall", s.getFirewall)
 	s.private("PUT /api/firewall", s.putFirewall)
 	s.private("POST /api/firewall/templates/ipsec", s.ipsecTemplate)
+	s.private("GET /api/firewall/devices", s.getDevices)
 	s.public("GET /api/host-access", s.goneHostAccess)
 	s.public("PUT /api/host-access", s.goneHostAccess)
 	s.private("GET /api/system", s.getSystem)

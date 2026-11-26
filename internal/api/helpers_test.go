@@ -21,6 +21,7 @@ type testEnv struct {
 	connection    *fakeConnection
 	firewallStore *fakeFirewallStore
 	firewall      *fakeFirewall
+	devices       *fakeDevices
 	remote        *fakeRemoteAccess
 	listener      *fakeListener
 	server        *Server
@@ -38,6 +39,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		connection:    &fakeConnection{status: vpn.Status{State: domain.StateDisconnected}},
 		firewallStore: &fakeFirewallStore{},
 		firewall:      newFakeFirewall(),
+		devices:       &fakeDevices{},
 		remote:        newFakeRemoteAccess(),
 		listener:      &fakeListener{},
 	}
@@ -50,6 +52,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Connection:    env.connection,
 		FirewallStore: env.firewallStore,
 		Firewall:      env.firewall,
+		Devices:       env.devices,
 		System: System{
 			Version: "1.2.3", ListenAddress: "192.168.1.10:8194", UIPort: testUIPort, TimeZone: "Europe/Berlin",
 			Checks: func() []CheckResult { return []CheckResult{{ID: "tun-device", OK: true, Detail: "present"}} },
@@ -147,4 +150,15 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 		t.Fatalf("decode: %v; body %s", err, rec.Body.String())
 	}
 	return value
+}
+
+// assertEveryFieldCoded fails unless every field message of p has a code
+// the UI can translate.
+func assertEveryFieldCoded(t *testing.T, p problem) {
+	t.Helper()
+	for field := range p.Fields {
+		if p.FieldCodes[field].Code == "" {
+			t.Errorf("field %s has no code: %+v", field, p)
+		}
+	}
 }

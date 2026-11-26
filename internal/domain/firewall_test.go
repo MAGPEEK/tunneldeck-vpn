@@ -183,6 +183,13 @@ func TestValidateFirewallRules(t *testing.T) {
 			with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = "a" }),
 			with(hostIn(ProtocolTCP, 23), func(r *FirewallRule) { r.ID = "a" }),
 		}, []string{"rules[1].id"}},
+		{"id with a colon", []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = "tdrule:a" })}, []string{"rules[0].id"}},
+		{"id with a space", []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = "a b" })}, []string{"rules[0].id"}},
+		{"id too long", []FirewallRule{with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = strings.Repeat("a", 65) })}, []string{"rules[0].id"}},
+		{"generated and readable ids", []FirewallRule{
+			with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) { r.ID = NewID() }),
+			with(hostIn(ProtocolTCP, 23), func(r *FirewallRule) { r.ID = "web_2-B" }),
+		}, nil},
 		{"duplicate match", []FirewallRule{hostIn(ProtocolTCP, 22), with(hostIn(ProtocolTCP, 22), func(r *FirewallRule) {
 			r.Action, r.Enabled = ActionDrop, false
 		})}, []string{"rules[1].name"}},

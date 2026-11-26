@@ -11,11 +11,11 @@ import (
 
 const remotePort = 8443
 
-const remoteAccept = "-p tcp --dport 8443 -j ACCEPT"
+const remoteAccept = "-p tcp --dport 8443 -m comment --comment tdfixed:remote-access -j ACCEPT"
 
 // remoteInput is TUNNELDECK-INPUT of testFirewall with the remote-access
 // accept before the DROP.
-var remoteInput = inputWith("-p tcp --dport 22 -j ACCEPT", "-p udp --dport 51820 -s 192.168.1.0/24 -j ACCEPT", remoteAccept)
+var remoteInput = slices.Concat(testInput[:len(testInput)-1], []string{remoteAccept, dropAll})
 
 func installedGuard(t *testing.T, f *fakeRunner) *Guard {
 	t.Helper()
@@ -59,18 +59,19 @@ func TestAnyPortForwardKeepsTheRemoteAccessPortForTheHost(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 	input := inputWith(remoteAccept)
-	accept := forwardWith("-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j ACCEPT")
-	dnat := "-p tcp -j DNAT --to-destination 192.168.2.5"
-	masquerade := []string{"! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j MASQUERADE"}
-	assertCalls(t, f.takeCalls(), slices.Concat(detectLegacy, reinstallCalls(state, input, accept,
-		[]string{"-p tcp --dport 8080 -j RETURN", "-p tcp --dport 8443 -j RETURN", dnat}, masquerade)))
+	accept := forwardWith(onRule(1, "-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j ACCEPT"))
+	dnat := onRule(1, "-p tcp -j DNAT --to-destination 192.168.2.5")
+	masquerade := []string{onRule(1, "! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j MASQUERADE")}
+	uiReturn := tagLine("tdfixed:host-port", "-p tcp --dport 8080 -j RETURN")
+	assertCalls(t, f.takeCalls(), slices.Concat(detectInstall, reinstallCalls(state, input, accept,
+		[]string{uiReturn, tagLine("tdfixed:host-port", "-p tcp --dport 8443 -j RETURN"), dnat}, masquerade)))
 
 	scriptState(f, state)
 	if err := g.SetRemoteAccessPort(context.Background(), 0); err != nil {
 		t.Fatalf("close port: %v", err)
 	}
 	assertCalls(t, f.takeCalls(), reinstallCalls(state, inputWith(), accept,
-		[]string{"-p tcp --dport 8080 -j RETURN", dnat}, masquerade))
+		[]string{uiReturn, dnat}, masquerade))
 }
 
 func TestSetRemoteAccessPortBeforeInstallIsUsedByTheNextInstall(t *testing.T) {

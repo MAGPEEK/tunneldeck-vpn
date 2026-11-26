@@ -410,7 +410,8 @@
       "ip": "ip-Werkzeug",
       "net-admin": "NET_ADMIN-Berechtigung",
       "ip-forward": "IP-Weiterleitung",
-      "lan-subnets": "LAN-Subnetze"
+      "lan-subnets": "LAN-Subnetze",
+      "rule-counters": "Trefferzähler"
     },
     "hint": {
       "tun-device": "Reichen Sie das TUN-Gerät in den Container durch (devices: /dev/net/tun).",
@@ -418,7 +419,8 @@
       "ip": "Installieren Sie iproute2 im Image.",
       "net-admin": "Geben Sie dem Container die Berechtigung NET_ADMIN (cap_add: NET_ADMIN).",
       "ip-forward": "Schalten Sie die IPv4-Weiterleitung auf dem Host ein (sysctl net.ipv4.ip_forward=1, dauerhaft in /etc/sysctl.conf); auf Docker-Hosts ist sie meist schon an. Ohne sie leiten Regeln an andere Geräte und ausgehende Regeln nichts weiter.",
-      "lan-subnets": "Starten Sie den Container mit network_mode: host auf einem Host, der eine IPv4-Adresse an seiner LAN-Schnittstelle hat."
+      "lan-subnets": "Starten Sie den Container mit network_mode: host auf einem Host, der eine IPv4-Adresse an seiner LAN-Schnittstelle hat.",
+      "rule-counters": "Das Comment-Match auf dem Host laden (modprobe xt_comment) oder das nft-Backend verwenden (TUNNELDECK_IPTABLES=nft) und den Container neu starten. Die Firewall funktioniert auch ohne; nur die Trefferzähler fehlen."
     }
   },
   "remoteAccess": {
@@ -522,6 +524,20 @@
     "remote_network_everything": "Eintrag {{entry}} darf nicht alle Adressen umfassen.",
     "remote_network_duplicate": "Eintrag {{entry}} steht doppelt in der Liste.",
     "remote_network_contains_server": "Eintrag {{entry}} enthält die Serveradresse, die außerhalb des Tunnels bleiben muss.",
-    "remote_network_overlaps_lan": "Eintrag {{entry}} überschneidet sich mit einem LAN-Subnetz des Hosts ({{subnets}})."
+    "remote_network_overlaps_lan": "Eintrag {{entry}} überschneidet sich mit einem LAN-Subnetz des Hosts ({{subnets}}).",
+    "firewall_id_invalid": "1 bis 64 Buchstaben, Ziffern, Unterstriche oder Bindestriche.",
+    "remote_access_ui_port": "Darf nicht der Port der Weboberfläche sein.",
+    "remote_access_port_in_firewall": "Eine aktive Firewall-Regel nutzt diesen Port.",
+    "remote_access_certificate_missing": "Bitte zuerst ein Zertifikat hochladen.",
+    "remote_access_certificate_invalid": "Muss eine PEM-Zertifikatskette sein, das Serverzertifikat zuerst.",
+    "remote_access_certificate_not_yet_valid": "Das Zertifikat ist noch nicht gültig.",
+    "remote_access_certificate_expired": "Das Zertifikat ist abgelaufen.",
+    "remote_access_key_not_pem": "Muss genau einen privaten PEM-Schlüssel enthalten.",
+    "remote_access_key_encrypted": "Der private Schlüssel darf nicht verschlüsselt sein.",
+    "remote_access_key_unsupported": "Muss ein RSA-Schlüssel mit mindestens 2048 Bit, ein ECDSA-Schlüssel (P-256 oder P-384) oder ein Ed25519-Schlüssel sein.",
+    "remote_access_key_unparseable": "Der private Schlüssel ist nicht lesbar.",
+    "remote_access_key_mismatch": "Der private Schlüssel gehört nicht zum Zertifikat.",
+    "username_invalid": "{{min}} bis {{max}} Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich oder Bindestrich.",
+    "vpn_address_invalid": "Das VPN hat keine gültige IPv4-Adresse zugewiesen."
   }
 }

@@ -28,8 +28,8 @@ func TestInstallFirewallSequences(t *testing.T) {
 			name:     "rule change appends new content and trims the old in every chain",
 			script:   func(f *fakeRunner) { scriptState(f, changedState) },
 			firewall: rulesOnly(changed(hostRule(domain.ProtocolTCP, domain.SinglePort(443)), func(r *domain.FirewallRule) { r.Source = "10.0.0.0/8" })),
-			want: slices.Concat(detectLegacy, reinstallCalls(changedState,
-				inputWith("-p tcp --dport 443 -s 10.0.0.0/8 -j ACCEPT"), testForward, nil, nil)),
+			want: slices.Concat(detectInstall, reinstallCalls(changedState,
+				inputWith(onRule(1, "-p tcp --dport 443 -s 10.0.0.0/8 -j ACCEPT")), testForward, nil, nil)),
 		},
 		{
 			name: "existing chain without trailing DROP is sealed first",
@@ -38,7 +38,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 				f.scripts[legacy+"-S TUNNELDECK-INPUT"] = []fakeResult{ok("-N TUNNELDECK-INPUT\n")}
 			},
 			firewall: domain.Firewall{},
-			want: slices.Concat(detectLegacy, []string{addrShow}, prefixed(legacy,
+			want: slices.Concat(detectInstall, []string{addrShow}, prefixed(legacy,
 				"-S TUNNELDECK-INPUT",
 				"-A TUNNELDECK-INPUT -j DROP",
 				"-S INPUT",
@@ -70,7 +70,7 @@ func TestInstallFirewallSequences(t *testing.T) {
 					on(natPrefix+"-C POSTROUTING -j TUNNELDECK-POSTROUTING", ok(""), fail(badRule))
 			},
 			firewall: domain.Firewall{},
-			want: slices.Concat(detectLegacy, []string{addrShow}, prefixed(legacy,
+			want: slices.Concat(detectInstall, []string{addrShow}, prefixed(legacy,
 				"-S TUNNELDECK-INPUT",
 				"-S INPUT",
 				"-I INPUT 1 -i tdvpn0 -j DROP",
@@ -127,12 +127,12 @@ func TestInstallFirewallSequences(t *testing.T) {
 // checks every chain's new content.
 func TestRuleShapes(t *testing.T) {
 	const (
-		ikeForward  = "-i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -j ACCEPT"
-		ikeDNAT     = "-p udp --dport 500 -j DNAT --to-destination 192.168.2.2"
-		ikeMasq     = "! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -j MASQUERADE"
+		ikeForward  = "-i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"
+		ikeDNAT     = "-p udp --dport 500 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.2"
+		ikeMasq     = "! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE"
 		lancomJump  = "-A FORWARD -s 192.168.2.2/32 -j TUNNELDECK-FORWARD"
 		officeJump  = "-A FORWARD -s 192.168.2.0/24 -d 10.0.0.0/8 -j TUNNELDECK-FORWARD"
-		lancomLocal = "! -i tdvpn0 ! -o tdvpn0 -s 192.168.2.2/32 -d 192.168.2.0/24 -j RETURN"
+		lancomLocal = "! -i tdvpn0 ! -o tdvpn0 -s 192.168.2.2/32 -d 192.168.2.0/24 -m comment --comment tdfixed:lan-return -j RETURN"
 	)
 	ike := portForward(domain.ProtocolUDP, "192.168.2.2", domain.SinglePort(500))
 	tests := []struct {
@@ -156,12 +156,12 @@ func TestRuleShapes(t *testing.T) {
 				changed(hostRule(domain.ProtocolTCP, domain.SinglePort(25)), func(r *domain.FirewallRule) { r.Enabled = false }),
 			),
 			input: inputWith(
-				"-p tcp --sport 1024:1100 --dport 5000:5010 -s 203.0.113.0/24 -j ACCEPT",
-				"-p icmp --icmp-type echo-request -j ACCEPT",
-				"-s 198.51.100.7/32 -j DROP",
-				"-p tcp --dport 23 -j REJECT --reject-with tcp-reset",
-				"-p udp --dport 23 -j REJECT --reject-with icmp-port-unreachable",
-				"-p 50 -j ACCEPT",
+				"-p tcp --sport 1024:1100 --dport 5000:5010 -s 203.0.113.0/24 -m comment --comment tdrule:r1 -j ACCEPT",
+				"-p icmp --icmp-type echo-request -m comment --comment tdrule:r2 -j ACCEPT",
+				"-s 198.51.100.7/32 -m comment --comment tdrule:r3 -j DROP",
+				"-p tcp --dport 23 -m comment --comment tdrule:r4 -j REJECT --reject-with tcp-reset",
+				"-p udp --dport 23 -m comment --comment tdrule:r4 -j REJECT --reject-with icmp-port-unreachable",
+				"-p 50 -m comment --comment tdrule:r5 -j ACCEPT",
 			),
 			forward: testForward,
 		},
@@ -179,8 +179,8 @@ func TestRuleShapes(t *testing.T) {
 				r.KeepSourceAddress, r.Source = true, "198.51.100.0/24"
 			})),
 			input:      inputWith(),
-			forward:    forwardWith("-i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -s 198.51.100.0/24 -m conntrack --ctstate DNAT -j ACCEPT"),
-			prerouting: []string{"-p udp --dport 500 -s 198.51.100.0/24 -j DNAT --to-destination 192.168.2.2"},
+			forward:    forwardWith("-i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -s 198.51.100.0/24 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"),
+			prerouting: []string{"-p udp --dport 500 -s 198.51.100.0/24 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.2"},
 		},
 		{
 			name: "port range shifted to other ports",
@@ -188,9 +188,9 @@ func TestRuleShapes(t *testing.T) {
 				r.PublicPort = ports(8000, 8010)
 			})),
 			input:       inputWith(),
-			forward:     forwardWith("-i tdvpn0 -d 192.168.2.3/32 -p tcp --dport 9000:9010 -m conntrack --ctstate DNAT -j ACCEPT"),
-			prerouting:  []string{"-p tcp --dport 8000:8010 -j DNAT --to-destination 192.168.2.3:9000-9010/8000"},
-			postrouting: []string{"! -o tdvpn0 -d 192.168.2.3/32 -p tcp --dport 9000:9010 -m conntrack --ctstate DNAT -j MASQUERADE"},
+			forward:     forwardWith("-i tdvpn0 -d 192.168.2.3/32 -p tcp --dport 9000:9010 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"),
+			prerouting:  []string{"-p tcp --dport 8000:8010 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.3:9000-9010/8000"},
+			postrouting: []string{"! -o tdvpn0 -d 192.168.2.3/32 -p tcp --dport 9000:9010 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE"},
 		},
 		{
 			name: "public port differs from the destination port, tcp+udp",
@@ -199,14 +199,14 @@ func TestRuleShapes(t *testing.T) {
 			})),
 			input: inputWith(),
 			forward: forwardWith(
-				"-i tdvpn0 -d 192.168.2.3/32 -p tcp --dport 22 -m conntrack --ctstate DNAT -j ACCEPT",
-				"-i tdvpn0 -d 192.168.2.3/32 -p udp --dport 22 -m conntrack --ctstate DNAT -j ACCEPT"),
+				"-i tdvpn0 -d 192.168.2.3/32 -p tcp --dport 22 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT",
+				"-i tdvpn0 -d 192.168.2.3/32 -p udp --dport 22 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"),
 			prerouting: []string{
-				"-p tcp --dport 2222 -j DNAT --to-destination 192.168.2.3:22",
-				"-p udp --dport 2222 -j DNAT --to-destination 192.168.2.3:22"},
+				"-p tcp --dport 2222 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.3:22",
+				"-p udp --dport 2222 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.3:22"},
 			postrouting: []string{
-				"! -o tdvpn0 -d 192.168.2.3/32 -p tcp --dport 22 -m conntrack --ctstate DNAT -j MASQUERADE",
-				"! -o tdvpn0 -d 192.168.2.3/32 -p udp --dport 22 -m conntrack --ctstate DNAT -j MASQUERADE"},
+				"! -o tdvpn0 -d 192.168.2.3/32 -p tcp --dport 22 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE",
+				"! -o tdvpn0 -d 192.168.2.3/32 -p udp --dport 22 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE"},
 		},
 		{
 			name: "inbound host rules on any port: tcp+udp from a source, drop udp",
@@ -215,9 +215,9 @@ func TestRuleShapes(t *testing.T) {
 				changed(hostRule(domain.ProtocolUDP, domain.PortRange{}), func(r *domain.FirewallRule) { r.Action = domain.ActionDrop }),
 			),
 			input: inputWith(
-				"-p tcp -s 10.8.0.0/24 -j ACCEPT",
-				"-p udp -s 10.8.0.0/24 -j ACCEPT",
-				"-p udp -j DROP",
+				"-p tcp -s 10.8.0.0/24 -m comment --comment tdrule:r1 -j ACCEPT",
+				"-p udp -s 10.8.0.0/24 -m comment --comment tdrule:r1 -j ACCEPT",
+				"-p udp -m comment --comment tdrule:r2 -j DROP",
 			),
 			forward: testForward,
 		},
@@ -226,30 +226,30 @@ func TestRuleShapes(t *testing.T) {
 			firewall: rulesOnly(portForward(domain.ProtocolTCPUDP, "192.168.2.5", domain.PortRange{})),
 			input:    inputWith(),
 			forward: forwardWith(
-				"-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j ACCEPT",
-				"-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j ACCEPT"),
+				"-i tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT",
+				"-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"),
 			prerouting: []string{
-				"-p tcp --dport 8080 -j RETURN",
-				"-p tcp -j DNAT --to-destination 192.168.2.5",
-				"-p udp -j DNAT --to-destination 192.168.2.5"},
+				"-p tcp --dport 8080 -m comment --comment tdfixed:host-port -j RETURN",
+				"-p tcp -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.5",
+				"-p udp -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.5"},
 			postrouting: []string{
-				"! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -j MASQUERADE",
-				"! -o tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j MASQUERADE"},
+				"! -o tdvpn0 -d 192.168.2.5/32 -p tcp -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE",
+				"! -o tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j MASQUERADE"},
 		},
 		{
 			name:       "udp forward on any port needs no exclusions",
 			firewall:   rulesOnly(changed(portForward(domain.ProtocolUDP, "192.168.2.5", domain.PortRange{}), func(r *domain.FirewallRule) { r.KeepSourceAddress = true })),
 			input:      inputWith(),
-			forward:    forwardWith("-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -j ACCEPT"),
-			prerouting: []string{"-p udp -j DNAT --to-destination 192.168.2.5"},
+			forward:    forwardWith("-i tdvpn0 -d 192.168.2.5/32 -p udp -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT"),
+			prerouting: []string{"-p udp -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.5"},
 		},
 		{
 			name:         "outbound udp on any port",
 			firewall:     rulesOnly(outboundRule(domain.ProtocolUDP, "192.168.2.0/24", "10.0.0.0/8")),
 			forwardJumps: []string{officeJump},
 			input:        inputWith(),
-			forward:      forwardWith("-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -p udp -j ACCEPT"),
-			postrouting:  []string{"-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -j MASQUERADE"},
+			forward:      forwardWith("-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -p udp -m comment --comment tdrule:r1 -j ACCEPT"),
+			postrouting:  []string{"-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -m comment --comment tdrule:r1 -j MASQUERADE"},
 		},
 		{
 			name: "ESP and GRE forwarding",
@@ -259,10 +259,10 @@ func TestRuleShapes(t *testing.T) {
 			),
 			input: inputWith(),
 			forward: forwardWith(
-				"-i tdvpn0 -d 192.168.2.2/32 -p 50 -m conntrack --ctstate DNAT -j ACCEPT",
-				"-i tdvpn0 -d 192.168.2.4/32 -p 47 -m conntrack --ctstate DNAT -j ACCEPT"),
-			prerouting:  []string{"-p 50 -j DNAT --to-destination 192.168.2.2", "-p 47 -j DNAT --to-destination 192.168.2.4"},
-			postrouting: []string{"! -o tdvpn0 -d 192.168.2.4/32 -p 47 -m conntrack --ctstate DNAT -j MASQUERADE"},
+				"-i tdvpn0 -d 192.168.2.2/32 -p 50 -m conntrack --ctstate DNAT -m comment --comment tdrule:r1 -j ACCEPT",
+				"-i tdvpn0 -d 192.168.2.4/32 -p 47 -m conntrack --ctstate DNAT -m comment --comment tdrule:r2 -j ACCEPT"),
+			prerouting:  []string{"-p 50 -m comment --comment tdrule:r1 -j DNAT --to-destination 192.168.2.2", "-p 47 -m comment --comment tdrule:r2 -j DNAT --to-destination 192.168.2.4"},
+			postrouting: []string{"! -o tdvpn0 -d 192.168.2.4/32 -p 47 -m conntrack --ctstate DNAT -m comment --comment tdrule:r2 -j MASQUERADE"},
 		},
 		{
 			name: "outbound to a network, tcp 443",
@@ -271,8 +271,8 @@ func TestRuleShapes(t *testing.T) {
 			})),
 			forwardJumps: []string{officeJump},
 			input:        inputWith(),
-			forward:      forwardWith("-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -p tcp --dport 443 -j ACCEPT"),
-			postrouting:  []string{"-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -j MASQUERADE"},
+			forward:      forwardWith("-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -p tcp --dport 443 -m comment --comment tdrule:r1 -j ACCEPT"),
+			postrouting:  []string{"-o tdvpn0 -s 192.168.2.0/24 -d 10.0.0.0/8 -m comment --comment tdrule:r1 -j MASQUERADE"},
 		},
 		{
 			name: "outbound to everything keeps the LAN out, with a drop rule above",
@@ -283,28 +283,26 @@ func TestRuleShapes(t *testing.T) {
 			forwardJumps: []string{lancomJump},
 			input:        inputWith(),
 			forward: slices.Concat([]string{lancomLocal}, forwardWith(
-				"-o tdvpn0 -s 192.168.2.2/32 -d 10.66.0.0/16 -j DROP",
-				"-o tdvpn0 -s 192.168.2.2/32 -j ACCEPT")),
-			postrouting: []string{"-o tdvpn0 -s 192.168.2.2/32 -j MASQUERADE"},
+				"-o tdvpn0 -s 192.168.2.2/32 -d 10.66.0.0/16 -m comment --comment tdrule:r1 -j DROP",
+				"-o tdvpn0 -s 192.168.2.2/32 -m comment --comment tdrule:r2 -j ACCEPT")),
+			postrouting: []string{"-o tdvpn0 -s 192.168.2.2/32 -m comment --comment tdrule:r2 -j MASQUERADE"},
 		},
 		{
-			name: "global protections",
-			firewall: domain.Firewall{FirewallSettings: domain.DefaultFirewallSettings(), Rules: []domain.FirewallRule{
-				hostRule(domain.ProtocolTCP, domain.SinglePort(22)),
-			}},
+			name:     "global protections",
+			firewall: withDefaultSettings(rulesOnly(hostRule(domain.ProtocolTCP, domain.SinglePort(22)))),
 			input: []string{
 				uiPortDrop, invalidDrop, established,
-				"-p tcp --syn -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 --hashlimit-mode srcip --hashlimit-name td-syn-in -j DROP",
-				"-p icmp --icmp-type echo-request -m hashlimit --hashlimit-above 5/sec --hashlimit-burst 10 --hashlimit-name td-ping-in -j DROP",
-				"-p tcp --dport 22 -j ACCEPT",
+				"-p tcp --syn -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 --hashlimit-mode srcip --hashlimit-name td-syn-in -m comment --comment tdfixed:syn-flood -j DROP",
+				"-p icmp --icmp-type echo-request -m hashlimit --hashlimit-above 5/sec --hashlimit-burst 10 --hashlimit-name td-ping-in -m comment --comment tdfixed:ping-limit -j DROP",
+				"-p tcp --dport 22 -m comment --comment tdrule:r1 -j ACCEPT",
 				dropAll,
 			},
 			forward: []string{
 				killSwitchDrop, invalidDrop,
-				"-p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+				"-p tcp --tcp-flags SYN,RST SYN -m comment --comment tdfixed:mss-clamp -j TCPMSS --clamp-mss-to-pmtu",
 				established,
-				"-i tdvpn0 -p tcp --syn -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 --hashlimit-mode srcip --hashlimit-name td-syn-fwd -j DROP",
-				"-i tdvpn0 -p icmp --icmp-type echo-request -m hashlimit --hashlimit-above 5/sec --hashlimit-burst 10 --hashlimit-name td-ping-fwd -j DROP",
+				"-i tdvpn0 -p tcp --syn -m hashlimit --hashlimit-above 25/sec --hashlimit-burst 50 --hashlimit-mode srcip --hashlimit-name td-syn-fwd -m comment --comment tdfixed:syn-flood -j DROP",
+				"-i tdvpn0 -p icmp --icmp-type echo-request -m hashlimit --hashlimit-above 5/sec --hashlimit-burst 10 --hashlimit-name td-ping-fwd -m comment --comment tdfixed:ping-limit -j DROP",
 				dropAll,
 			},
 		},
@@ -317,7 +315,7 @@ func TestRuleShapes(t *testing.T) {
 			if err := newLegacyGuard(f).InstallFirewall(context.Background(), tt.firewall, uiPort); err != nil {
 				t.Fatalf("InstallFirewall: %v", err)
 			}
-			assertCalls(t, f.calls, slices.Concat(detectLegacy,
+			assertCalls(t, f.calls, slices.Concat(detectInstall,
 				reinstallCalls(state, tt.input, tt.forward, tt.prerouting, tt.postrouting)))
 		})
 	}
@@ -431,7 +429,7 @@ func TestInstallFirewallChecksTheLAN(t *testing.T) {
 	f := newFakeRunner()
 	err := newLegacyGuard(f).InstallFirewall(context.Background(), outside, uiPort)
 	assertValidationField(t, err, "rules[0].destination")
-	assertCalls(t, f.calls, slices.Concat(detectLegacy, []string{addrShow}))
+	assertCalls(t, f.calls, slices.Concat(detectInstall, []string{addrShow}))
 
 	disabled := rulesOnly(changed(outside.Rules[0], func(r *domain.FirewallRule) { r.Enabled = false }))
 	f = newFakeRunner()
@@ -446,14 +444,16 @@ func TestInstallFirewallChecksTheLAN(t *testing.T) {
 	if err := g.InstallFirewall(context.Background(), testFirewall, uiPort); err == nil || !strings.Contains(err.Error(), "detect LAN subnets") {
 		t.Fatalf("err = %v, want the LAN detection failure", err)
 	}
-	if slices.ContainsFunc(f.calls, func(c string) bool { return strings.Contains(c, "TUNNELDECK") }) {
+	if slices.ContainsFunc(f.calls, func(c string) bool {
+		return strings.Contains(c, "TUNNELDECK") && !strings.Contains(c, commentProbeChain)
+	}) {
 		t.Errorf("chains touched without LAN subnets: %v", f.calls)
 	}
 }
 
 func TestConntrackFallsBackToStateMatch(t *testing.T) {
 	const conntrackRule = legacy + "-A TUNNELDECK-INPUT " + established
-	const stateRule = legacy + "-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
+	const stateRule = legacy + "-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -m comment --comment tdfixed:established -j ACCEPT"
 	f := newFakeRunner()
 	scriptInstalled(f)
 	f.on(conntrackRule, fail("iptables v1.8.7 (legacy): Couldn't load match `conntrack':No such file or directory"))
@@ -463,13 +463,13 @@ func TestConntrackFallsBackToStateMatch(t *testing.T) {
 		t.Fatalf("first install: %v", err)
 	}
 	calls := f.takeCalls()
-	afterListings := len(detectLegacy) + 3
+	afterListings := len(detectInstall) + 3
 	assertCalls(t, calls[afterListings:afterListings+4], []string{
 		legacy + "-A TUNNELDECK-INPUT " + uiPortDrop, conntrackRule, stateRule, legacy + "-A TUNNELDECK-INPUT -j DROP",
 	})
 	for _, want := range []string{
-		legacy + "-A TUNNELDECK-FORWARD -i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -j ACCEPT",
-		natPrefix + "-A TUNNELDECK-POSTROUTING ! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -j MASQUERADE",
+		legacy + "-A TUNNELDECK-FORWARD -i tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m comment --comment tdrule:r1 -j ACCEPT",
+		natPrefix + "-A TUNNELDECK-POSTROUTING ! -o tdvpn0 -d 192.168.2.2/32 -p udp --dport 500 -m comment --comment tdrule:r1 -j MASQUERADE",
 	} {
 		if !slices.Contains(calls, want) {
 			t.Errorf("the state match cannot express DNAT; want %q in %v", want, calls)
@@ -490,7 +490,7 @@ func TestConntrackAndStateBothFail(t *testing.T) {
 	f := newFakeRunner()
 	scriptInstalled(f)
 	f.on(legacy+"-A TUNNELDECK-INPUT "+established, fail("no conntrack")).
-		on(legacy+"-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT", fail("no state"))
+		on(legacy+"-A TUNNELDECK-INPUT -m state --state ESTABLISHED,RELATED -m comment --comment tdfixed:established -j ACCEPT", fail("no state"))
 	err := newLegacyGuard(f).InstallFirewall(context.Background(), domain.Firewall{}, uiPort)
 	if err == nil || !strings.Contains(err.Error(), "no conntrack") || !strings.Contains(err.Error(), "no state") {
 		t.Fatalf("err = %v, want both match failures", err)
@@ -501,7 +501,7 @@ func TestConntrackAndStateBothFail(t *testing.T) {
 }
 
 func TestInstallFirewallFailureLeavesDropInPlace(t *testing.T) {
-	const failing = legacy + "-A TUNNELDECK-INPUT -p tcp --dport 22 -j ACCEPT"
+	const failing = legacy + "-A TUNNELDECK-INPUT -p tcp --dport 22 -m comment --comment tdrule:ssh -j ACCEPT"
 	f := newFakeRunner()
 	scriptFresh(f)
 	f.on(failing, fail("iptables: Resource temporarily unavailable."))
