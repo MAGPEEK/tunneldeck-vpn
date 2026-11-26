@@ -186,9 +186,10 @@ func (r settingsReader) key(field, text string, required bool) Key {
 }
 
 // address reads the interface address, an IPv4 address with its prefix
-// length; a plain address means /32. It becomes the VPN IP. Its network
-// must stay clear of the host's LAN: the kernel adds a route for it, and
-// the host would answer for the address in the LAN.
+// length as wg-quick files write it; a plain address means /32. It becomes
+// the VPN IP and is put on the device as /32, so the prefix length adds no
+// route. The address must lie outside the host's LAN, or the host would
+// answer for it in the LAN.
 func (r settingsReader) address(lan []netip.Prefix) netip.Prefix {
 	text := r.str(KeyAddress)
 	if text == "" {
@@ -200,7 +201,7 @@ func (r settingsReader) address(lan []netip.Prefix) netip.Prefix {
 	case !ok:
 		r.errs.AddIssue(KeyAddress, domain.Issue("wireguard_address_invalid"),
 			"must be an IPv4 address with its prefix length, such as 10.66.0.2/32")
-	case slices.ContainsFunc(lan, prefix.Masked().Overlaps):
+	case slices.ContainsFunc(lan, func(subnet netip.Prefix) bool { return subnet.Contains(prefix.Addr()) }):
 		r.errs.AddIssue(KeyAddress, domain.Issue("wireguard_address_overlaps_lan", "subnets", describeNetworks(lan)),
 			"overlaps a LAN subnet of the host ("+describeNetworks(lan)+")")
 	}

@@ -44,6 +44,11 @@ const (
 	ErrorCodeProfileInvalid ErrorCode = "profile_invalid"
 	// ErrorCodeStartFailed: the driver could not start the tunnel.
 	ErrorCodeStartFailed ErrorCode = "start_failed"
+	// ErrorCodeEndpointInTunnel: the server's address lies in a network
+	// the profile routes through the tunnel, so the tunnel's own packets
+	// would loop into it. Retried, because the name may resolve elsewhere
+	// later (DynDNS).
+	ErrorCodeEndpointInTunnel ErrorCode = "endpoint_in_tunnel"
 )
 
 // StateEvent reports a connection state change. VPNIP, Remote and Since are

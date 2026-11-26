@@ -63,8 +63,13 @@ type variant struct {
 	remoteHost netip.Addr
 	// dataCipher is the data-channel cipher the status must report.
 	dataCipher string
-	settings   func(pki) map[string]any
-	secrets    func(p pki, password string) map[string]string
+	// hostAddress is true when the driver puts the VPN IP on tdvpn0 as a
+	// host address (/32, WireGuard): the main table gets no connected
+	// route, and the host reaches the server's tunnel address only from the
+	// VPN IP, through table 7194.
+	hostAddress bool
+	settings    func(pki) map[string]any
+	secrets     func(p pki, password string) map[string]string
 }
 
 var variants = []variant{

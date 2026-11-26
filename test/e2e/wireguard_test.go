@@ -36,12 +36,13 @@ const everything = "0.0.0.0/0"
 // wireGuardVariant describes server-wg for the checks shared with the
 // OpenVPN variants. Its profiles are built by wireGuardScenario.
 var wireGuardVariant = variant{
-	name:       "D-wireguard",
-	service:    wireGuardService,
-	pool:       netip.MustParsePrefix("10.94.4.0/24"),
-	gateway:    netip.MustParseAddr("10.94.4.1"),
-	remoteHost: netip.MustParseAddr("10.99.0.1"),
-	dataCipher: "ChaCha20-Poly1305",
+	name:        "D-wireguard",
+	service:     wireGuardService,
+	pool:        netip.MustParsePrefix("10.94.4.0/24"),
+	gateway:     netip.MustParseAddr("10.94.4.1"),
+	remoteHost:  netip.MustParseAddr("10.99.0.1"),
+	dataCipher:  "ChaCha20-Poly1305",
+	hostAddress: true,
 }
 
 // keyPair is a WireGuard key pair from POST /api/drivers/wireguard/keypair.

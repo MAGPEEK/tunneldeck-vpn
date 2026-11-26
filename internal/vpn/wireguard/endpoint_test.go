@@ -42,15 +42,27 @@ func TestParseEndpoint(t *testing.T) {
 	}
 }
 
-// fakeResolver answers from a map and counts the lookups.
+// fakeResolver answers from a map and counts the lookups. With hold set,
+// a lookup first signals entered and then waits until hold is closed or
+// its context ends, like a name server that does not answer.
 type fakeResolver struct {
 	answers map[string][]netip.Addr
 	err     error
 	lookups int
+	hold    chan struct{}
+	entered chan struct{}
 }
 
-func (r *fakeResolver) LookupNetIP(_ context.Context, network, host string) ([]netip.Addr, error) {
+func (r *fakeResolver) LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error) {
 	r.lookups++
+	if r.hold != nil {
+		r.entered <- struct{}{}
+		select {
+		case <-r.hold:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if network != "ip" {
 		return nil, errors.New("unexpected network " + network)
 	}

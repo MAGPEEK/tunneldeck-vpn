@@ -181,7 +181,8 @@
       "firewall_failed": "The firewall rules could not be applied",
       "routing_failed": "Routing through the tunnel failed",
       "profile_invalid": "The profile is incomplete or invalid",
-      "start_failed": "The VPN process could not be started"
+      "start_failed": "The VPN process could not be started",
+      "endpoint_in_tunnel": "The server address lies in a network routed through the tunnel"
     },
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
     "profileMissing": "This profile no longer exists.",

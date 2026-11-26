@@ -91,7 +91,8 @@ Variant D (`D-wireguard`, on every backend) runs steps 3–9 with these differen
 
 - The profile is created from form fields; `GET /api/profiles/{id}` shows `secrets.privateKey.hasValue` and `derived.publicKey` equal to the generated public key, never the private key.
 - Connect means the first handshake. The status names `ChaCha20-Poly1305` as data cipher, no control channel, no message code and no `routingWarning`; no log line holds the private key.
-- Step 5 also covers the allowed IPs: `10.99.0.0/24` becomes `7180: from all to 10.99.0.0/24 lookup 7194`, `0.0.0.0/0` adds no rule and leaves the main table alone.
+- Step 4 pings from the VPN IP (`ping -I`): the address sits on `tdvpn0` as /32, so the main table has no route to the tunnel subnet.
+- Step 5: the main table does not change at all (no connected route, SPEC §18). The allowed IPs: `10.99.0.0/24` becomes `7180: from all to 10.99.0.0/24 lookup 7194`, `0.0.0.0/0` adds no rule.
 - Step 8 also checks that `tdvpn0` is gone.
 - Step 9 uses a second profile imported from a wg-quick `.conf` (`POST /api/profiles/import`) with the same keys plus `DNS`, an IPv6 address and `::/0`, without `PersistentKeepalive`: the draft has the notes `dns_ignored`, `ipv6_ignored` and `keepalive_default`, nothing rejected or missing, and connects.
 

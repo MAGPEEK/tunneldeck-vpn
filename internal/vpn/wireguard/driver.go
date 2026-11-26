@@ -137,25 +137,43 @@ func (*Driver) Derive(p domain.Profile) map[string]string {
 // when the device failed.
 func (d *Driver) Events() <-chan domain.Event { return d.events }
 
-// Start resolves the endpoint, creates the device on the tunnel interface,
-// gives the interface its address, MTU and link and configures the server
-// as the device's peer. Waiting for the handshake runs in the background
-// and is reported through Events.
+// Start checks the profile and returns; everything that may wait runs in
+// the background (tunnel.run), so the caller stays responsive: resolving
+// the endpoint, creating the device on the tunnel interface, giving the
+// interface its address, MTU and link and configuring the server as the
+// device's peer, then waiting for the handshake. Failures of these steps
+// are reported through Events as an "error" state.
 func (d *Driver) Start(ctx context.Context, p domain.Profile, s vpn.Secrets) error {
 	if err := d.claimStart(); err != nil {
 		return err
 	}
-	t, err := d.launch(ctx, p, s)
+	t, err := d.prepare(ctx, p, s)
 	if err != nil {
 		d.finish()
 		return fmt.Errorf("start wireguard: %w", err)
 	}
 	if d.attach(t) {
-		t.stop()
+		d.finish()
 		return nil
 	}
-	t.begin()
+	go t.run()
 	return nil
+}
+
+// prepare checks the profile and the options and returns the tunnel to
+// run.
+func (d *Driver) prepare(ctx context.Context, p domain.Profile, s vpn.Secrets) (*tunnel, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	config, problems := parseProfile(p, s, nil)
+	if err := problems.OrNil(); err != nil {
+		return nil, err
+	}
+	if d.opts.Runner == nil || d.opts.DeviceName == "" {
+		return nil, errors.New("the driver has no device name or command runner")
+	}
+	return newTunnel(d, config), nil
 }
 
 func (d *Driver) claimStart() error {
@@ -171,35 +189,13 @@ func (d *Driver) claimStart() error {
 	return nil
 }
 
-func (d *Driver) launch(ctx context.Context, p domain.Profile, s vpn.Secrets) (*tunnel, error) {
-	config, problems := parseProfile(p, s, nil)
-	if err := problems.OrNil(); err != nil {
-		return nil, err
-	}
-	if d.opts.Runner == nil || d.opts.DeviceName == "" {
-		return nil, errors.New("the driver has no device name or command runner")
-	}
-	server, err := resolve(ctx, d.opts.Resolver, config.endpoint)
-	if err != nil {
-		return nil, err
-	}
-	device, err := d.opts.Opener.Open(d.opts.DeviceName, config.mtu, d.deviceLog())
-	if err != nil {
-		return nil, err
-	}
-	if err := d.configure(ctx, device, config, server); err != nil {
-		device.Close()
-		return nil, err
-	}
-	return newTunnel(d, device, config, server), nil
-}
-
 // configure gives the interface its address, MTU and link through ip and
-// the device its keys and peer through the UAPI. The main routing table is
-// left alone; the kernel adds only the connected route of the address.
+// the device its keys and peer through the UAPI. The address is added as
+// a host address (/32), so the kernel adds no route to the main table: the
+// tunnel is reached through table 7194 only (policy rules of netguard).
 func (d *Driver) configure(ctx context.Context, device Device, c profileConfig, server netip.AddrPort) error {
 	name := d.opts.DeviceName
-	if _, err := d.opts.Runner.Run(ctx, "ip", "address", "add", c.address.String(), "dev", name); err != nil {
+	if _, err := d.opts.Runner.Run(ctx, "ip", "address", "add", hostAddress(c.address).String(), "dev", name); err != nil {
 		return fmt.Errorf("set the tunnel address: %w", err)
 	}
 	if _, err := d.opts.Runner.Run(ctx, "ip", "link", "set", "dev", name, "mtu", strconv.Itoa(c.mtu), "up"); err != nil {
@@ -209,6 +205,11 @@ func (d *Driver) configure(ctx context.Context, device Device, c profileConfig, 
 		return fmt.Errorf("configure the WireGuard device: %w", err)
 	}
 	return nil
+}
+
+// hostAddress is the interface address as a single-address prefix.
+func hostAddress(address netip.Prefix) netip.Prefix {
+	return netip.PrefixFrom(address.Addr(), address.Addr().BitLen())
 }
 
 // deviceLog forwards the device's log lines to Events without waiting

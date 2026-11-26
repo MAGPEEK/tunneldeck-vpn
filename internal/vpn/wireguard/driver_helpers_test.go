@@ -155,12 +155,48 @@ func (h *driverHarness) start(p domain.Profile) error {
 	return h.driver.Start(context.Background(), p, vpn.Secrets(p.Secrets))
 }
 
+// mustStart starts a valid profile and waits until the setup in the
+// background has armed the first check.
 func (h *driverHarness) mustStart() {
 	h.t.Helper()
-	if err := h.start(validProfile(h.t, nil)); err != nil {
+	h.mustStartProfile(validProfile(h.t, nil))
+}
+
+func (h *driverHarness) mustStartProfile(p domain.Profile) {
+	h.t.Helper()
+	if err := h.start(p); err != nil {
 		h.t.Fatalf("Start: %v", err)
 	}
+	h.clock.WaitForTimers(h.t, 1)
 	h.drain()
+}
+
+// failedState waits until Events is closed and returns the last state,
+// which must be an error.
+func (h *driverHarness) failedState() domain.StateEvent {
+	h.t.Helper()
+	h.assertEventsClosed()
+	got := states(h.taken())
+	if len(got) == 0 || got[len(got)-1].State != domain.StateError {
+		h.t.Fatalf("states = %+v, want an error last", got)
+	}
+	return got[len(got)-1]
+}
+
+// stopWithin calls Stop and fails the test when it does not return within
+// limit.
+func (h *driverHarness) stopWithin(limit time.Duration) {
+	h.t.Helper()
+	stopped := make(chan error, 1)
+	go func() { stopped <- h.driver.Stop(context.Background()) }()
+	select {
+	case err := <-stopped:
+		if err != nil {
+			h.t.Errorf("Stop = %v", err)
+		}
+	case <-time.After(limit):
+		h.t.Fatalf("Stop did not return within %s", limit)
+	}
 }
 
 // advance moves the clock poll by poll, reading the events in between so

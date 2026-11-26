@@ -30,7 +30,8 @@ func TestDriverIdentity(t *testing.T) {
 
 func TestDriverStartConfiguresTheDevice(t *testing.T) {
 	h := newDriverHarness(t)
-	h.mustStart()
+	// The prefix length of the address adds no route: the device gets /32.
+	h.mustStartProfile(validProfile(t, func(s domain.Settings, _ map[string]string) { s.SetString(KeyAddress, "10.66.0.2/24") }))
 
 	device := h.device.snapshot()
 	if device.name != testDevice || device.mtu != 1420 {
@@ -57,58 +58,65 @@ func TestDriverStartConfiguresTheDevice(t *testing.T) {
 	}
 }
 
-func TestDriverStartFailures(t *testing.T) {
+func TestDriverStartRejectsAnInvalidProfile(t *testing.T) {
+	h := newDriverHarness(t)
+	p := validProfile(t, func(s domain.Settings, _ map[string]string) { delete(s, KeyAddress) })
+	if err := h.start(p); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("Start = %v, want a validation error", err)
+	}
+	h.assertEventsClosed()
+	if h.opener.opened != 0 || h.resolver.lookups != 0 {
+		t.Errorf("opened %d devices and resolved %d times, want nothing", h.opener.opened, h.resolver.lookups)
+	}
+}
+
+// TestDriverSetupFailures: everything after the profile check runs in the
+// background, so its failures arrive as an error state.
+func TestDriverSetupFailures(t *testing.T) {
 	tests := []struct {
-		name       string
-		profile    func(t *testing.T) domain.Profile
-		prepare    func(h *driverHarness)
-		validation bool
-		opened     bool
-		closed     bool
+		name    string
+		prepare func(h *driverHarness)
+		code    domain.ErrorCode
+		opened  bool
+		closed  bool
 	}{
 		{
-			name: "invalid profile",
-			profile: func(t *testing.T) domain.Profile {
-				return validProfile(t, func(s domain.Settings, _ map[string]string) { delete(s, KeyAddress) })
-			},
-			validation: true,
+			name:    "endpoint does not resolve",
+			prepare: func(h *driverHarness) { h.resolver.err = errors.New("no such host") },
+			code:    domain.ErrorCodeStartFailed,
 		},
 		{
-			name:    "endpoint does not resolve",
-			profile: func(t *testing.T) domain.Profile { return validProfile(t, nil) },
-			prepare: func(h *driverHarness) { h.resolver.err = errors.New("no such host") },
+			name: "endpoint resolves into a remote network",
+			prepare: func(h *driverHarness) {
+				h.resolver.answers["vpn.example.com"] = []netip.Addr{netip.MustParseAddr("10.20.1.1")}
+			},
+			code: domain.ErrorCodeEndpointInTunnel,
 		},
 		{
 			name:    "device cannot be created",
-			profile: func(t *testing.T) domain.Profile { return validProfile(t, nil) },
 			prepare: func(h *driverHarness) { h.opener.err = errors.New("no /dev/net/tun") },
-			opened:  true,
+			code:    domain.ErrorCodeStartFailed, opened: true,
 		},
 		{
 			name:    "address cannot be set",
-			profile: func(t *testing.T) domain.Profile { return validProfile(t, nil) },
 			prepare: func(h *driverHarness) { h.runner.failOn = "address add" },
-			opened:  true, closed: true,
+			code:    domain.ErrorCodeStartFailed, opened: true, closed: true,
 		},
 		{
 			name:    "configuration refused",
-			profile: func(t *testing.T) domain.Profile { return validProfile(t, nil) },
 			prepare: func(h *driverHarness) { h.device.setErr = errors.New("UAPI error 22") },
-			opened:  true, closed: true,
+			code:    domain.ErrorCodeStartFailed, opened: true, closed: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newDriverHarness(t)
-			if tt.prepare != nil {
-				tt.prepare(h)
+			tt.prepare(h)
+			if err := h.start(validProfile(t, nil)); err != nil {
+				t.Fatalf("Start = %v, want the failure as an event", err)
 			}
-			err := h.start(tt.profile(t))
-			if err == nil {
-				t.Fatal("Start succeeded")
-			}
-			if got := errors.Is(err, domain.ErrValidation); got != tt.validation {
-				t.Errorf("validation error = %v: %v", got, err)
+			if got := h.failedState(); got.Code != tt.code || !strings.HasPrefix(got.Message, "starting the WireGuard tunnel failed: ") {
+				t.Errorf("error state = %+v, want code %s", got, tt.code)
 			}
 			if got := h.opener.opened > 0; got != tt.opened {
 				t.Errorf("device opened = %v", got)
@@ -116,11 +124,29 @@ func TestDriverStartFailures(t *testing.T) {
 			if got := h.device.snapshot().closed; got != tt.closed {
 				t.Errorf("device closed = %v", got)
 			}
-			h.assertEventsClosed()
 			if len(h.clock.Pending()) != 0 {
 				t.Errorf("timers left: %v", h.clock.Pending())
 			}
 		})
+	}
+}
+
+// TestDriverStartDoesNotWaitForTheNameServer: Start returns while the
+// endpoint is still being resolved, and Stop ends that resolution.
+func TestDriverStartDoesNotWaitForTheNameServer(t *testing.T) {
+	h := newDriverHarness(t)
+	h.resolver.hold, h.resolver.entered = make(chan struct{}), make(chan struct{}, 1)
+	if err := h.start(validProfile(t, nil)); err != nil {
+		t.Fatal(err)
+	}
+	<-h.resolver.entered
+	h.stopWithin(5 * time.Second)
+	h.assertEventsClosed()
+	if got := states(h.taken()); len(got) != 1 || got[0].State != domain.StateDisconnected {
+		t.Errorf("states = %+v, want disconnected", got)
+	}
+	if h.opener.opened != 0 {
+		t.Error("a device was opened after the stop")
 	}
 }
 
@@ -359,5 +385,92 @@ func TestDriverDropsDeviceLinesWhenNobodyReads(t *testing.T) {
 	h.drain()
 	if n := len(h.taken()); n != eventBuffer {
 		t.Errorf("read %d events, want the buffer of %d", n, eventBuffer)
+	}
+}
+
+// connectAndGoSilent connects h, lets the server stop answering while the
+// device keeps sending, and advances to just before the tunnel counts as
+// lost; the next three checks find it lost.
+func connectAndGoSilent(h *driverHarness) {
+	h.mustStart()
+	h.handshake(100, 200)
+	h.advance(pollInterval)
+	h.sends(900)
+	h.advance(handshakeTimeout - 2*pollInterval)
+	h.taken()
+}
+
+func TestDriverFailsWhenTheEndpointMovesIntoARemoteNetwork(t *testing.T) {
+	h := newDriverHarness(t)
+	connectAndGoSilent(h)
+	h.resolver.answers["vpn.example.com"] = []netip.Addr{netip.MustParseAddr("10.20.0.7")}
+	h.advance(3 * pollInterval)
+	got := h.failedState()
+	if got.Code != domain.ErrorCodeEndpointInTunnel || !strings.Contains(got.Message, "10.20.0.0/16") {
+		t.Errorf("error state = %+v, want endpoint_in_tunnel naming the network", got)
+	}
+	if !h.device.snapshot().closed {
+		t.Error("the device was not closed")
+	}
+}
+
+// TestDriverStopDoesNotWaitForTheNameServer: resolving the endpoint again
+// runs without the lock, so Stop returns while the name server is silent.
+func TestDriverStopDoesNotWaitForTheNameServer(t *testing.T) {
+	h := newDriverHarness(t)
+	connectAndGoSilent(h)
+	h.resolver.hold, h.resolver.entered = make(chan struct{}), make(chan struct{}, 1)
+	advanced := make(chan struct{})
+	go func() {
+		defer close(advanced)
+		for range 3 {
+			h.clock.Advance(pollInterval)
+		}
+	}()
+	<-h.resolver.entered
+	h.stopWithin(5 * time.Second)
+	<-advanced
+	h.assertEventsClosed()
+	got := states(h.taken())
+	if len(got) != 2 || got[0].State != domain.StateReconnecting || got[1].State != domain.StateDisconnected {
+		t.Errorf("states = %+v, want reconnecting, then disconnected", got)
+	}
+	if sets := h.device.snapshot().sets; len(sets) != 1 {
+		t.Errorf("UAPI sets after the stop: %q", sets[1:])
+	}
+}
+
+// TestDriverAgesHandshakesByItsOwnClock: the device reports handshake times
+// on the wall clock, which NTP may step; their age counts from when the
+// driver saw them change.
+func TestDriverAgesHandshakesByItsOwnClock(t *testing.T) {
+	h := newDriverHarness(t)
+	h.mustStart()
+	// The wall clock was 10 minutes behind at the handshake.
+	h.device.set(func(f *fakeDevice) {
+		f.stats = peerStats{lastHandshake: h.clock.Now().Add(-10 * time.Minute), txBytes: 200}
+	})
+	h.advance(pollInterval)
+	if got := states(h.taken()); len(got) != 1 || got[0].State != domain.StateConnected {
+		t.Fatalf("states = %+v, want connected", got)
+	}
+	h.sends(900)
+	h.advance(handshakeTimeout - 2*pollInterval)
+	if got := states(h.taken()); len(got) != 0 {
+		t.Fatalf("states = %+v, want connected for 180 s after the handshake was seen", got)
+	}
+
+	// The clock is set back: the next handshake has an earlier time, and
+	// still counts as new.
+	h.device.set(func(f *fakeDevice) { f.stats.lastHandshake = h.clock.Now().Add(-time.Hour) })
+	h.advance(pollInterval)
+	h.advance(handshakeTimeout - 2*pollInterval)
+	if got := states(h.taken()); len(got) != 0 {
+		t.Fatalf("states = %+v, want the earlier handshake taken as new", got)
+	}
+	h.sends(1800)
+	h.advance(4 * pollInterval)
+	if got := states(h.taken()); len(got) != 1 || got[0].State != domain.StateReconnecting {
+		t.Errorf("states = %+v, want reconnecting 180 s after the last handshake was seen", got)
 	}
 }

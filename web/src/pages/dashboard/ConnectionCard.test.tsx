@@ -225,6 +225,10 @@ describe('ConnectionCard', () => {
     ['auth_failed', 'The server rejected the credentials – AUTH_FAILED'],
     ['firewall_failed', 'The firewall rules could not be applied – AUTH_FAILED'],
     ['start_failed', 'The VPN process could not be started – AUTH_FAILED'],
+    [
+      'endpoint_in_tunnel',
+      'The server address lies in a network routed through the tunnel – AUTH_FAILED',
+    ],
     ['something_new', 'AUTH_FAILED'],
   ])('shows the error message with the translated code %s and Try again', (code, text) => {
     const { onConnect } = renderCard({

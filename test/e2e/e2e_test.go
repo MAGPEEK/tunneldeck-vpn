@@ -203,12 +203,17 @@ func (sc *scenario) checkNegotiation(t *testing.T) {
 }
 
 // checkTraffic pings the server's tunnel address from the host side and
-// expects the byte counters to grow by at least the ping payload.
+// expects the byte counters to grow by at least the ping payload. Without
+// a connected route (hostAddress) the ping leaves from the VPN IP.
 func (sc *scenario) checkTraffic(t *testing.T) {
 	t.Helper()
 	const count, size = 5, 1000
 	before := sc.td.status(t)
-	sc.td.exec(t, "ping", "-c", strconv.Itoa(count), "-s", strconv.Itoa(size), "-W", "2", sc.variant.gateway.String())
+	ping := []string{"ping", "-c", strconv.Itoa(count), "-s", strconv.Itoa(size), "-W", "2"}
+	if sc.variant.hostAddress {
+		ping = append(ping, "-I", before.VPNIP)
+	}
+	sc.td.exec(t, append(ping, sc.variant.gateway.String())...)
 	minimum := uint64(count * size)
 	sc.td.waitFor(t, "byte counters to grow", 20*time.Second, func(s connectionStatus) bool {
 		return s.BytesIn >= before.BytesIn+minimum && s.BytesOut >= before.BytesOut+minimum
@@ -231,15 +236,19 @@ func readRouting(t *testing.T, td *tunnelDeck) routing {
 }
 
 // checkRouting: the main table differs from before only by the kernel's
-// connected route of the tunnel subnet (SPEC §6); rule 7194 sends traffic
-// from the VPN IP to table 7194, whose default route is the tunnel.
+// connected route of the tunnel subnet (SPEC §6), and not at all for a
+// host address (WireGuard, SPEC §18); rule 7194 sends traffic from the VPN
+// IP to table 7194, whose default route is the tunnel.
 func (sc *scenario) checkRouting(t *testing.T, vpnIP netip.Addr) {
 	t.Helper()
 	now := readRouting(t, sc.td)
-	kernelRoute := fmt.Sprintf("%s dev tdvpn0 proto kernel scope link src %s", sc.variant.pool, vpnIP)
+	var kernelRoutes []string
+	if !sc.variant.hostAddress {
+		kernelRoutes = append(kernelRoutes, fmt.Sprintf("%s dev tdvpn0 proto kernel scope link src %s", sc.variant.pool, vpnIP))
+	}
 	added, removed := difference(now.main, sc.before.main), difference(sc.before.main, now.main)
-	if len(removed) > 0 || !slices.Equal(added, []string{kernelRoute}) {
-		t.Errorf("main table changed: added %q, removed %q; want only %q added", added, removed, kernelRoute)
+	if len(removed) > 0 || !slices.Equal(added, kernelRoutes) {
+		t.Errorf("main table changed: added %q, removed %q; want only %q added", added, removed, kernelRoutes)
 	}
 	wantRules := []string{fmt.Sprintf("7194: from %s lookup 7194", vpnIP)}
 	if sc.variant.remoteHost.IsValid() {
