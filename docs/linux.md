@@ -86,6 +86,8 @@ ip rule show; ip route show table 7194
 - both hold rules: the one with more; the System page and the log warn that the host mixes backends, whose other rules still apply,
 - neither holds rules: nf_tables.
 
+What each System page entry means and which module fixes a warning: [System page checks explained](system-checks.md).
+
 The iptables self-check on the System page and the start log (`iptables backend binary=... reason=...`) name the choice and the reason. To override it, set `TUNNELDECK_IPTABLES` to `nft` or `legacy` (default `auto`).
 
 On a shared backend the rules still interact, in a fixed order: TunnelDeck-VPN inserts its jump at position 1 of `INPUT`, so for traffic arriving on `tdvpn0` its chain decides first and that decision wins. A port opened by an inbound rule to this device's own LAN address (or the remote-access port) is reachable even if the host firewall would drop it; everything else from the tunnel is dropped even if the host firewall allows it. Traffic on other interfaces never enters TunnelDeck-VPN's chains. Rules in another *table* (firewalld's own nftables table, or the other backend on a mixed host) are evaluated separately and can still drop what TunnelDeck-VPN accepts.

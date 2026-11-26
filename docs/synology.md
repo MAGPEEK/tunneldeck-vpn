@@ -147,6 +147,8 @@ DSM kernels (DSM 7.2 on the DS723+ runs Linux 4.4) do not ship every iptables mo
 
 The switches stay as you set them, so the protection works as soon as the module is there. Each warning names the missing module and the fallback in use. *Check on your NAS:* `sudo modprobe xt_hashlimit` (likewise `xt_limit`, `xt_TCPMSS`, `ipt_REJECT`); if the module does not exist on DSM, the warning stays and the firewall keeps working without that protection. After loading a module, restart the container.
 
+Every System page entry, with the module to load and the DSM steps, is explained in [System page checks explained](system-checks.md).
+
 ### An IPsec router in the local LAN
 
 Reference case (SPEC §16.2): an IPsec router in the local LAN, for example at `192.168.1.2`, builds its IPsec tunnels through the tunnel's public address.

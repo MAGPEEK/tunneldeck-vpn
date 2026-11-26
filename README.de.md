@@ -47,12 +47,13 @@ services:
 | 8194 | HTTP | nur LAN, nie durch den Tunnel | Weboberfläche. Ändern mit `TUNNELDECK_LISTEN=<LAN-IP>:<Port>`, z. B. `192.168.1.10:9000`. |
 | 8443 (Vorgabe, frei wählbar) | HTTPS | LAN und VPN-Tunnel | Optionaler Fernzugriff auf die Weboberfläche. Standardmäßig aus; einschalten unter **System → Fernzugriff**. Fernzugriff über das VPN nur per HTTPS, nie per reinem HTTP. |
 
-Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer du erlaubst ihn auf der Seite **Firewall**.
+Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer Sie erlauben ihn auf der Seite **Firewall**.
 
 ## Dokumentation
 
 - [Einrichtung auf einem Linux-Docker-Host](docs/linux.de.md): TUN-Gerät, Firewall-Werkzeuge (ufw, firewalld), HTTPS, Sicherung, Aktualisierung
 - [Einrichtung auf einer Synology](docs/synology.de.md): TUN-Modul, Container Manager, Firewall, HTTPS, Sicherung, Aktualisierung
+- [Systemprüfungen erklärt](docs/system-checks.de.md): was jeder Eintrag des Selbsttests bedeutet und wie Sie ihn unter Linux und DSM beheben
 - [Umzug vom Teltonika RUT240](docs/migrate-from-rut240.de.md): Felder und zusätzliche Optionen, Beispiel mdex
 - [Releases](docs/RELEASING.md) (englisch): Versions-Tags, Image bauen und veröffentlichen
 - [Spezifikation](docs/SPEC.md) und [OpenVPN-Notizen](docs/openvpn-notes.md) (englisch)

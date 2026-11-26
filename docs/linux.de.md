@@ -86,6 +86,8 @@ ip rule show; ip route show table 7194
 - beide enthalten Regeln: das mit mehr Regeln; die Seite System und das Log warnen, dass der Host beide Backends mischt und die Regeln des anderen weiter gelten,
 - keins enthält Regeln: nf_tables.
 
+Was jeder Eintrag der Seite System bedeutet und welches Modul eine Warnung behebt: [Systemprüfungen erklärt](system-checks.de.md).
+
 Der iptables-Selbsttest auf der Seite System und das Start-Log (`iptables backend binary=... reason=...`) nennen die Wahl und den Grund. Wer sie übersteuern will, setzt `TUNNELDECK_IPTABLES` auf `nft` oder `legacy` (Standard `auto`).
 
 Auch im gemeinsamen Backend wirken die Regeln zusammen, in fester Reihenfolge: TunnelDeck-VPN setzt seinen Sprung an Position 1 von `INPUT`, für Verkehr, der über `tdvpn0` ankommt, entscheidet also zuerst seine Kette, und diese Entscheidung gilt. Ein mit einer eingehenden Regel an die eigene LAN-Adresse dieses Geräts geöffneter Port (oder der Port des Fernzugriffs) ist erreichbar, auch wenn die Host-Firewall ihn verwerfen würde; alles andere aus dem Tunnel wird verworfen, auch wenn die Host-Firewall es erlaubt. Verkehr auf anderen Schnittstellen läuft nie durch die Ketten von TunnelDeck-VPN. Regeln in einer anderen *Tabelle* (die eigene nftables-Tabelle von firewalld oder das andere Backend auf einem gemischten Host) werden getrennt ausgewertet und können verwerfen, was TunnelDeck-VPN annimmt.

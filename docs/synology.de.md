@@ -147,6 +147,8 @@ DSM-Kernel (DSM 7.2 auf der DS723+ läuft mit Linux 4.4) enthalten nicht jedes i
 
 Die Schalter bleiben so, wie Sie sie gesetzt haben; die Schutzfunktion greift, sobald das Modul vorhanden ist. Jede Warnung nennt das fehlende Modul und den aktiven Ersatz. *Auf der NAS prüfen:* `sudo modprobe xt_hashlimit` (ebenso `xt_limit`, `xt_TCPMSS`, `ipt_REJECT`); gibt es das Modul auf DSM nicht, bleibt die Warnung, und die Firewall arbeitet ohne diese Schutzfunktion weiter. Nach dem Laden eines Moduls den Container neu starten.
 
+Alle Einträge der Seite System, mit dem zu ladenden Modul und den Schritten für DSM: [Systemprüfungen erklärt](system-checks.de.md).
+
 ### Ein IPsec-Router im lokalen LAN
 
 Referenzfall (SPEC §16.2): Ein IPsec-Router im lokalen LAN, zum Beispiel unter `192.168.1.2`, baut seine IPsec-Tunnel über die öffentliche Adresse des Tunnels auf.
