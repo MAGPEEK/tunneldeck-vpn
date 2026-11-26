@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0-alpha.4] - 2026-11-26
+
 ### Changed
 
 - Firewall editor suggestions follow the detected network: "Open a service on this device" and "Block something" prefill the host's first LAN address, address placeholders (device, outbound source, IPsec router) are built from the first detected LAN subnet (e.g. `192.168.2.x` for `192.168.2.0/24`), and "Let a LAN device into the VPN" offers "Whole local LAN (<subnet>)" in one click. Without a detected network the fields show a neutral hint instead of a fixed example address.

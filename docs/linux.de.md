@@ -31,7 +31,7 @@ Ein Verzeichnis anlegen, zum Beispiel `/opt/tunneldeck`, mit dieser `docker-comp
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.2.0-alpha.3
+    image: magpeek/tunneldeck-vpn:0.2.0-alpha.4
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]

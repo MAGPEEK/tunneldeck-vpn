@@ -31,7 +31,7 @@ Create a directory, for example `/opt/tunneldeck`, with this `docker-compose.yml
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.2.0-alpha.3
+    image: magpeek/tunneldeck-vpn:0.2.0-alpha.4
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
