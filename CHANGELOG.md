@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard: Connect, Reconnect and Disconnect sit at the bottom of "Connection details". The "Remote access on" pill is gone; the remote access row shows only its state and port, without the URL. The "VPN address" row shows "VPN IP" and below it "Public IP" (the public address of the profile) instead of the server address, which the connection line already shows.
+
 ## [0.2.0] - 2026-11-26
 
 First release of the 0.2 line, field-tested on a Synology DS723+ with mdex. It contains everything from 0.2.0-alpha.1 to 0.2.0-alpha.6 and the changes below.

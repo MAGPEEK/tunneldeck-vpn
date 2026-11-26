@@ -19,7 +19,6 @@ import { genericErrorMessage } from '../auth/formError';
 import { ImportFailureNotice } from '../profiles/import/ImportFailureNotice';
 import { LoadProfileFileButton } from '../profiles/import/LoadProfileFileButton';
 import { useProfileImport } from '../profiles/import/useProfileImport';
-import { profileServer } from '../profiles/profileText';
 import { ConnectionCard, type ConnectionAction } from './ConnectionCard';
 import styles from './DashboardPage.module.css';
 import { useDashboardItems } from './dashboardItems';
@@ -118,16 +117,17 @@ export function DashboardPage() {
               deviceCount={deviceCount}
               version={system.data?.version}
               showLine={items.isVisible('line')}
-              remoteAccess={remoteAccess.data}
-            />
-            <StatusList
-              status={connection.data}
-              server={activeProfile ? profileServer(activeProfile) : ''}
-              firewall={firewall.data}
-              deviceCount={deviceCount}
-              remoteAccess={remoteAccess.data}
-              publicAddress={activeProfile?.publicAddress}
-              items={items}
+              details={(actions) => (
+                <StatusList
+                  status={connection.data}
+                  firewall={firewall.data}
+                  deviceCount={deviceCount}
+                  remoteAccess={remoteAccess.data}
+                  publicAddress={activeProfile?.publicAddress}
+                  items={items}
+                  footer={actions}
+                />
+              )}
             />
           </>
         )}

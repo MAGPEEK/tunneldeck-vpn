@@ -1,16 +1,13 @@
 import { TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import type { ConnectionStatus } from '../../api/connection';
 import type { FirewallState } from '../../api/firewall';
 import type { Profile } from '../../api/profiles';
-import type { RemoteAccess } from '../../api/remoteAccess';
 import { AdvisoryList } from '../../advisories/AdvisoryList';
 import { Button } from '../../components/Button';
-import { StatePill } from '../../components/StatePill';
 import { translateDynamic } from '../../i18n/dynamic';
-import { remoteAccessActive } from '../../remoteAccess/remoteAccessUrl';
 import { protocolName } from '../profiles/profileText';
 import styles from './ConnectionCard.module.css';
 import { ConnectionLine } from './ConnectionLine';
@@ -31,8 +28,12 @@ export interface ConnectionCardProps {
   version?: string;
   /** Whether the connection line is shown; true unless the user hid it. */
   showLine?: boolean;
-  /** null when this build has no remote access; undefined while loading. */
-  remoteAccess?: RemoteAccess | null;
+  /**
+   * Renders what follows the card (the connection details) with the
+   * Connect, Reconnect and Disconnect buttons as its footer. Without it the
+   * buttons sit at the end of the card.
+   */
+  details?: (actions: ReactNode) => ReactNode;
 }
 
 /** The server's host name without port: from the profile, else from the live remote. */
@@ -59,38 +60,39 @@ export function ConnectionCard(props: ConnectionCardProps) {
   const protocol = protocolName(t, status.protocol ?? profile?.protocol ?? 'openvpn');
   const advisories = idle ? (profile?.advisories ?? []) : status.advisories;
 
+  const actions = (
+    <div className={styles.actions}>
+      <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
+    </div>
+  );
   return (
-    <section className={styles.card} aria-label={t('connection.label')}>
-      <span className="visually-hidden" aria-live="polite" aria-atomic="true">
-        {t(`connection.state.${status.state}`)}
-      </span>
-      {remoteAccessActive(props.remoteAccess) && (
-        <div className={styles.header}>
-          <StatePill tone="accent">{t('connection.remoteAccessOn')}</StatePill>
-        </div>
-      )}
-      {status.state === 'error' && <ErrorLine status={status} />}
-      {status.routingWarning !== undefined && status.state !== 'error' && <RoutingWarning />}
-      {actionError !== undefined && (
-        <p role="alert" className={styles.error}>
-          {actionError}
-        </p>
-      )}
-      {props.showLine !== false && (
-        <ConnectionLine
-          status={status}
-          serverHost={serverHost(profile, status.remote)}
-          protocolLabel={protocol}
-          firewall={props.firewall}
-          deviceCount={props.deviceCount}
-          version={props.version}
-        />
-      )}
-      <div className={styles.actions}>
-        <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
-      </div>
-      <AdvisoryList advisories={advisories} />
-    </section>
+    <>
+      <section className={styles.card} aria-label={t('connection.label')}>
+        <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+          {t(`connection.state.${status.state}`)}
+        </span>
+        {status.state === 'error' && <ErrorLine status={status} />}
+        {status.routingWarning !== undefined && status.state !== 'error' && <RoutingWarning />}
+        {actionError !== undefined && (
+          <p role="alert" className={styles.error}>
+            {actionError}
+          </p>
+        )}
+        {props.showLine !== false && (
+          <ConnectionLine
+            status={status}
+            serverHost={serverHost(profile, status.remote)}
+            protocolLabel={protocol}
+            firewall={props.firewall}
+            deviceCount={props.deviceCount}
+            version={props.version}
+          />
+        )}
+        {!props.details && actions}
+        <AdvisoryList advisories={advisories} />
+      </section>
+      {props.details?.(actions)}
+    </>
   );
 }
 

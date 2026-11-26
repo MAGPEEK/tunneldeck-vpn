@@ -63,6 +63,12 @@
   overflow-wrap: anywhere;
 }
 
+.lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .mono {
   font-family: var(--font-mono);
 }
@@ -90,4 +96,8 @@
 .hide:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
+}
+
+.footer {
+  margin-top: var(--space-4);
 }

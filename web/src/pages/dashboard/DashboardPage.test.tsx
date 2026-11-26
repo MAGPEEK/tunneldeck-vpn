@@ -204,13 +204,10 @@ describe('DashboardPage', () => {
       }),
     );
     expect(await screen.findByText('HTTPS on port 8443')).toBeInTheDocument();
-    expect(screen.getByText('Remote access on').closest('[data-tone]')).toHaveAttribute(
-      'data-tone',
-      'accent',
-    );
+    expect(screen.queryByText('Remote access on')).not.toBeInTheDocument();
   });
 
-  it('links remote access at the public address of the profile while connected', async () => {
+  it('shows active remote access without its URL while connected', async () => {
     renderApp(
       routes({
         'GET /api/profiles': { body: [{ ...profile, publicAddress: '203.0.113.10' }] },
@@ -228,12 +225,13 @@ describe('DashboardPage', () => {
         },
       }),
     );
+    expect(await screen.findByText('HTTPS on port 8443')).toBeInTheDocument();
     expect(
-      await screen.findByRole('link', { name: 'https://203.0.113.10:8443' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('link', { name: 'https://203.0.113.10:8443' }),
+    ).not.toBeInTheDocument();
   });
 
-  it('shows no remote access pill while remote access is off or not listening', async () => {
+  it('shows the last error while remote access is not listening', async () => {
     renderApp(
       routes({
         'GET /api/remote-access': {
@@ -249,7 +247,6 @@ describe('DashboardPage', () => {
       }),
     );
     expect(await screen.findByText('Last error: address already in use')).toBeInTheDocument();
-    expect(screen.queryByText('Remote access on')).not.toBeInTheDocument();
   });
 
   it('links an error to the log page', async () => {

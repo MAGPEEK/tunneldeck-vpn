@@ -119,6 +119,8 @@
         "neutral": "inactive"
       },
       "address": "VPN address (IPv4)",
+      "vpnIp": "VPN IP",
+      "publicIp": "Public IP",
       "connectedSince": "Connected since {{time}}",
       "notConnected": "Not connected",
       "encryption": "Encryption",
@@ -183,8 +185,7 @@
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
     "profileMissing": "This profile no longer exists.",
     "openLog": "Open log for details",
-    "routingWarning": "Routing for forwarded traffic could not be applied; retrying…",
-    "remoteAccessOn": "Remote access on"
+    "routingWarning": "Routing for forwarded traffic could not be applied; retrying…"
   },
   "log": {
     "title": "Log",

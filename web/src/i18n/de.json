@@ -119,6 +119,8 @@
         "neutral": "inaktiv"
       },
       "address": "VPN-Adresse (IPv4)",
+      "vpnIp": "VPN-IP",
+      "publicIp": "Öffentliche IP",
       "connectedSince": "Verbunden seit {{time}}",
       "notConnected": "Nicht verbunden",
       "encryption": "Verschlüsselung",
@@ -183,8 +185,7 @@
     "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
     "profileMissing": "Dieses Profil existiert nicht mehr.",
     "openLog": "Protokoll mit Details öffnen",
-    "routingWarning": "Das Routing für weitergeleiteten Verkehr konnte nicht angewendet werden; neuer Versuch läuft …",
-    "remoteAccessOn": "Fernzugriff aktiv"
+    "routingWarning": "Das Routing für weitergeleiteten Verkehr konnte nicht angewendet werden; neuer Versuch läuft …"
   },
   "log": {
     "title": "Protokoll",

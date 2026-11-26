@@ -32,7 +32,7 @@ function Harness({ status, ...props }: HarnessProps) {
   return (
     <StatusList
       status={status}
-      server="vpn.example.com:1194"
+      publicAddress="46.16.217.194"
       firewall={makeFirewall()}
       deviceCount={3}
       remoteAccess={null}
@@ -71,8 +71,13 @@ describe('StatusList', () => {
       'VPN address (IPv4) (status OK)',
     );
     expect(within(row('address')).getByText(/^Connected since /)).toBeInTheDocument();
-    expect(within(row('address')).getByText('10.8.0.6')).toBeInTheDocument();
-    expect(within(row('address')).getByText('203.0.113.7:1194')).toBeInTheDocument();
+    expect(within(row('address')).getByText('VPN IP:', { exact: false })).toHaveTextContent(
+      'VPN IP: 10.8.0.6',
+    );
+    expect(within(row('address')).getByText('Public IP:', { exact: false })).toHaveTextContent(
+      'Public IP: 46.16.217.194',
+    );
+    expect(row('address')).not.toHaveTextContent('203.0.113.7');
     expect(within(row('lan')).getByText('192.168.1.10')).toBeInTheDocument();
     expect(within(row('lan')).getByText('192.168.1.0/24')).toBeInTheDocument();
     expect(within(row('lan')).getByText('3 devices')).toBeInTheDocument();
@@ -87,7 +92,7 @@ describe('StatusList', () => {
     renderList(makeStatus());
     expect(row('address')).toHaveAttribute('data-tone', 'neutral');
     expect(row('address')).toHaveTextContent('Not connected');
-    expect(within(row('address')).getByText('vpn.example.com:1194')).toBeInTheDocument();
+    expect(row('address')).toHaveTextContent('VPN IP: –');
     expect(row('traffic')).toHaveTextContent('Received –');
   });
 
@@ -132,7 +137,7 @@ describe('StatusList', () => {
   });
 
   it.each<[RemoteAccess, string, string]>([
-    [remoteOn, 'success', 'https://10.8.0.6:8443'],
+    [remoteOn, 'success', 'HTTPS on port 8443'],
     [{ ...remoteOn, listening: false }, 'warning', 'HTTPS on port 8443'],
     [{ ...remoteOn, enabled: false }, 'neutral', 'Off'],
   ])('shows remote access %#', (remoteAccess, tone, text) => {
@@ -141,22 +146,10 @@ describe('StatusList', () => {
     expect(row('remote')).toHaveTextContent(text);
   });
 
-  it('links remote access at the public address without a Copy button', () => {
-    renderList(connected, { remoteAccess: remoteOn, publicAddress: 'vpn.example.com' });
-    const link = within(row('remote')).getByRole('link', { name: 'https://vpn.example.com:8443' });
-    expect(link).toHaveAttribute('href', 'https://vpn.example.com:8443');
-    expect(within(row('remote')).queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument();
-    expect(row('remote')).not.toHaveTextContent('Set the public address');
-  });
-
-  it('falls back to the VPN IP with a hint when the profile names no public address', () => {
-    renderList(connected, { remoteAccess: remoteOn, publicAddress: '' });
-    expect(
-      within(row('remote')).getByRole('link', { name: 'https://10.8.0.6:8443' }),
-    ).toBeInTheDocument();
-    expect(row('remote')).toHaveTextContent(
-      'Set the public address in the profile if your provider uses a different one.',
-    );
+  it('shows active remote access by its green dot, without the URL', () => {
+    renderList(connected, { remoteAccess: remoteOn });
+    expect(within(row('remote')).queryByRole('link')).not.toBeInTheDocument();
+    expect(row('remote')).not.toHaveTextContent('https://');
   });
 
   it('shows the port while the tunnel is down and the last error while not listening', () => {
@@ -169,6 +162,15 @@ describe('StatusList', () => {
     });
     expect(row('remote')).toHaveAttribute('data-tone', 'warning');
     expect(row('remote')).toHaveTextContent('Last error: address already in use');
+  });
+
+  it('shows the public IP as a dash when the profile names none, and the footer below the rows', () => {
+    renderList(connected, { publicAddress: '', footer: <button type="button">Disconnect</button> });
+    expect(row('address')).toHaveTextContent('Public IP: –');
+    const lastRow = row('traffic').parentElement?.lastElementChild;
+    expect(
+      lastRow?.compareDocumentPosition(screen.getByRole('button', { name: 'Disconnect' })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('hides remote access when the build has none and the device count while unknown', () => {

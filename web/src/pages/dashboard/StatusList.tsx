@@ -8,8 +8,6 @@ import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import type { StateTone } from '../../components/StatePill';
 import { formatBytes, formatDateTime, parseTime } from '../../format/format';
-import { RemoteAccessAddress } from '../../remoteAccess/RemoteAccessAddress';
-import { remoteAccessTarget } from '../../remoteAccess/remoteAccessUrl';
 import { CustomizePanel, CustomizeToggle } from './CustomizePanel';
 import type { DashboardItem, DashboardItems } from './dashboardItems';
 import {
@@ -24,8 +22,6 @@ import styles from './StatusList.module.css';
 
 export interface StatusListProps {
   status: ConnectionStatus;
-  /** "host:port" of the VPN server; "" when unknown. */
-  server: string;
   firewall: FirewallState | undefined;
   deviceCount: number | undefined;
   /** null when this build has no remote access. */
@@ -34,6 +30,8 @@ export interface StatusListProps {
   publicAddress?: string;
   /** Which rows (and the connection line) this browser shows. */
   items: DashboardItems;
+  /** Shown below the rows, e.g. the connection buttons. */
+  footer?: ReactNode;
 }
 
 interface Row {
@@ -94,11 +92,12 @@ export function StatusList(props: StatusListProps) {
           </div>
         ))}
       </dl>
+      {props.footer && <div className={styles.footer}>{props.footer}</div>}
     </Card>
   );
 }
 
-function addressRow({ status, server, t, locale }: RowContext): Row {
+function addressRow({ status, publicAddress, t, locale }: RowContext): Row {
   const live = tunnelUp(status.state);
   const since = status.state === 'connected' ? parseTime(status.since) : undefined;
   const vpnIp = live ? status.vpnIp : undefined;
@@ -110,8 +109,15 @@ function addressRow({ status, server, t, locale }: RowContext): Row {
       since
         ? t('dashboard.details.connectedSince', { time: formatDateTime(since, locale) })
         : t('dashboard.details.notConnected'),
-      <span className={styles.mono}>{vpnIp || '–'}</span>,
-      <span className={styles.mono}>{(live && status.remote) || server || '–'}</span>,
+      <span className={styles.lines}>
+        <span>
+          {t('dashboard.details.vpnIp')}: <span className={styles.mono}>{vpnIp || '–'}</span>
+        </span>
+        <span>
+          {t('dashboard.details.publicIp')}:{' '}
+          <span className={styles.mono}>{publicAddress || '–'}</span>
+        </span>
+      </span>,
     ],
   };
 }
@@ -173,7 +179,7 @@ function firewallRow({ firewall, status, t }: RowContext): Row {
   return { id: 'firewall', label: t('dashboard.details.firewall'), tone, values };
 }
 
-function remoteAccessRow({ remoteAccess, publicAddress, status, t }: RowContext): Row | undefined {
+function remoteAccessRow({ remoteAccess, t }: RowContext): Row | undefined {
   if (!remoteAccess) {
     return undefined;
   }
@@ -189,14 +195,7 @@ function remoteAccessRow({ remoteAccess, publicAddress, status, t }: RowContext)
     }
     return { id: 'remote', label, tone: 'warning', values };
   }
-  const vpnIp = tunnelUp(status.state) ? status.vpnIp : undefined;
-  const target = remoteAccessTarget(remoteAccess.port, publicAddress, vpnIp);
-  return {
-    id: 'remote',
-    label,
-    tone: 'success',
-    values: [target ? <RemoteAccessAddress target={target} /> : port],
-  };
+  return { id: 'remote', label, tone: 'success', values: [port] };
 }
 
 function trafficRow({ status, t, locale }: RowContext): Row {
