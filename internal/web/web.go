@@ -3,7 +3,9 @@ package web
 import (
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -16,6 +18,21 @@ import (
 var dist embed.FS
 
 const indexFile = "index.html"
+
+// iconTypes lists the app-icon and manifest types Go's built-in MIME table
+// lacks; registering them keeps the result independent of the host's tables.
+var iconTypes = map[string]string{
+	".ico":         "image/x-icon",
+	".webmanifest": "application/manifest+json",
+}
+
+func init() {
+	for ext, typ := range iconTypes {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			panic(fmt.Errorf("register MIME type for %s: %w", ext, err))
+		}
+	}
+}
 
 // Handler serves the embedded single-page application.
 func Handler() http.Handler {

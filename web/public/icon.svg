@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TunnelDeck-VPN">
+  <rect width="512" height="512" rx="112" fill="#1f63c9"/>
+  <path d="M256 92 L392 140 V246 C392 330 336 390 256 420 C176 390 120 330 120 246 V140 Z" fill="#ffffff"/>
+  <path d="M256 128 L360 164 V246 C360 310 318 358 256 384 C194 358 152 310 152 246 V164 Z" fill="#1f63c9"/>
+  <rect x="198" y="236" width="116" height="92" rx="16" fill="#ffffff"/>
+  <path d="M220 236 V206 C220 186 236 170 256 170 C276 170 292 186 292 206 V236" fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="256" cy="276" r="14" fill="#1f63c9"/>
+  <rect x="249" y="282" width="14" height="26" rx="7" fill="#1f63c9"/>
+</svg>

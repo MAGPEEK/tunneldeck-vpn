@@ -57,3 +57,36 @@ func TestEmbeddedHandlerResponds(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (built) or 503 (not built)", rec.Code)
 	}
 }
+
+func TestHandlerServesIconFilesWithContentType(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html":           {Data: []byte("<html>index</html>")},
+		"favicon.ico":          {Data: []byte("ico")},
+		"manifest.webmanifest": {Data: []byte("{}")},
+		"icon.svg":             {Data: []byte("<svg/>")},
+		"icon-192.png":         {Data: []byte("png")},
+	}
+	tests := []struct {
+		path     string
+		wantType string
+		wantBody string
+	}{
+		{path: "/favicon.ico", wantType: "image/x-icon", wantBody: "ico"},
+		{path: "/manifest.webmanifest", wantType: "application/manifest+json", wantBody: "{}"},
+		{path: "/icon.svg", wantType: "image/svg+xml", wantBody: "<svg/>"},
+		{path: "/icon-192.png", wantType: "image/png", wantBody: "png"},
+	}
+	handler := NewHandler(assets)
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			if got := rec.Header().Get("Content-Type"); got != tt.wantType {
+				t.Fatalf("Content-Type = %q, want %q", got, tt.wantType)
+			}
+			if got := rec.Body.String(); got != tt.wantBody {
+				t.Fatalf("body = %q, want %q", got, tt.wantBody)
+			}
+		})
+	}
+}
