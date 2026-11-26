@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- The remote access address on the Dashboard and the System page is a plain link; the Copy button next to it is gone.
+
 ## [0.2.0-alpha.6] - 2026-11-27
 
 ### Added

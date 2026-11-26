@@ -144,11 +144,11 @@ describe('StatusList', () => {
     expect(row('remote')).toHaveTextContent(text);
   });
 
-  it('links remote access at the public address with a Copy button', () => {
+  it('links remote access at the public address without a Copy button', () => {
     renderList(connected, { remoteAccess: remoteOn, publicAddress: 'vpn.example.com' });
     const link = within(row('remote')).getByRole('link', { name: 'https://vpn.example.com:8443' });
     expect(link).toHaveAttribute('href', 'https://vpn.example.com:8443');
-    expect(within(row('remote')).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(within(row('remote')).queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument();
     expect(row('remote')).not.toHaveTextContent('Set the public address');
   });
 
