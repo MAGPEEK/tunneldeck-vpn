@@ -2,7 +2,7 @@
 
 **Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Läuft auf jedem Linux-Docker-Host mit amd64 oder arm64: Server, Mini-PC oder Raspberry Pi.
 
-[English](README.md) · Lizenz: MIT · Status: **0.3.0**; OpenVPN im Praxistest auf einer Synology DS723+ mit mdex bestätigt, WireGuard bisher nur gegen Test-Server geprüft
+[English](README.md) · Lizenz: MIT · Status: **0.4.0**; OpenVPN im Praxistest auf einer Synology DS723+ mit mdex bestätigt; WireGuard und IPsec (IKEv1 XAuth) live gegen eine FRITZ!Box getestet
 
 ## Was es kann
 
@@ -22,14 +22,14 @@
 |---|---|
 | OpenVPN (2.7) | verfügbar |
 | WireGuard | verfügbar (ab 0.3.0) |
-| IPsec / IKEv2 | verfügbar (noch nicht veröffentlicht; IKEv1 XAuth als veralteter Rückfall), siehe [IPsec-Gateways](docs/ipsec.de.md) |
+| IPsec / IKEv2 | verfügbar ab 0.4.0 (IKEv1 XAuth als veralteter Rückfall), siehe [IPsec-Gateways](docs/ipsec.de.md) |
 
 ## Schnellstart
 
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.3.0
+    image: magpeek/tunneldeck-vpn:0.4.0
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
@@ -66,6 +66,7 @@ Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer Sie erlauben ihn 
 - **0.1.0**: OpenVPN-Client, Dashboard, Host-Schutz, tägliche Trennung, Fernzugriff per HTTPS
 - **0.2.0**: Firewall mit Portweiterleitung zu LAN-Geräten, Ausgangsregeln und Kill-Switch, IPsec-Vorlage, Remote-Netze, PKCS#12
 - **0.3.0**: WireGuard (eingebautes wireguard-go, Schlüsselerzeugung, `.conf`-Import)
+- **0.4.0**: IPsec/IKEv2 (strongSwan mit ESP im Userspace; PSK, Zertifikat, EAP; virtuelle IP oder Netz-zu-Netz; IKEv1 XAuth als Rückfalloption)
 
 ## Entwicklung
 
