@@ -710,7 +710,7 @@
     "enable": "Detect the public IP automatically",
     "url": "Service URL",
     "urlHint": "An http or https address that answers with the IPv4 address as plain text.",
-    "privacy": "The service sees the public IP address of the tunnel and the name TunnelDeck-VPN as user agent; nothing else is sent.",
+    "privacy": "The service sees the public IP address of the tunnel and the name TunnelDeck-VPN as user agent; nothing else is sent. The host resolves the service name with its usual DNS server, not through the tunnel.",
     "save": "Save changes",
     "saved": "Public IP detection saved."
   },

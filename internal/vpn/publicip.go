@@ -84,6 +84,11 @@ func (l *loop) setPublicIP(ip string) {
 // tunnel again with the changed setting, or forgets it when the detection
 // was switched off.
 func (l *loop) publicIPLookupChanged() {
+	if finder := l.cfg.PublicIP; finder == nil || !finder.Enabled() {
+		l.publicIP.stop()
+		l.setPublicIP("")
+		return
+	}
 	if t := l.tunnel; t != nil && !t.stopping && l.status.State == domain.StateConnected && l.status.RoutingWarning == nil {
 		l.detectPublicIP(t)
 	}

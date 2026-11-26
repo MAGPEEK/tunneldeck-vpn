@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Fixed
 
+- Public IP detection: a reconnect, a failed routing and switching the detection off clear the old public IP at once, so the dashboard never shows the address of the previous server; the lookup no longer follows redirects. The privacy note says that the service name is resolved with the host's DNS server.
 - Firewall page: the "How to turn it on" link for IP forwarding points at the guide of the installed version instead of `main`.
 
 ## [0.2.3] - 2026-11-26

@@ -170,3 +170,22 @@ func TestEnabled(t *testing.T) {
 		}
 	}
 }
+
+func TestLookupRefusesRedirects(t *testing.T) {
+	var followed atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		followed.Add(1)
+		_, _ = w.Write([]byte("203.0.113.9"))
+	}))
+	t.Cleanup(target.Close)
+	redirect := httptest.NewServer(http.RedirectHandler(target.URL, http.StatusFound))
+	t.Cleanup(redirect.Close)
+
+	got, err := testFinder(redirect.URL).Lookup(context.Background(), loopback)
+	if err == nil || !strings.Contains(err.Error(), "302") {
+		t.Fatalf("Lookup = %v, %v; want an error naming the redirect status", got, err)
+	}
+	if followed.Load() != 0 {
+		t.Errorf("the redirect target was asked %d times, want 0", followed.Load())
+	}
+}

@@ -78,6 +78,8 @@ func (l *loop) tunnelConnected(t *tunnel, e domain.StateEvent) {
 	l.setState(domain.StateConnected, "")
 	if l.status.RoutingWarning == nil {
 		l.detectPublicIP(t)
+	} else {
+		l.setPublicIP("")
 	}
 }
 
@@ -219,9 +221,9 @@ func (l *loop) dailyReconnectDue() {
 	l.armDaily()
 }
 
-// setState changes the state; leaving the connected state stops the public
-// IP detection, and leaving the tunnel's states forgets what the tunnel
-// reported.
+// setState changes the state. Leaving the connected state stops the public
+// IP detection and forgets the public IP, which a reconnect may change;
+// leaving the tunnel's states forgets what the tunnel reported.
 func (l *loop) setState(state domain.ConnectionState, message string) {
 	l.status.State, l.status.Message, l.status.Since = state, message, l.now()
 	if state != domain.StateConnected {
@@ -230,9 +232,11 @@ func (l *loop) setState(state domain.ConnectionState, message string) {
 	if state != domain.StateConnected && state != domain.StateReconnecting {
 		l.status.VPNIP, l.status.Remote = "", ""
 		l.status.DataCipher, l.status.ControlChannel = "", ""
-		l.status.PublicIP = ""
 	}
 	l.broadcast(l.stateEvent())
+	if state != domain.StateConnected {
+		l.setPublicIP("")
+	}
 }
 
 // stateEvent describes the current state.

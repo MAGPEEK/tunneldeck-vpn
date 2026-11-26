@@ -266,7 +266,7 @@ func TestManagerRecordsTheNegotiatedChannel(t *testing.T) {
 	}
 
 	// Reconnecting keeps them; a renegotiation updates one of them.
-	d.emit(domain.StateEvent{State: domain.StateReconnecting}, domain.ChannelEvent{DataCipher: "none"})
+	d.emit(domain.ChannelEvent{DataCipher: "none"}, domain.StateEvent{State: domain.StateReconnecting})
 	h.waitState(domain.StateReconnecting)
 	if s := h.m.Status(); s.DataCipher != "none" || s.ControlChannel == "" {
 		t.Errorf("status while reconnecting = %+v", s)

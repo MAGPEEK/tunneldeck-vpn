@@ -69,11 +69,11 @@ func (f *Finder) Enabled() bool {
 
 // Lookup asks the service with one GET from the local address local,
 // retrying twice with a pause, and returns the IPv4 address it answered.
-// It stops when ctx ends. Errors name the service's host only, never the
-// full URL, which may carry an access token.
+// It stops when ctx ends. Errors name the service's host only, which
+// keeps the log lines short.
 func (f *Finder) Lookup(ctx context.Context, local netip.Addr) (netip.Addr, error) {
 	target := f.settings.PublicIPLookup().URL
-	client := &http.Client{Transport: f.transport(local)}
+	client := &http.Client{Transport: f.transport(local), CheckRedirect: refuseRedirects}
 	defer client.CloseIdleConnections()
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -89,6 +89,13 @@ func (f *Finder) Lookup(ctx context.Context, local netip.Addr) (netip.Addr, erro
 		err = ctxErr
 	}
 	return netip.Addr{}, fmt.Errorf("ask %s for the public IP: %w", hostOf(target), err)
+}
+
+// refuseRedirects stops at the first redirect, which then fails as a
+// non-200 answer: a redirect could point the request at another host,
+// a plain-HTTP URL or an address on the host or the LAN.
+func refuseRedirects(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 // ask runs one attempt.

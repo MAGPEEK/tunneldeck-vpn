@@ -710,7 +710,7 @@
     "enable": "Öffentliche IP automatisch erkennen",
     "url": "Adresse des Dienstes",
     "urlHint": "Eine http- oder https-Adresse, die die IPv4-Adresse als reinen Text zurückgibt.",
-    "privacy": "Der Dienst sieht die öffentliche IP-Adresse des Tunnels und den Namen TunnelDeck-VPN als User-Agent; sonst wird nichts übertragen.",
+    "privacy": "Der Dienst sieht die öffentliche IP-Adresse des Tunnels und den Namen TunnelDeck-VPN als User-Agent; sonst wird nichts übertragen. Den Namen des Dienstes löst der Host über seinen normalen DNS-Server auf, nicht durch den Tunnel.",
     "save": "Änderungen speichern",
     "saved": "Erkennung der öffentlichen IP gespeichert."
   },

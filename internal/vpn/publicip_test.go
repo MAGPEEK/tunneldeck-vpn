@@ -93,19 +93,20 @@ func TestManagerDetectsThePublicIP(t *testing.T) {
 	h.waitLog("public IP through the tunnel: 46.16.217.194")
 	h.waitPublicIP("46.16.217.194")
 
-	// Reconnecting keeps it; the next connected event detects it again.
+	// Reconnecting forgets it, since the next server may have another
+	// address; the next connected event detects it again.
 	d.emit(domain.StateEvent{State: domain.StateReconnecting})
 	h.waitState(domain.StateReconnecting)
-	if got := h.m.Status().PublicIP; got != "46.16.217.194" {
-		t.Errorf("public IP while reconnecting = %q", got)
-	}
+	h.waitPublicIP("")
 	d.emit(connectedEvent("172.21.31.171"))
 	if local := receive(t, "second lookup", finder.asked); local.String() != "172.21.31.171" {
 		t.Fatalf("second lookup from %s", local)
 	}
 	finder.answer("", errors.New("ask api.ipify.org for the public IP: timeout"))
 	h.waitLog("detecting the public IP through the tunnel failed: ask api.ipify.org for the public IP: timeout")
-	h.waitPublicIP("")
+	if got := h.m.Status().PublicIP; got != "" {
+		t.Errorf("public IP after a failed lookup = %q", got)
+	}
 
 	d.emit(connectedEvent("172.21.31.171"))
 	receive(t, "third lookup", finder.asked)
