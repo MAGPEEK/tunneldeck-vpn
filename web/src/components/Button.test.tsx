@@ -15,6 +15,17 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Delete profile' }).className).toMatch(/danger/);
   });
 
+  it('applies the small size only when requested', () => {
+    render(
+      <>
+        <Button size="small">Edit</Button>
+        <Button>Save</Button>
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'Edit' }).className).toMatch(/small/);
+    expect(screen.getByRole('button', { name: 'Save' }).className).not.toMatch(/small/);
+  });
+
   it('calls onClick when pressed', () => {
     const onClick = vi.fn();
     render(<Button onClick={onClick}>Connect</Button>);

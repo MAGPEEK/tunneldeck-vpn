@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuleCounters } from '../../api/firewall';
@@ -130,21 +130,27 @@ function RuleRow(props: RuleRowProps) {
             <ArrowDown size={16} aria-hidden="true" />
           </Button>
           <Button
-            variant="ghost"
+            variant="secondary"
+            size="small"
+            icon={<Pencil size={16} aria-hidden="true" />}
             aria-label={t('firewall.editNamed', { name })}
             onClick={() => props.onEdit(draft.key)}
           >
             {t('firewall.edit')}
           </Button>
           <Button
-            variant="ghost"
+            variant="secondary"
+            size="small"
+            icon={<Copy size={16} aria-hidden="true" />}
             aria-label={t('firewall.duplicateNamed', { name })}
             onClick={() => props.onDuplicate(draft.key)}
           >
             {t('firewall.duplicate')}
           </Button>
           <Button
-            variant="ghost"
+            variant="danger"
+            size="small"
+            icon={<Trash2 size={16} aria-hidden="true" />}
             aria-label={t('firewall.deleteNamed', { name })}
             onClick={() => onConfirm(draft.key)}
           >

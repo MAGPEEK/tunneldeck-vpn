@@ -3,14 +3,18 @@ import styles from './Button.module.css';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
+export type ButtonSize = 'medium' | 'small';
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
   icon?: ReactNode;
 }
 
 export function Button({
   variant = 'secondary',
+  size = 'medium',
   loading = false,
   icon,
   type = 'button',
@@ -19,7 +23,13 @@ export function Button({
   children,
   ...rest
 }: ButtonProps) {
-  const classes = [styles.button, styles[variant], loading ? styles.loading : '', className ?? '']
+  const classes = [
+    styles.button,
+    styles[variant],
+    size === 'small' ? styles.small : '',
+    loading ? styles.loading : '',
+    className ?? '',
+  ]
     .filter(Boolean)
     .join(' ');
   return (

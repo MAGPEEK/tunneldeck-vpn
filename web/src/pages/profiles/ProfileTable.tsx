@@ -1,3 +1,4 @@
+import { Copy, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConnectionStatus } from '../../api/connection';
@@ -58,21 +59,27 @@ export function ProfileTable(props: ProfileTableProps) {
         return (
           <div className={styles.actions}>
             <Button
-              variant="ghost"
+              variant="secondary"
+              size="small"
+              icon={<Pencil size={16} aria-hidden="true" />}
               onClick={() => onEdit(profile)}
               aria-label={t('profiles.editNamed', { name: profile.name })}
             >
               {t('profiles.edit')}
             </Button>
             <Button
-              variant="ghost"
+              variant="secondary"
+              size="small"
+              icon={<Copy size={16} aria-hidden="true" />}
               onClick={() => onDuplicate(profile)}
               aria-label={t('profiles.duplicateNamed', { name: profile.name })}
             >
               {t('profiles.duplicate')}
             </Button>
             <Button
-              variant="ghost"
+              variant="danger"
+              size="small"
+              icon={<Trash2 size={16} aria-hidden="true" />}
               aria-label={t('profiles.deleteNamed', { name: profile.name })}
               onClick={() => setConfirmingId(profile.id)}
             >
