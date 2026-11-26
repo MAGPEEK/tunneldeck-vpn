@@ -277,9 +277,16 @@ A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels usi
 - `GET/PUT /api/firewall` replaces `/api/host-access` (the old endpoint answers 410 Gone with a pointer).
 - Breaking change → release 0.2.0.
 
-### 16.4 UI
+### 16.4 UI (redesign, owner-approved 2026-11-26)
 
-Page "Firewall" replaces "Host access": two tabs "Inbound from VPN" and "Outbound to VPN"; table columns Source → Destination, Protocol, Public port (inbound), Destination port, Keep source address (inbound), Enabled, Comment; drag handle for order; destination picker with "This device" plus free IPv4; template button "IPsec device"; live hit counters per rule (from `iptables -L -v`) as a later addition.
+Based on a comparison of pfSense, OPNsense, OpenWrt LuCI, Teltonika RutOS, UniFi, MikroTik, Firewalla, Fritz!Box and Synology DSM. The rule model (§16.1) is unchanged; only the presentation changes.
+
+- **Rule list** (one list, both directions, in evaluation order): per row an enable switch, a flow strip of chips `Source → (Host) → Target` with the endpoint the rule is about highlighted (accent), a second line with name, service/ports in plain words and notable options ("sender kept", "all ports", "off"), a hit counter, and row actions Edit / Duplicate / Delete; up/down buttons for order. Filter chips: All / Inbound / Outbound.
+- **Add rule = intent first.** Cards: "Make a LAN device reachable from the VPN" (port forward), "Open a service on the host", "Let a LAN device into the VPN" (outbound), "IPsec router" (template, §16.2), "Block something" (drop/reject), "Custom rule" (full form). Each card presets direction, action and destination kind and shows only its fields.
+- **Editor**: the same flow strip on top (live); numbered steps: 1 device (picker), 2 service (presets HTTP 80/tcp, HTTPS 443/tcp, SSH 22/tcp, RDP 3389/tcp, SMB 445/tcp, DNS 53/tcp+udp, "All ports", "Custom" with protocol + port fields), 3 name (prefilled from device + service, editable). A plain-language summary generated from the same model as the rules, e.g. "Connections from any sender to <VPN address>:443 go to Webserver 192.168.2.30:443 (TCP). The webserver sees the host as sender." Collapsible "Restrict and advanced": sender (source CIDR + source port), different port on the VPN address, "Sender seen by the target: Host / Original" (= keepSourceAddress, with one-line explanation), comment. Collapsible "What this rule creates" listing the technical entries (filter accept, DNAT, masquerade, policy route) read-only. Empty fields always mean "any".
+- **Device picker**: LAN neighbours of the host (IP, MAC, hostname when resolvable via reverse DNS or DHCP leases visible to the host) from `GET /api/firewall/devices`; free IP/CIDR entry always possible; a hint when a chosen device's address may change ("Reserve this address in your router").
+- **Hit counters**: `GET /api/firewall` returns per-rule packet/byte counters read from iptables (`-L -v -x`) through `CommandRunner`; counters must survive re-applying unchanged rules (rules are matched by a comment tag `tdrule:<id>` and only changed rules are replaced; counters reset only when a rule changes). Shown as "N hits"; "–" while disabled.
+- Not done (anti-patterns found): implicit bidirectional rules, auto-generated extra rows in the list, a separate NAT tab.
 
 ## 17. Compared with the Teltonika RUT240 VPN features
 

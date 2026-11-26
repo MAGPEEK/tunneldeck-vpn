@@ -83,3 +83,13 @@ Extend `test/e2e`: inbound port forward to a LAN container (with and without kee
 ## [x] 20. OpenVPN remote networks and PKCS#12 — careful — after: 16
 
 SPEC §17 "Adopt": profile setting `remoteNetworks` (form field, validation, `ip rule to <net> lookup 7194` while connected, usable as outbound firewall destination); inline/uploaded PKCS#12 as secret (importer maps `<pkcs12>`, renderer emits it inline); keep-alive placeholder; advisory/importer message for static-key mode. Tests incl. golden files; e2e: host reaches a network behind the test server.
+
+# Firewall usability (0.2.0)
+
+## [ ] 21. Devices and hit counters — careful — after: any-port change
+
+SPEC §16.4 "Device picker" and "Hit counters": `GET /api/firewall/devices` (LAN neighbours from `ip -4 neigh` plus host-visible names, through `CommandRunner`; no new privileges); per-rule counters in `GET /api/firewall`, tagged rules (`-m comment --comment tdrule:<id>`), incremental apply so unchanged rules keep their counters while the DROP-safe refill guarantee holds. Tests with the fake runner; integration test for counter persistence across re-apply.
+
+## [ ] 22. Firewall UI redesign — medium — after: 21
+
+SPEC §16.4 exactly: unified rule list with flow strips, filter chips, hit counters; intent cards; step editor with device picker, service presets, live summary, collapsible advanced and "What this rule creates"; IPsec card uses the template endpoint. i18n de/en, tests. Orchestrator reviews visually.
