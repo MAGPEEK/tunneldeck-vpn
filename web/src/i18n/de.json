@@ -167,7 +167,7 @@
   },
   "profiles": {
     "new": "Neues Profil",
-    "deleteFailed": "Das Profil konnte nicht gelöscht werden. Trennen Sie es zuerst und versuchen Sie es erneut.",
+    "deleteFailed": "Das Profil konnte nicht gelöscht werden. Versuchen Sie es erneut.",
     "column": {
       "name": "Name",
       "protocol": "Protokoll",
@@ -178,7 +178,6 @@
     },
     "off": "Aus",
     "active": "Aktiv",
-    "deleteWhileConnected": "Zum Löschen trennen",
     "edit": "Bearbeiten",
     "editNamed": "{{name}} bearbeiten",
     "duplicate": "Duplizieren",
@@ -188,6 +187,8 @@
     "confirmLabel": "Löschen bestätigen",
     "confirmDelete": "Profil „{{name}}“ löschen? Das lässt sich nicht rückgängig machen.",
     "confirmDeleteButton": "Profil löschen",
+    "confirmDeleteInUse": "Dieses Profil wird verwendet. Es wird getrennt und gelöscht.",
+    "confirmDeleteInUseButton": "Trennen und löschen",
     "cancel": "Abbrechen",
     "empty": "Noch keine Profile",
     "importTitle": "OpenVPN-Konfiguration einfügen",
@@ -271,7 +272,9 @@
       "setenv_ignored": "setzt eine Variable, die nur Skripte und VPN-Apps nutzen; sie wird nicht gebraucht.",
       "script_security_dropped": "erlaubt nur Skripte; TunnelDeck-VPN startet keine, daher wird sie nicht gebraucht.",
       "verb_replaced": "wurde durch die Protokollstufe von TunnelDeck-VPN ersetzt.",
-      "credentials_expected": "Die Datei enthält kein Client-Zertifikat und weder Benutzername noch Passwort. Die Anmeldung mit Benutzername und Passwort ist gewählt: Geben Sie die Zugangsdaten Ihres Anbieters ein."
+      "credentials_expected": "Die Datei enthält kein Client-Zertifikat und weder Benutzername noch Passwort. Die Anmeldung mit Benutzername und Passwort ist gewählt: Geben Sie die Zugangsdaten Ihres Anbieters ein.",
+      "credentials_from_partial_block": "Benutzername und Passwort wurden aus einem nur teilweise auskommentierten Zugangsdaten-Block übernommen.",
+      "unknown_directive": "ist keine bekannte OpenVPN-Option."
     }
   },
   "firewall": {
@@ -646,6 +649,8 @@
     "openvpn_pkcs12_invalid": "Muss eine base64-kodierte PKCS#12-Datei (.p12, .pfx) von höchstens 64 KiB sein.",
     "openvpn_extra_options_rejected": "Hier nicht erlaubt: Zeile {{lines}}.",
     "openvpn_block_not_closed": "Zeile {{line}}: Der eingebettete Block <{{block}}> ist nicht geschlossen.",
+    "openvpn_credentials_block_ambiguous": "Zeile {{line}}: Der Zugangsdaten-Block ist teilweise auskommentiert und hat mehr als zwei nicht auskommentierte Zeilen. Lassen Sie nur Benutzername und Passwort stehen oder kommentieren Sie den ganzen Block aus.",
+    "extra_option_unknown": "Unbekannte OpenVPN-Option: {{name}}",
     "remote_network_not_cidr": "Eintrag {{entry}}: Geben Sie ein IPv4-Netz in CIDR-Schreibweise ein, z. B. 10.1.2.0/24.",
     "remote_network_not_canonical": "Eintrag {{entry}}: Schreiben Sie die Netzadresse mit ihrer Präfixlänge, z. B. 10.1.2.0/24.",
     "remote_network_everything": "Eintrag {{entry}} darf nicht alle Adressen umfassen.",

@@ -63,8 +63,3 @@ export function useConnectionControl() {
     reconnect: useMutation({ mutationFn: reconnect, onSuccess }),
   };
 }
-
-/** States in which a profile counts as in use (it cannot be deleted). */
-export function isTunnelActive(status: ConnectionStatus | undefined, profileId: string): boolean {
-  return status !== undefined && status.profileId === profileId && status.state !== 'disconnected';
-}

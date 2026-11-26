@@ -5,7 +5,6 @@ import type { Profile } from '../../api/profiles';
 import { Button } from '../../components/Button';
 import { StatePill } from '../../components/StatePill';
 import { Table, type Column } from '../../components/Table';
-import { isTunnelActive } from '../../queries/queries';
 import { profileServer, protocolName } from './profileText';
 import styles from './ProfileTable.module.css';
 
@@ -56,15 +55,8 @@ export function ProfileTable(props: ProfileTableProps) {
       header: <span className="visually-hidden">{t('profiles.column.actions')}</span>,
       align: 'end',
       render: (profile) => {
-        const inUse = isTunnelActive(status, profile.id);
-        const hintId = `delete-hint-${profile.id}`;
         return (
           <div className={styles.actions}>
-            {inUse && (
-              <span id={hintId} className={styles.hint}>
-                {t('profiles.deleteWhileConnected')}
-              </span>
-            )}
             <Button
               variant="ghost"
               onClick={() => onEdit(profile)}
@@ -81,8 +73,6 @@ export function ProfileTable(props: ProfileTableProps) {
             </Button>
             <Button
               variant="ghost"
-              disabled={inUse}
-              aria-describedby={inUse ? hintId : undefined}
               aria-label={t('profiles.deleteNamed', { name: profile.name })}
               onClick={() => setConfirmingId(profile.id)}
             >
@@ -94,23 +84,29 @@ export function ProfileTable(props: ProfileTableProps) {
     },
   ];
 
-  const confirmRow = (profile: Profile) =>
-    profile.id === confirmingId ? (
+  const confirmRow = (profile: Profile) => {
+    if (profile.id !== confirmingId) return undefined;
+    const inUse = profile.id === activeId;
+    return (
       <div className={styles.confirm} role="group" aria-label={t('profiles.confirmLabel')}>
-        <span>{t('profiles.confirmDelete', { name: profile.name })}</span>
+        <span>
+          {inUse
+            ? t('profiles.confirmDeleteInUse')
+            : t('profiles.confirmDelete', { name: profile.name })}
+        </span>
         <div className={styles.actions}>
           <Button onClick={() => setConfirmingId(undefined)}>{t('profiles.cancel')}</Button>
           <Button
             variant="danger"
             loading={deletingId === profile.id}
-            disabled={isTunnelActive(status, profile.id)}
             onClick={() => onDelete(profile)}
           >
-            {t('profiles.confirmDeleteButton')}
+            {inUse ? t('profiles.confirmDeleteInUseButton') : t('profiles.confirmDeleteButton')}
           </Button>
         </div>
       </div>
-    ) : undefined;
+    );
+  };
 
   return (
     <Table

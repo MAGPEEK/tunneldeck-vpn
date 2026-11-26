@@ -9,6 +9,10 @@ import (
 // defaultHeartbeat is the interval of the SSE keep-alive comment.
 const defaultHeartbeat = 20 * time.Second
 
+// defaultDisconnectTimeout bounds the wait for the tunnel to stop when the
+// active profile is deleted.
+const defaultDisconnectTimeout = 15 * time.Second
+
 // Deps are the services the API uses. All are required.
 type Deps struct {
 	Auth          Auth
@@ -32,6 +36,9 @@ type Options struct {
 	Now func() time.Time
 	// Heartbeat is the SSE keep-alive interval, 20 s by default.
 	Heartbeat time.Duration
+	// DisconnectTimeout bounds how long deleting the active profile waits
+	// for its tunnel to stop, 15 s by default.
+	DisconnectTimeout time.Duration
 }
 
 // Server serves /api/* on both listeners; wrap the handler of the HTTPS
@@ -40,8 +47,11 @@ type Server struct {
 	deps      Deps
 	now       func() time.Time
 	heartbeat time.Duration
-	mux       *http.ServeMux
-	handler   http.Handler
+	// disconnectTimeout bounds the wait for the tunnel to stop when the
+	// active profile is deleted.
+	disconnectTimeout time.Duration
+	mux               *http.ServeMux
+	handler           http.Handler
 
 	// portsMu serialises firewall and remote-access updates: their ports
 	// are checked against each other, and a rollback never overwrites a
@@ -55,17 +65,21 @@ type Server struct {
 // New returns the API server.
 func New(deps Deps, opts Options) *Server {
 	s := &Server{
-		deps:      deps,
-		now:       opts.Now,
-		heartbeat: opts.Heartbeat,
-		mux:       http.NewServeMux(),
-		closed:    make(chan struct{}),
+		deps:              deps,
+		now:               opts.Now,
+		heartbeat:         opts.Heartbeat,
+		disconnectTimeout: opts.DisconnectTimeout,
+		mux:               http.NewServeMux(),
+		closed:            make(chan struct{}),
 	}
 	if s.now == nil {
 		s.now = time.Now
 	}
 	if s.heartbeat <= 0 {
 		s.heartbeat = defaultHeartbeat
+	}
+	if s.disconnectTimeout <= 0 {
+		s.disconnectTimeout = defaultDisconnectTimeout
 	}
 	s.routes()
 	s.handler = logRequests(checkCSRF(s.mux))

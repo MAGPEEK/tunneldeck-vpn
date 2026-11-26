@@ -2,6 +2,7 @@ package openvpn
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -266,5 +267,42 @@ func TestRenderQuotesSocketPath(t *testing.T) {
 	}
 	if !strings.Contains(config, "management \"/run/tunnel deck/mgmt.sock\" unix\n") {
 		t.Errorf("socket path not quoted:\n%s", config)
+	}
+}
+
+// TestRenderSkipsUnknownExtraOptions renders profiles stored before extra
+// options were checked against the known directives: unknown lines are
+// left out with a warning that names the line, never the text.
+func TestRenderSkipsUnknownExtraOptions(t *testing.T) {
+	settings := mdexSettings()
+	settings[KeyExtraOptions] = []string{"float", "stored-user", "stored password", "mssfix"}
+	config, warnings, err := Render(newProfile(t, settings, mdexSecrets()), mdexSecrets(), testOptions)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, value := range []string{"stored-user", "stored password", "stored"} {
+		if strings.Contains(config, value) {
+			t.Errorf("config contains %q", value)
+		}
+	}
+	lines := strings.Split(config, "\n")
+	for _, want := range []string{"float", "mssfix"} {
+		if !slices.Contains(lines, want) {
+			t.Errorf("config lacks %q", want)
+		}
+	}
+	var skipped []int
+	for _, w := range warnings {
+		if w.Code != CodeUnknownDirective {
+			continue
+		}
+		skipped = append(skipped, w.Line)
+		if w.Directive != "" || strings.Contains(w.Message, "stored") || describeExtraWarning(w) != "extra option on line "+
+			strconv.Itoa(w.Line)+" "+w.Message {
+			t.Errorf("warning %+v reveals the line or is described wrongly", w)
+		}
+	}
+	if !slices.Equal(skipped, []int{2, 3}) {
+		t.Errorf("skipped lines = %v, want [2 3]", skipped)
 	}
 }

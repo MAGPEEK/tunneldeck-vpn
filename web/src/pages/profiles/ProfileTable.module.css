@@ -10,11 +10,6 @@
   gap: var(--space-1);
 }
 
-.hint {
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-}
-
 .confirm {
   display: flex;
   flex-wrap: wrap;

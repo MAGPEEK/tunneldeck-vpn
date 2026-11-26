@@ -50,6 +50,10 @@ var (
 		code: CodeSetenvIgnored, severity: SeverityWarning,
 		message: "dropped: only scripts and client apps read these variables, and TunnelDeck-VPN runs neither",
 	}
+	verdictUnknown = verdict{
+		code: CodeUnknownDirective, severity: SeverityRejected,
+		message: "is not a known OpenVPN 2.7 option",
+	}
 	verdictStaticKey = verdict{
 		code: CodeStaticKeyUnsupported, severity: SeverityRejected,
 		message: "static-key mode is deprecated in OpenVPN 2.7 and insecure, and is not supported; " +
@@ -155,9 +159,12 @@ func set(names ...string) map[string]bool {
 	return m
 }
 
-// isOpenVPNDirective reports whether the classifier knows d as an OpenVPN
-// directive, whatever happens to it.
+// isOpenVPNDirective reports whether d is a known OpenVPN directive,
+// whatever happens to it.
 func isOpenVPNDirective(d directive) bool {
+	if knownDirectives[d.name] {
+		return true
+	}
 	v, removed := classify(d)
 	return removed && v.code != CodeInvalidDirective
 }

@@ -305,6 +305,16 @@ Recommendations:
 
 ---
 
+## Known directives
+
+Imported directives and extra options must be on the allowlist `knownDirectives` (`internal/vpn/openvpn/known.go`); anything else is rejected as `unknown_directive` (import) or `extra_option_unknown` (validation). The denylist in `classify.go` is applied first and still decides which known directives are dropped or rejected.
+
+- **Source.** The openvpn binary of the image, 2.7.9 (`alpine:3.24.4`, `apk add openvpn~2.7`), probed on 2026-11-26: for every option-like name from `openvpn --help` and from `strings /usr/sbin/openvpn`, `openvpn --<name> [1 [1 [1]]] --version` was run; a name counts as recognized when no argument count gives `Unrecognized option or missing or extra parameter(s)`. 287 names are recognized. `--help` alone is incomplete (it lacks e.g. `key-direction`, `persist-key`, `tls-groups`, `peer-fingerprint`, `data-ciphers-fallback`).
+- **Left out** (recognized, but not for a client config): server-only options (`server`, `push`, `mode`, `ifconfig-pool`, `client-config-dir`, `duplicate-cn`, `verify-client-cert`, `tls-server`, `dh`, …), push-only and internal options (`peer-id`, `auth-token`, `key-derivation`, `protocol-flags`, `push-continuation`, …), stand-alone commands (`genkey`, `show-*`, `test-crypto`, `mktun`, `help`, `version`), the inline-only `connection` and `http-proxy-user-pass`, and options that make 2.7.9 exit (`no-replay`, `compat-names`, `no-name-remapping`, `client-cert-not-required`, `msg-channel`). Not recognized at all on Linux: `block-outside-dns`, `register-dns`, `ip-win32` and the other Windows-only options, `iproute`, `inetd`, `ncp-disable`.
+- **Credentials typed as lines.** Providers ship `<auth-user-pass>` commented out (`;<auth-user-pass>`, `;Username`, `;Password`, `;</auth-user-pass>`). Users who uncomment only the data lines turn the credentials into "directives" (`Options error: Unrecognized option ... <username>`). The importer takes uncommented lines between a commented opener or closer as username and password (`credentials_from_partial_block`) and refuses more than two (`openvpn_credentials_block_ambiguous`). Warnings and errors print a directive or file name that matches the stored username, password or key passphrase as `(hidden)`. Rendering a stored profile skips unknown extra options and logs only their line number.
+
+---
+
 ## Sources
 
 - Alpine package index, openvpn in v3.24: https://pkgs.alpinelinux.org/packages?name=openvpn&branch=v3.24&repo=&arch=x86_64 (2.7.9-r0)

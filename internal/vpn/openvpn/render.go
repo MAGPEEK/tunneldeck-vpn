@@ -41,13 +41,15 @@ const (
 // routing is TunnelDeck's (route-noexec), netguard routes them while
 // connected.
 //
-// Warnings report extra options that were dropped. An invalid profile
-// yields a *domain.ValidationError. The output is deterministic.
+// Warnings report extra options that were dropped. Extra options that are
+// no known OpenVPN directive, which profiles stored by older versions may
+// hold, are skipped with a warning that names only their line. An invalid
+// profile yields a *domain.ValidationError. The output is deterministic.
 func Render(p domain.Profile, s vpn.Secrets, opts RenderOptions) (string, []Warning, error) {
 	if err := opts.validate(); err != nil {
 		return "", nil, err
 	}
-	c, errs := parseProfile(p, s, nil)
+	c, errs := parseProfile(p, s, nil, skipUnknownExtras)
 	if err := errs.OrNil(); err != nil {
 		return "", nil, err
 	}
@@ -176,6 +178,7 @@ func (r *renderer) authentication() {
 // that an imported rendered config renders the same again.
 func (r *renderer) extraOptions() {
 	r.warnings = append(r.warnings, r.config.extras.dropped...)
+	r.warnings = append(r.warnings, skippedUnknown(r.config.extras.unknown)...)
 	var lines []string
 	for _, option := range r.config.extras.kept {
 		if w, conflict := r.conflict(option); conflict {

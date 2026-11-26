@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/vpn"
@@ -212,16 +213,24 @@ func TestDeleteProfile(t *testing.T) {
 		name         string
 		state        domain.ConnectionState
 		active       bool
-		status       int
+		disconnect   disconnectMode
 		wantCommands []string
 	}{
-		{name: "inactive", state: domain.StateConnected, status: http.StatusNoContent},
-		{name: "active but disconnected", state: domain.StateDisconnected, active: true, status: http.StatusNoContent, wantCommands: []string{"disconnect"}},
-		{name: "active in error", state: domain.StateError, active: true, status: http.StatusNoContent, wantCommands: []string{"disconnect"}},
-		{name: "active and connecting", state: domain.StateConnecting, active: true, status: http.StatusConflict},
-		{name: "active and connected", state: domain.StateConnected, active: true, status: http.StatusConflict},
-		{name: "active and reconnecting", state: domain.StateReconnecting, active: true, status: http.StatusConflict},
-		{name: "active and disconnecting", state: domain.StateDisconnecting, active: true, status: http.StatusConflict},
+		{name: "other profile active", state: domain.StateConnected},
+		{name: "active but disconnected", state: domain.StateDisconnected, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{name: "active in error", state: domain.StateError, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{name: "active and connecting", state: domain.StateConnecting, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{name: "active and connected", state: domain.StateConnected, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{name: "active and reconnecting", state: domain.StateReconnecting, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{name: "active and disconnecting", state: domain.StateDisconnecting, active: true, disconnect: stopsAtOnce, wantCommands: []string{"disconnect"}},
+		{
+			name: "active and connected, stop reported by event", state: domain.StateConnected, active: true,
+			disconnect: stopsByEvent, wantCommands: []string{"disconnect"},
+		},
+		{
+			name: "active and reconnecting, stop reported by event", state: domain.StateReconnecting, active: true,
+			disconnect: stopsByEvent, wantCommands: []string{"disconnect"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -232,21 +241,12 @@ func TestDeleteProfile(t *testing.T) {
 				status.ProfileID = stored.ID
 			}
 			env.connection.setStatus(status)
+			env.connection.disconnect = tt.disconnect
 			rec := env.do(t, http.MethodDelete, "/api/profiles/"+stored.ID, "")
+			assertStatus(t, rec, http.StatusNoContent)
 			if !slices.Equal(env.connection.commands, tt.wantCommands) {
 				t.Errorf("connection commands = %v, want %v", env.connection.commands, tt.wantCommands)
 			}
-			if tt.status == http.StatusConflict {
-				p := assertProblem(t, rec, tt.status, CodeConflict)
-				if !strings.Contains(p.Detail, "Disconnect") {
-					t.Errorf("detail = %q", p.Detail)
-				}
-				if len(env.profiles.ListProfiles()) != 1 {
-					t.Error("profile was deleted")
-				}
-				return
-			}
-			assertStatus(t, rec, tt.status)
 			if len(env.profiles.ListProfiles()) != 0 || !slices.Equal(env.connection.changed, []string{stored.ID}) {
 				t.Errorf("profiles %v, changed %v", env.profiles.ListProfiles(), env.connection.changed)
 			}
@@ -254,6 +254,24 @@ func TestDeleteProfile(t *testing.T) {
 	}
 	env := newTestEnv(t)
 	assertProblem(t, env.do(t, http.MethodDelete, "/api/profiles/missing", ""), http.StatusNotFound, CodeNotFound)
+}
+
+func TestDeleteProfileKeepsProfileWhenTunnelDoesNotStop(t *testing.T) {
+	env := newTestEnv(t)
+	env.server = New(env.server.deps, Options{DisconnectTimeout: 20 * time.Millisecond})
+	stored := env.storedProfile("Office")
+	env.connection.setStatus(vpn.Status{State: domain.StateReconnecting, ProfileID: stored.ID})
+	env.connection.disconnect = neverStops
+	p := assertProblem(t, env.do(t, http.MethodDelete, "/api/profiles/"+stored.ID, ""), http.StatusServiceUnavailable, CodeUnavailable)
+	if !strings.Contains(p.Detail, "did not stop in time") {
+		t.Errorf("detail = %q", p.Detail)
+	}
+	if len(env.profiles.ListProfiles()) != 1 || len(env.connection.changed) != 0 {
+		t.Errorf("profiles %v, changed %v; want the profile kept", env.profiles.ListProfiles(), env.connection.changed)
+	}
+	if env.connection.cancelCount() != 1 {
+		t.Errorf("unsubscribed %d times, want 1", env.connection.cancelCount())
+	}
 }
 
 func TestDeleteProfileKeepsProfileWhenDisconnectFails(t *testing.T) {

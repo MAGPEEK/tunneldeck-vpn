@@ -39,11 +39,14 @@ type ImportResult struct {
 // ImportOVPN parses the text of an .ovpn file into settings, secrets and
 // warnings (docs/openvpn-notes.md, "Consequences" item 4). Known directives
 // become fields, inline blocks become certificate and secret fields, inline
-// credentials become username and password, everything else goes through
-// the extra-option rules: kept, dropped with a warning, or reported with
-// severity "rejected". Only unusable input fails: a file that is too
-// large, empty, binary or without any OpenVPN directive, or an inline
-// block without its closing tag; the error is a *domain.ValidationError.
+// credentials, also from a partly commented-out block, become username and
+// password, everything else goes through the extra-option rules: kept,
+// dropped with a warning, or reported with severity "rejected", like every
+// directive that is no known OpenVPN 2.7 option. Only unusable input fails:
+// a file that is too large, empty, binary or without any OpenVPN
+// directive, an inline block without its closing tag, or a partly
+// commented-out credentials block with more than two lines; the error is a
+// *domain.ValidationError.
 func ImportOVPN(text string) (ImportResult, error) {
 	if len(text) > maxImportBytes {
 		return ImportResult{}, domain.NewFieldError(importField, domain.Issue("file_too_large", "max", "1 MiB"), "must be at most 1 MiB")
@@ -55,19 +58,10 @@ func ImportOVPN(text string) (ImportResult, error) {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	im := newImporter()
 	for i := 0; i < len(lines); i++ {
-		number := i + 1
-		match := blockOpener.FindStringSubmatch(strings.TrimSpace(lines[i]))
-		if match == nil {
-			im.line(lines[i], number)
-			continue
+		end, err := im.consume(lines, i)
+		if err != nil {
+			return ImportResult{}, err
 		}
-		end := blockEnd(lines, i, match[1])
-		if end < 0 {
-			return ImportResult{}, domain.NewFieldError(importField,
-				domain.Issue("openvpn_block_not_closed", "line", strconv.Itoa(number), "block", match[1]),
-				fmt.Sprintf("line %d: inline block <%s> is not closed", number, match[1]))
-		}
-		im.block(match[1], lines[i+1:end], number)
 		i = end
 	}
 	switch {
@@ -86,6 +80,111 @@ func emptyFileError() error {
 func notAProfileError() error {
 	return domain.NewFieldError(importField, domain.Issue("openvpn_not_a_profile"),
 		"is not an OpenVPN profile: it contains no OpenVPN directive")
+}
+
+// consume imports lines[i], together with the block it opens, and returns
+// the index of the last line it used.
+func (im *importer) consume(lines []string, i int) (int, error) {
+	if end, found, err := im.partialCredentials(lines, i); found || err != nil {
+		return end, err
+	}
+	number := i + 1
+	match := blockOpener.FindStringSubmatch(strings.TrimSpace(lines[i]))
+	if match == nil {
+		im.line(lines[i], number)
+		return i, nil
+	}
+	end := blockEnd(lines, i, match[1])
+	if end < 0 {
+		return i, domain.NewFieldError(importField,
+			domain.Issue("openvpn_block_not_closed", "line", strconv.Itoa(number), "block", match[1]),
+			fmt.Sprintf("line %d: inline block <%s> is not closed", number, match[1]))
+	}
+	im.block(match[1], lines[i+1:end], number)
+	return end, nil
+}
+
+// Tags of the inline credentials block.
+const (
+	credentialsOpener = "<auth-user-pass>"
+	credentialsCloser = "</auth-user-pass>"
+)
+
+// maxCredentialLines is the number of lines an inline credentials block
+// holds: username and password.
+const maxCredentialLines = 2
+
+// partialCredentials imports an <auth-user-pass> block opened at lines[i]
+// whose opener or closer, or both, are commented out while lines between
+// them are not. Providers ship the block commented out, and users often
+// remove the comment characters of the data lines only; OpenVPN would read
+// those as directives. The uncommented lines are username and password;
+// commented lines between are the provider's template. found is false when
+// lines[i] opens no such block; more than two data lines are an error
+// because it is unclear which of them are the credentials.
+func (im *importer) partialCredentials(lines []string, i int) (end int, found bool, err error) {
+	opener, openerCommented := credentialsMarker(lines[i])
+	if opener != credentialsOpener {
+		return i, false, nil
+	}
+	end = credentialsEnd(lines, i)
+	if end < 0 {
+		return i, false, nil
+	}
+	_, closerCommented := credentialsMarker(lines[end])
+	data := dataLines(lines[i+1 : end])
+	if !openerCommented && !closerCommented || openerCommented && closerCommented && len(data) == 0 {
+		return i, false, nil
+	}
+	number := i + 1
+	if len(data) > maxCredentialLines {
+		return i, true, domain.NewFieldError(importField,
+			domain.Issue("openvpn_credentials_block_ambiguous", "line", strconv.Itoa(number)),
+			fmt.Sprintf("line %d: the <auth-user-pass> block is partly commented out and has more than "+
+				"two uncommented lines; keep only username and password, or comment out the whole block", number))
+	}
+	im.content, im.recognized = true, true
+	im.credentials(data)
+	im.warn(Warning{
+		Code: CodeCredentialsFromPartialBlock, Severity: SeverityInfo, Directive: "auth-user-pass", Line: number,
+		Message: "username and password were taken from an <auth-user-pass> block that is partly commented out",
+	})
+	return end, true, nil
+}
+
+// credentialsMarker returns credentialsOpener or credentialsCloser when
+// line is one of them, possibly behind comment characters, and whether it
+// is commented out.
+func credentialsMarker(line string) (marker string, commented bool) {
+	trimmed := strings.TrimSpace(line)
+	uncommented := strings.TrimSpace(strings.TrimLeft(trimmed, "#;"))
+	if uncommented != credentialsOpener && uncommented != credentialsCloser {
+		return "", false
+	}
+	return uncommented, uncommented != trimmed
+}
+
+// credentialsEnd returns the index of the first credentials closer after
+// lines[start], commented or not, or -1.
+func credentialsEnd(lines []string, start int) int {
+	for i := start + 1; i < len(lines); i++ {
+		if marker, _ := credentialsMarker(lines[i]); marker == credentialsCloser {
+			return i
+		}
+	}
+	return -1
+}
+
+// dataLines returns the lines that are neither blank nor comments.
+func dataLines(lines []string) []string {
+	var data []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !isComment(trimmed[0]) {
+			data = append(data, line)
+		}
+	}
+	return data
 }
 
 // blockEnd returns the index of the closing tag of the block opened at
@@ -523,6 +622,7 @@ func (im *importer) warn(w Warning) {
 }
 
 // result applies the precedence rules and defaults and returns the draft.
+// Warnings never quote the imported username or password.
 func (im *importer) result() ImportResult {
 	s := im.settings
 	s.SetInt(KeyPort, cmp.Or(im.remotePort, im.port, DefaultPort))
@@ -546,7 +646,8 @@ func (im *importer) result() ImportResult {
 			Message: "remote-cert-tls server is added; switch off verifyServerCertUsage if the server certificate lacks the TLS server usage",
 		})
 	}
-	return ImportResult{Settings: s, Secrets: im.secrets, Warnings: im.warnings, Missing: missing}
+	hidden := credentialRedactor(s, im.secrets)
+	return ImportResult{Settings: s, Secrets: im.secrets, Warnings: hidden.warnings(im.warnings), Missing: missing}
 }
 
 func (im *importer) authMode() string {

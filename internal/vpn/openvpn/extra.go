@@ -2,6 +2,7 @@ package openvpn
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -57,15 +58,16 @@ type extraOption struct {
 }
 
 // extraResult sorts the extra options of a profile into kept, dropped and
-// rejected lines.
+// rejected lines and lines that are no known OpenVPN directive.
 type extraResult struct {
 	kept     []extraOption
 	dropped  []Warning
 	rejected []Warning
+	unknown  []Warning
 }
 
-// checkExtraOptions applies readLine, the classifier and the line length
-// limit to every extra option.
+// checkExtraOptions applies readLine, the classifier, the list of known
+// directives and the line length limit to every extra option.
 func checkExtraOptions(lines []string) extraResult {
 	var result extraResult
 	for i, raw := range lines {
@@ -78,6 +80,8 @@ func checkExtraOptions(lines []string) extraResult {
 		case status == lineBlank:
 		case status == lineKept:
 			result.kept = append(result.kept, extraOption{line: number, directive: d})
+		case v.code == CodeUnknownDirective:
+			result.unknown = append(result.unknown, v.warning(d, number))
 		case v.rejected():
 			result.rejected = append(result.rejected, v.warning(d, number))
 		default:
@@ -87,11 +91,15 @@ func checkExtraOptions(lines []string) extraResult {
 	return result
 }
 
-// classifyKept classifies a parsed directive and checks that its canonical
-// form still fits on one config line.
+// classifyKept classifies a parsed directive, rejects it when it is no
+// known OpenVPN directive and checks that its canonical form still fits on
+// one config line.
 func classifyKept(d directive) (verdict, lineStatus) {
 	if v, removed := classify(d); removed {
 		return v, lineRemoved
+	}
+	if !knownDirectives[d.name] {
+		return verdictUnknown, lineRemoved
 	}
 	if len(d.String()) >= maxLineLength {
 		return lineTooLong, lineRemoved
@@ -99,13 +107,50 @@ func classifyKept(d directive) (verdict, lineStatus) {
 	return verdict{}, lineKept
 }
 
-// rejectionIssue names the rejected lines for a translated message.
-func rejectionIssue(rejected []Warning) domain.FieldIssue {
-	lines := make([]string, len(rejected))
-	for i, w := range rejected {
+// redacted returns result with every warning passed through hidden.
+func (result extraResult) redacted(hidden redactor) extraResult {
+	result.dropped = hidden.warnings(result.dropped)
+	result.rejected = hidden.warnings(result.rejected)
+	result.unknown = hidden.warnings(result.unknown)
+	return result
+}
+
+// rejectionIssue describes failing lines for a translated message: the
+// names of unknown options when only those fail, else the line numbers.
+func rejectionIssue(failing []Warning) domain.FieldIssue {
+	if !slices.ContainsFunc(failing, func(w Warning) bool { return w.Code != CodeUnknownDirective }) {
+		return domain.Issue("extra_option_unknown", "name", unknownNames(failing))
+	}
+	lines := make([]string, len(failing))
+	for i, w := range failing {
 		lines[i] = strconv.Itoa(w.Line)
 	}
 	return domain.Issue("openvpn_extra_options_rejected", "lines", strings.Join(lines, ", "))
+}
+
+// unknownNames joins the distinct directive names of unknown lines. The
+// warnings must be redacted.
+func unknownNames(unknown []Warning) string {
+	var names []string
+	for _, w := range unknown {
+		if !slices.Contains(names, w.Directive) {
+			names = append(names, w.Directive)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// skippedUnknown turns unknown lines into render warnings that name the
+// line only, never the text: such a line may hold a credential.
+func skippedUnknown(unknown []Warning) []Warning {
+	skipped := make([]Warning, len(unknown))
+	for i, w := range unknown {
+		skipped[i] = Warning{
+			Code: CodeUnknownDirective, Severity: SeverityWarning, Line: w.Line,
+			Message: "skipped: not a known OpenVPN 2.7 option; remove it from the profile",
+		}
+	}
+	return skipped
 }
 
 // describeRejections joins rejected lines into one validation message. Only

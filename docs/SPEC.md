@@ -133,7 +133,7 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | POST | `/api/setup`, `/api/login`, `/api/logout` | Account and session |
 | GET | `/api/drivers` | Protocols with their `FormSchema` |
 | GET/POST | `/api/profiles` | List / create |
-| GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete refused while the profile is active and connecting, connected, reconnecting or disconnecting; an active profile in state `error` is disconnected first) |
+| GET/PUT/DELETE | `/api/profiles/{id}` | Read / update / delete (delete is always possible: an active profile in any state other than `disconnected` is disconnected first and deleted once the manager reports `disconnected`; if the tunnel does not stop within 15 s the profile is kept and `503 unavailable` is returned) |
 | POST | `/api/profiles/import` | Parse `.ovpn` text → draft profile + warnings (not saved). The draft echoes the secrets contained in the uploaded text back to the same client so the form can submit them with the create request — the only response that carries secret values, and never from storage |
 | GET | `/api/connection` | State, active profile, VPN IP, remote, since, bytes in/out, rates |
 | POST | `/api/connection/connect` `{profileId}`, `/disconnect`, `/reconnect` | Control |

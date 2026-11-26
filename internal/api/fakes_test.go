@@ -273,6 +273,7 @@ type fakeConnection struct {
 	logTail     int
 	subscribers []chan domain.Event
 	cancelled   int
+	disconnect  disconnectMode
 }
 
 func (c *fakeConnection) record(command string) error {
@@ -285,8 +286,36 @@ func (c *fakeConnection) record(command string) error {
 func (c *fakeConnection) Connect(_ context.Context, id string) error {
 	return c.record("connect " + id)
 }
-func (c *fakeConnection) Disconnect(context.Context) error { return c.record("disconnect") }
-func (c *fakeConnection) Reconnect(context.Context) error  { return c.record("reconnect") }
+
+// disconnectMode is how the fake tunnel reacts to Disconnect.
+type disconnectMode int
+
+const (
+	neverStops   disconnectMode = iota // the status stays as it is
+	stopsByEvent                       // only a state event reports it
+	stopsAtOnce                        // status is disconnected on return
+)
+
+func (c *fakeConnection) Disconnect(context.Context) error {
+	if err := c.record("disconnect"); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch c.disconnect {
+	case stopsAtOnce:
+		c.status = vpn.Status{State: domain.StateDisconnected}
+	case stopsByEvent:
+		for _, events := range c.subscribers {
+			events <- domain.StateEvent{State: domain.StateDisconnecting}
+			events <- domain.StateEvent{State: domain.StateDisconnected}
+		}
+	case neverStops:
+	}
+	return nil
+}
+
+func (c *fakeConnection) Reconnect(context.Context) error { return c.record("reconnect") }
 
 func (c *fakeConnection) ProfileChanged(id string) {
 	c.mu.Lock()

@@ -303,3 +303,48 @@ func TestRemoteNetworks(t *testing.T) {
 		t.Errorf("RemoteNetworks without the setting = %v, want none", got)
 	}
 }
+
+// TestValidateRejectsUnknownExtraOptions reports extra options that are no
+// known OpenVPN directive, such as credentials that an older import stored
+// there, and never names the stored username, password or passphrase.
+func TestValidateRejectsUnknownExtraOptions(t *testing.T) {
+	tests := []struct {
+		name     string
+		extras   []string
+		wantCode string
+		wantName string
+		wantNot  []string
+	}{
+		{name: "unknown option", extras: []string{"float", "frobnicate 1"}, wantCode: "extra_option_unknown", wantName: "frobnicate"},
+		{
+			name: "stored username and password", extras: []string{"float", "tduser", "mdex-password"},
+			wantCode: "extra_option_unknown", wantName: hiddenValue, wantNot: []string{"tduser", "mdex-password"},
+		},
+		{
+			name: "passphrase with spaces", extras: []string{"passphrase words"},
+			wantCode: "extra_option_unknown", wantName: hiddenValue, wantNot: []string{"passphrase"},
+		},
+		{name: "unknown and forbidden", extras: []string{"up /bin/sh", "tduser"}, wantCode: "openvpn_extra_options_rejected", wantNot: []string{"tduser"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, secrets := mdexSettings(), mdexSecrets()
+			settings[KeyExtraOptions] = tt.extras
+			secrets[SecretKeyPassphrase] = "passphrase words"
+			err := Validate(newProfile(t, settings, secrets))
+			var v *domain.ValidationError
+			if !errors.As(err, &v) {
+				t.Fatalf("Validate error = %v, want a *domain.ValidationError", err)
+			}
+			issue := v.Issues[KeyExtraOptions]
+			if issue.Code != tt.wantCode || issue.Params["name"] != tt.wantName {
+				t.Errorf("issue = %+v, want %s with name %q", issue, tt.wantCode, tt.wantName)
+			}
+			for _, value := range tt.wantNot {
+				if strings.Contains(err.Error(), value) {
+					t.Errorf("error %q names %q", err, value)
+				}
+			}
+		})
+	}
+}

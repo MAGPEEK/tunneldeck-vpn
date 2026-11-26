@@ -167,7 +167,7 @@
   },
   "profiles": {
     "new": "New profile",
-    "deleteFailed": "The profile could not be deleted. Disconnect it first and try again.",
+    "deleteFailed": "The profile could not be deleted. Try again.",
     "column": {
       "name": "Name",
       "protocol": "Protocol",
@@ -178,7 +178,6 @@
     },
     "off": "Off",
     "active": "Active",
-    "deleteWhileConnected": "Disconnect to delete",
     "edit": "Edit",
     "editNamed": "Edit {{name}}",
     "duplicate": "Duplicate",
@@ -188,6 +187,8 @@
     "confirmLabel": "Confirm deletion",
     "confirmDelete": "Delete the profile \"{{name}}\"? This cannot be undone.",
     "confirmDeleteButton": "Delete profile",
+    "confirmDeleteInUse": "This profile is in use. It will be disconnected and deleted.",
+    "confirmDeleteInUseButton": "Disconnect and delete",
     "cancel": "Cancel",
     "empty": "No profiles yet",
     "importTitle": "Paste an OpenVPN configuration",
@@ -271,7 +272,9 @@
       "setenv_ignored": "sets a variable that only scripts and VPN apps use; it is not needed.",
       "script_security_dropped": "only allows scripts; TunnelDeck-VPN runs none, so it is not needed.",
       "verb_replaced": "was replaced by the log level of TunnelDeck-VPN.",
-      "credentials_expected": "The file contains no client certificate and no username and password. Sign-in with username and password is selected: enter the access data from your provider."
+      "credentials_expected": "The file contains no client certificate and no username and password. Sign-in with username and password is selected: enter the access data from your provider.",
+      "credentials_from_partial_block": "Username and password were taken from a credentials block that is only partly commented out.",
+      "unknown_directive": "is not a known OpenVPN option."
     }
   },
   "firewall": {
@@ -646,6 +649,8 @@
     "openvpn_pkcs12_invalid": "Must be a base64-encoded PKCS#12 file (.p12, .pfx) of at most 64 KiB.",
     "openvpn_extra_options_rejected": "Not allowed here: line {{lines}}.",
     "openvpn_block_not_closed": "Line {{line}}: the inline block <{{block}}> is not closed.",
+    "openvpn_credentials_block_ambiguous": "Line {{line}}: the credentials block is partly commented out and has more than two uncommented lines. Keep only username and password, or comment out the whole block.",
+    "extra_option_unknown": "Unknown OpenVPN option: {{name}}",
     "remote_network_not_cidr": "Entry {{entry}}: enter an IPv4 network in CIDR notation, such as 10.1.2.0/24.",
     "remote_network_not_canonical": "Entry {{entry}}: write the network address with its prefix length, such as 10.1.2.0/24.",
     "remote_network_everything": "Entry {{entry}} must not cover every address.",

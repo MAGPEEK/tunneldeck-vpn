@@ -99,8 +99,17 @@ func (r *run) supervise() {
 
 func (r *run) reportWarnings() {
 	for _, w := range r.warnings {
-		r.log(domain.LogLevelWarn, fmt.Sprintf("extra option %q %s", w.Directive, w.Message))
+		r.log(domain.LogLevelWarn, describeExtraWarning(w))
 	}
+}
+
+// describeExtraWarning names the extra option of w by its directive, or by
+// its line when the warning withholds the text.
+func describeExtraWarning(w Warning) string {
+	if w.Directive == "" {
+		return fmt.Sprintf("extra option on line %d %s", w.Line, w.Message)
+	}
+	return fmt.Sprintf("extra option %q %s", w.Directive, w.Message)
 }
 
 func (r *run) waitForExit() {

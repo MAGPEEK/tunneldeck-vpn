@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"net/http"
@@ -207,17 +208,13 @@ func mergeValidation(v *domain.ValidationError, err error) {
 	}
 }
 
-// deleteProfile refuses to delete the active profile while its tunnel is
-// up or changing state (SPEC §9). An active profile in state error or
-// disconnected is disconnected first, which clears the desired connection.
+// deleteProfile deletes a profile in any connection state (SPEC §9). The
+// active profile is disconnected first, which clears the desired
+// connection, and deleted once the tunnel is down.
 func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if status := s.deps.Connection.Status(); status.ProfileID == id {
-		if tunnelInUse(status.State) {
-			writeError(w, r, conflictError{detail: "Disconnect the profile before deleting it."})
-			return
-		}
-		if err := s.deps.Connection.Disconnect(r.Context()); err != nil {
+	if s.deps.Connection.Status().ProfileID == id {
+		if err := s.disconnectAndWait(r.Context()); err != nil {
 			writeError(w, r, err)
 			return
 		}
@@ -230,13 +227,42 @@ func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-// tunnelInUse reports whether a tunnel in state is up or changing state.
-func tunnelInUse(state domain.ConnectionState) bool {
-	switch state {
-	case domain.StateConnecting, domain.StateConnected, domain.StateReconnecting, domain.StateDisconnecting:
-		return true
+// disconnectAndWait disconnects and waits, at most disconnectTimeout, until
+// the manager reports the tunnel disconnected. It subscribes before
+// disconnecting so the final state event cannot be missed.
+func (s *Server) disconnectAndWait(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, s.disconnectTimeout)
+	defer cancel()
+	events, unsubscribe := s.deps.Connection.Subscribe()
+	defer unsubscribe()
+	if err := s.deps.Connection.Disconnect(ctx); err != nil {
+		return err
 	}
-	return false
+	if s.deps.Connection.Status().State == domain.StateDisconnected {
+		return nil
+	}
+	if awaitDisconnected(ctx, events) || s.deps.Connection.Status().State == domain.StateDisconnected {
+		return nil
+	}
+	return unavailableError{detail: "The connection did not stop in time, so the profile was not deleted. Try again."}
+}
+
+// awaitDisconnected reads events until a disconnected state arrives (true),
+// or the stream closes or ctx ends (false).
+func awaitDisconnected(ctx context.Context, events <-chan domain.Event) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case event, ok := <-events:
+			if !ok {
+				return false
+			}
+			if state, isState := event.(domain.StateEvent); isState && state.State == domain.StateDisconnected {
+				return true
+			}
+		}
+	}
 }
 
 func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {

@@ -52,12 +52,29 @@ describe('ProfilesPage', () => {
     expect(within(row('Office')).queryByText('Active')).not.toBeInTheDocument();
   });
 
-  it('disables delete with a hint while the profile is connected', async () => {
+  it('keeps delete enabled for every profile, also the connected one', async () => {
     renderApp(routes(), '/profiles');
-    const button = await screen.findByRole('button', { name: 'Delete mdex' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription('Disconnect to delete');
+    expect(await screen.findByRole('button', { name: 'Delete mdex' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Delete Office' })).toBeEnabled();
+  });
+
+  it('warns that the profile in use is disconnected and deleted', async () => {
+    const { fetchMock } = renderApp(
+      routes({ 'DELETE /api/profiles/p2': { status: 204 } }),
+      '/profiles',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete mdex' }));
+    const confirm = screen.getByRole('group', { name: 'Confirm deletion' });
+    expect(confirm).toHaveTextContent(
+      'This profile is in use. It will be disconnected and deleted.',
+    );
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Disconnect and delete' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/profiles/p2',
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
   });
 
   it('deletes after an inline confirmation', async () => {
@@ -95,13 +112,13 @@ describe('ProfilesPage', () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
   });
 
-  it('shows a refused delete', async () => {
+  it('shows a failed delete', async () => {
     renderApp(
       routes({
         'DELETE /api/profiles/p1': problem(
-          409,
-          'conflict',
-          'Disconnect the profile before deleting it.',
+          503,
+          'unavailable',
+          'The connection did not stop in time, so the profile was not deleted. Try again.',
         ),
       }),
       '/profiles',

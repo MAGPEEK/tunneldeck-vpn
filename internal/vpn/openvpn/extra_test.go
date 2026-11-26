@@ -20,6 +20,8 @@ func checkOne(line string) (extraOutcome, bool) {
 		return extraOutcome{kept: result.kept[0].directive.String()}, true
 	case len(result.rejected) == 1:
 		return extraOutcome{code: result.rejected[0].Code, rejected: true}, true
+	case len(result.unknown) == 1:
+		return extraOutcome{code: result.unknown[0].Code, rejected: true}, true
 	case len(result.dropped) == 1:
 		return extraOutcome{code: result.dropped[0].Code}, true
 	}
@@ -172,6 +174,63 @@ func TestExtraOptionsHandledByTunnelDeck(t *testing.T) {
 			got, _ := checkOne(tt.line)
 			if got != tt.want {
 				t.Errorf("outcome = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestExtraOptionsUnknown rejects every directive that is no known OpenVPN
+// 2.7 client option, such as a username typed on a line of its own, while
+// the denylist still decides about known directives.
+func TestExtraOptionsUnknown(t *testing.T) {
+	tests := []struct {
+		line string
+		want extraOutcome
+	}{
+		{"alice", rejected(CodeUnknownDirective)},
+		{"frobnicate 1", rejected(CodeUnknownDirective)},
+		{"block-outside-dns", rejected(CodeUnknownDirective)},
+		{"server 10.8.0.0 255.255.255.0", rejected(CodeUnknownDirective)},
+		{"push \"route 10.0.0.0 255.0.0.0\"", rejected(CodeUnknownDirective)},
+		{"no-replay", rejected(CodeUnknownDirective)},
+		{"genkey", rejected(CodeUnknownDirective)},
+		{"Alice", rejected(CodeInvalidDirective)},
+		{"up /bin/sh", rejected(CodeRunsCode)},
+		{"ncp-disable", dropped(CodeDeprecatedIgnored)},
+		{"tun-mtu 1500", kept("tun-mtu 1500")},
+		{"tls-groups X25519", kept("tls-groups X25519")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			got, _ := checkOne(tt.line)
+			if got != tt.want {
+				t.Errorf("outcome = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRejectionIssue(t *testing.T) {
+	unknown := func(name string, line int) Warning {
+		return Warning{Code: CodeUnknownDirective, Directive: name, Line: line}
+	}
+	tests := []struct {
+		name    string
+		failing []Warning
+		want    string
+	}{
+		{"unknown only", []Warning{unknown("alice", 1), unknown("bob", 3), unknown("alice", 4)}, "extra_option_unknown name=alice, bob"},
+		{"mixed", []Warning{{Code: CodeRunsCode, Directive: "up", Line: 1}, unknown("alice", 2)}, "openvpn_extra_options_rejected lines=1, 2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issue := rejectionIssue(tt.failing)
+			got := issue.Code
+			for key, value := range issue.Params {
+				got += " " + key + "=" + value
+			}
+			if got != tt.want {
+				t.Errorf("issue = %q, want %q", got, tt.want)
 			}
 		})
 	}

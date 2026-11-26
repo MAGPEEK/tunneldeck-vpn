@@ -150,7 +150,7 @@ func Validate(p domain.Profile) error {
 // one of lan, the host's LAN subnets: routing them into the tunnel would
 // cut the host off from its LAN.
 func ValidateWithLAN(p domain.Profile, lan []netip.Prefix) error {
-	_, err := parseProfile(p, vpn.Secrets(p.Secrets), lan)
+	_, err := parseProfile(p, vpn.Secrets(p.Secrets), lan, rejectUnknownExtras)
 	return err.OrNil()
 }
 
@@ -170,11 +170,25 @@ func RemoteNetworks(p domain.Profile) []netip.Prefix {
 	return networks
 }
 
+// unknownExtrasPolicy decides what happens to an extra option that is no
+// known OpenVPN directive: it fails validation, so that the user sees and
+// removes it, or it is skipped when a stored profile is rendered.
+type unknownExtrasPolicy int
+
+const (
+	rejectUnknownExtras unknownExtrasPolicy = iota
+	skipUnknownExtras
+)
+
 // parseProfile checks p's settings together with secrets and returns the
-// typed config. lan, when known, are the host's LAN subnets. The returned
+// typed config. lan, when known, are the host's LAN subnets; unknown says
+// how extra options that are no known directive are treated. The returned
 // *ValidationError is empty when all is well.
-func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix) (profileConfig, *domain.ValidationError) {
-	r := settingsReader{settings: p.Settings, errs: &domain.ValidationError{}}
+func parseProfile(p domain.Profile, secrets vpn.Secrets, lan []netip.Prefix, unknown unknownExtrasPolicy) (profileConfig, *domain.ValidationError) {
+	r := settingsReader{
+		settings: p.Settings, errs: &domain.ValidationError{},
+		hidden: credentialRedactor(p.Settings, secrets), unknownExtras: unknown,
+	}
 	if p.Protocol != domain.ProtocolOpenVPN {
 		r.errs.AddIssue("protocol", domain.Issue("protocol_unsupported"), "must be openvpn")
 	}
@@ -237,9 +251,19 @@ var keyMaterialCodes = map[error]string{
 }
 
 // settingsReader reads typed settings with defaults and collects errors.
+// hidden keeps credentials out of the errors about extra options.
 type settingsReader struct {
-	settings domain.Settings
-	errs     *domain.ValidationError
+	settings      domain.Settings
+	errs          *domain.ValidationError
+	hidden        redactor
+	unknownExtras unknownExtrasPolicy
+}
+
+// credentialRedactor hides the username, password and key passphrase of a
+// profile.
+func credentialRedactor(settings domain.Settings, secrets vpn.Secrets) redactor {
+	username, _ := settings.String(KeyUsername)
+	return newRedactor(username, secrets[SecretPassword], secrets[SecretKeyPassphrase])
 }
 
 func (r settingsReader) rejectUnknownKeys(secrets vpn.Secrets) {
@@ -507,9 +531,14 @@ func (r settingsReader) extraOptions() extraResult {
 		r.errs.AddIssue(KeyExtraOptions, domain.Issue("not_string_list"), "must be a list of strings")
 		return extraResult{}
 	}
-	result := checkExtraOptions(lines)
-	if len(result.rejected) > 0 {
-		r.errs.AddIssue(KeyExtraOptions, rejectionIssue(result.rejected), describeRejections(result.rejected))
+	result := checkExtraOptions(lines).redacted(r.hidden)
+	failing := result.rejected
+	if r.unknownExtras == rejectUnknownExtras {
+		failing = slices.Concat(result.rejected, result.unknown)
+		slices.SortStableFunc(failing, func(a, b Warning) int { return a.Line - b.Line })
+	}
+	if len(failing) > 0 {
+		r.errs.AddIssue(KeyExtraOptions, rejectionIssue(failing), describeRejections(failing))
 	}
 	return result
 }

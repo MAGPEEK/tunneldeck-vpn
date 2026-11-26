@@ -67,6 +67,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var validation *domain.ValidationError
 	var rateLimit *RateLimitError
 	var badRequest badRequestError
+	var unavailable unavailableError
 	switch {
 	case errors.As(err, &badRequest):
 		writeProblem(w, newProblem(http.StatusBadRequest, CodeBadRequest, badRequest.detail))
@@ -92,6 +93,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 			detail = c.detail
 		}
 		writeProblem(w, newProblem(http.StatusConflict, CodeConflict, detail))
+	case errors.As(err, &unavailable):
+		writeProblem(w, newProblem(http.StatusServiceUnavailable, CodeUnavailable, unavailable.detail))
 	case errors.Is(err, vpn.ErrClosed):
 		writeProblem(w, newProblem(http.StatusServiceUnavailable, CodeUnavailable, "The server is shutting down."))
 	default:
@@ -105,3 +108,9 @@ type conflictError struct{ detail string }
 
 func (e conflictError) Error() string { return e.detail }
 func (e conflictError) Unwrap() error { return domain.ErrConflict }
+
+// unavailableError is a temporary failure, answered with 503 and a detail
+// for the client.
+type unavailableError struct{ detail string }
+
+func (e unavailableError) Error() string { return e.detail }

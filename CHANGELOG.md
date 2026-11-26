@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Fixed
+
+- Profiles can always be deleted, also the active one while it connects, is connected or keeps retrying. `DELETE /api/profiles/{id}` disconnects the active profile first, waits up to 15 s for the tunnel to stop and then deletes it (`503 unavailable` if it does not stop in time) instead of answering `409`. The Delete button is no longer disabled; for the profile in use the confirmation reads "This profile is in use. It will be disconnected and deleted." with the button "Disconnect and delete".
+- OpenVPN import: credentials could end up in extra options. When only the data lines of a provider's commented-out `<auth-user-pass>` template were uncommented, username and password were stored unencrypted as extra options, shown in the UI and written into the rendered config, where OpenVPN failed with "Unrecognized option". The uncommented lines between a commented opener or closer are now taken as username and password (note `credentials_from_partial_block`); more than two such lines fail the import (`openvpn_credentials_block_ambiguous`). Imported directives and extra options must be known OpenVPN 2.7 client options (the list comes from the image's openvpn 2.7.9): an unknown directive is not imported (`unknown_directive`, rejected), and an unknown extra option fails validation with `extra_option_unknown` ("Unknown OpenVPN option: …"), also for stored profiles when they are saved again; nothing is deleted automatically. Connecting a stored profile skips such entries and logs a warning with the line number only. Warnings and errors show a value that matches the stored username, password or key passphrase as "(hidden)".
+
 ## [0.2.0-alpha.4] - 2026-11-27
 
 ### Fixed
