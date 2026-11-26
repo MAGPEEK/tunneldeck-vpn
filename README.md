@@ -2,7 +2,7 @@
 
 **A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC or a Raspberry Pi.
 
-[Deutsch](README.de.md) · License: MIT · Status: **0.4.0**; OpenVPN field-tested on a Synology DS723+ with mdex; WireGuard and IPsec (IKEv1 XAuth) tested live against a FRITZ!Box
+[Deutsch](README.de.md) · License: MIT · Status: **0.4.1**; OpenVPN field-tested on a Synology DS723+ with mdex; WireGuard and IPsec (IKEv1 XAuth) tested live against a FRITZ!Box
 
 ## What it does
 
@@ -29,7 +29,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.4.0
+    image: magpeek/tunneldeck-vpn:0.4.1
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]

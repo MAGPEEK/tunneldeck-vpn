@@ -2,7 +2,7 @@
 # docs/synology.md. Create /volume1/docker/tunneldeck before the first start.
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.4.0
+    image: magpeek/tunneldeck-vpn:0.4.1
     container_name: tunneldeck
     network_mode: host
     cap_add:

@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-26
+
 ### Added
 
 - WireGuard import: a further `[Interface]` section is noted ("its keys are merged into the first one"), and the import lists at most 50 notes, followed by how many more are not listed.
