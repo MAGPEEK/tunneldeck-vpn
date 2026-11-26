@@ -54,7 +54,7 @@
 - `web/src/theme/` — theme storage and toggle
 - `web/src/layout/` — `AppShell` (sidebar/top bar), `AuthLayout`, `Page`
 - `web/src/components/` — shared Button, Card, CopyButton, Field, StatePill (state tones plus accent), EmptyState, Table (with optional detail row and highlighted-row state), Notice, ExternalLink (new tab, `rel="noopener noreferrer"`)
-- `web/src/advisories/` — advisory list (dashboard) and notice (profile form)
+- `web/src/advisories/` — advisory list (dashboard) and notice (profile form); `liveAdvisories.ts` turns "cipher none" into a warning while the tunnel negotiated a cipher
 - `web/src/publicIp/` — `shownPublicIp`: the profile's public address, else the detected public IP (`shownPublicIp.ts`), shared by Dashboard and remote access
 - `web/src/remoteAccess/` — remote access URL from the public address, the detected public IP or the VPN IP (`remoteAccessUrl.ts`) and its link with Copy button (`RemoteAccessAddress.tsx`), shared by Dashboard and System page
 - `web/src/format/` — pure formatters: bytes, bit rates, durations, clock and zoned time; uptime as the largest units (`uptime.ts`)
