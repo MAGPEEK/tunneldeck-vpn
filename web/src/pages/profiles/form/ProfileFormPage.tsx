@@ -25,6 +25,7 @@ function emptyDraft(drivers: Driver[], protocol: string): ProfileDraft {
     values: initialValues(schema),
     secrets: initialSecrets(schema),
     dailyReconnect: DEFAULT_DAILY,
+    publicAddress: '',
   };
 }
 
@@ -38,6 +39,7 @@ function draftFromProfile(drivers: Driver[], profile: Profile, keepSecrets: bool
     values: initialValues(schema, profile.settings),
     secrets: initialSecrets(schema, keepSecrets ? profile.secrets : {}),
     dailyReconnect: profile.dailyReconnect,
+    publicAddress: profile.publicAddress ?? '',
   };
 }
 

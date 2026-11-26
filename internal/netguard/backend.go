@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,58 @@ type Backend struct {
 	// Mixed is true when both backends hold host rules: the rules of the
 	// backend not chosen keep filtering traffic as well.
 	Mixed bool
+	// choice is Reason as a self-check detail code with its parameters.
+	choice backendChoice
+}
+
+// backendChoice is why a backend was chosen: a self-check detail code and
+// the values its text needs.
+type backendChoice struct {
+	code        string
+	kind        xtablesKind
+	nftRules    int
+	legacyRules int
+}
+
+// newBackend is binary, chosen for c.
+func newBackend(binary string, c backendChoice) Backend {
+	return Backend{Binary: binary, Reason: c.reason(), Mixed: c.code == detailIptablesMixed, choice: c}
+}
+
+// with is c for code, choosing kind.
+func (c backendChoice) with(code string, kind xtablesKind) backendChoice {
+	c.code, c.kind = code, kind
+	return c
+}
+
+// reason explains c in English.
+func (c backendChoice) reason() string {
+	switch c.code {
+	case detailIptablesForced:
+		return fmt.Sprintf("forced to %s by configuration", c.kind)
+	case detailIptablesOnlyNft:
+		return "only the nf_tables backend works"
+	case detailIptablesOnlyLegacy:
+		return "only the legacy backend works"
+	case detailIptablesMixed:
+		return fmt.Sprintf("host rules in both backends (nf_tables %d, legacy %d), chose %s; the other backend's rules still apply",
+			c.nftRules, c.legacyRules, c.kind)
+	case detailIptablesRulesLegacy:
+		return fmt.Sprintf("host rules only in legacy (%d)", c.legacyRules)
+	case detailIptablesRulesNft:
+		return fmt.Sprintf("host rules only in nf_tables (%d)", c.nftRules)
+	}
+	return "no host rules in either backend, nf_tables preferred"
+}
+
+// params are the values of c's detail text; binary is the chosen binary.
+func (c backendChoice) params(binary string) map[string]string {
+	return map[string]string{
+		"binary":      binary,
+		"backend":     string(c.kind),
+		"nftRules":    strconv.Itoa(c.nftRules),
+		"legacyRules": strconv.Itoa(c.legacyRules),
+	}
 }
 
 // xtablesKind is an iptables backend as "iptables -V" names it.
@@ -107,7 +160,7 @@ func (g *Guard) forcedBackend(ctx context.Context, kind xtablesKind) (Backend, e
 	if len(found) == 0 {
 		return Backend{}, &NoBackendError{Attempts: attempts}
 	}
-	return Backend{Binary: found[0].binary, Reason: fmt.Sprintf("forced to %s by configuration", kind)}, nil
+	return newBackend(found[0].binary, backendChoice{code: detailIptablesForced, kind: kind}), nil
 }
 
 // autoBackend shares the backend with the host's firewall: the one that
@@ -120,33 +173,29 @@ func (g *Guard) autoBackend(ctx context.Context) (Backend, error) {
 	}
 	nft, hasNft := probeOf(found, kindNft)
 	legacy, hasLegacy := probeOf(found, kindLegacy)
+	counts := backendChoice{nftRules: nft.rules, legacyRules: legacy.rules}
 	switch {
 	case !hasLegacy:
-		return Backend{Binary: nft.binary, Reason: "only the nf_tables backend works"}, nil
+		return newBackend(nft.binary, counts.with(detailIptablesOnlyNft, kindNft)), nil
 	case !hasNft:
-		return Backend{Binary: legacy.binary, Reason: "only the legacy backend works"}, nil
+		return newBackend(legacy.binary, counts.with(detailIptablesOnlyLegacy, kindLegacy)), nil
 	case nft.rules > 0 && legacy.rules > 0:
-		return mixedBackend(nft, legacy), nil
+		return mixedBackend(nft, legacy, counts), nil
 	case legacy.rules > 0:
-		return Backend{Binary: legacy.binary, Reason: fmt.Sprintf("host rules only in legacy (%d)", legacy.rules)}, nil
+		return newBackend(legacy.binary, counts.with(detailIptablesRulesLegacy, kindLegacy)), nil
 	case nft.rules > 0:
-		return Backend{Binary: nft.binary, Reason: fmt.Sprintf("host rules only in nf_tables (%d)", nft.rules)}, nil
+		return newBackend(nft.binary, counts.with(detailIptablesRulesNft, kindNft)), nil
 	}
-	return Backend{Binary: nft.binary, Reason: "no host rules in either backend, nf_tables preferred"}, nil
+	return newBackend(nft.binary, counts.with(detailIptablesNoRules, kindNft)), nil
 }
 
 // mixedBackend picks the backend with more host rules, nf_tables on a tie.
-func mixedBackend(nft, legacy probe) Backend {
+func mixedBackend(nft, legacy probe, counts backendChoice) Backend {
 	chosen := nft
 	if legacy.rules > nft.rules {
 		chosen = legacy
 	}
-	return Backend{
-		Binary: chosen.binary,
-		Reason: fmt.Sprintf("host rules in both backends (nf_tables %d, legacy %d), chose %s; the other backend's rules still apply",
-			nft.rules, legacy.rules, chosen.kind),
-		Mixed: true,
-	}
+	return newBackend(chosen.binary, counts.with(detailIptablesMixed, chosen.kind))
 }
 
 // probeKinds finds a working binary for each of kinds: the backend's own

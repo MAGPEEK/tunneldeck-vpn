@@ -31,8 +31,11 @@ type Profile struct {
 	Settings       Settings          `json:"settings"`
 	Secrets        map[string]string `json:"-"`
 	DailyReconnect DailyReconnect    `json:"dailyReconnect"`
-	CreatedAt      time.Time         `json:"createdAt"`
-	UpdatedAt      time.Time         `json:"updatedAt"`
+	// PublicAddress is the address the provider assigns to this connection
+	// (IPv4 or host name), set by the user; empty when unknown.
+	PublicAddress string    `json:"publicAddress"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // SecretState tells whether a secret field holds a value, without the value.
@@ -49,6 +52,7 @@ type PublicProfile struct {
 	Settings       Settings               `json:"settings"`
 	Secrets        map[string]SecretState `json:"secrets"`
 	DailyReconnect DailyReconnect         `json:"dailyReconnect"`
+	PublicAddress  string                 `json:"publicAddress"`
 	CreatedAt      time.Time              `json:"createdAt"`
 	UpdatedAt      time.Time              `json:"updatedAt"`
 }
@@ -69,15 +73,17 @@ func (p Profile) Public() PublicProfile {
 		Settings:       p.Settings.Clone(),
 		Secrets:        secrets,
 		DailyReconnect: p.DailyReconnect,
+		PublicAddress:  p.PublicAddress,
 		CreatedAt:      p.CreatedAt,
 		UpdatedAt:      p.UpdatedAt,
 	}
 }
 
-// Normalize trims the name and fills an empty daily reconnect time with the
+// Normalize trims the name and the public address and fills an empty daily reconnect time with the
 // default.
 func (p *Profile) Normalize() {
 	p.Name = strings.TrimSpace(p.Name)
+	p.PublicAddress = strings.TrimSpace(p.PublicAddress)
 	if p.DailyReconnect.Time == "" {
 		p.DailyReconnect.Time = DefaultDailyReconnectTime
 	}
@@ -98,6 +104,9 @@ func (p Profile) Validate() error {
 		}
 	}
 	v.Merge("dailyReconnect.", asValidationError(p.DailyReconnect.Validate()))
+	if p.PublicAddress != "" && !isPublicAddress(p.PublicAddress) {
+		v.AddIssue("publicAddress", Issue("public_address_invalid"), "must be an IPv4 address or a host name")
+	}
 	return v.OrNil()
 }
 

@@ -216,4 +216,28 @@ describe('ConnectionCard', () => {
     renderCard(connected);
     expect(screen.getByRole('group')).toHaveAttribute('data-layout', 'horizontal');
   });
+
+  it('shows a routing warning with a link to the log while the tunnel is up', () => {
+    renderCard({
+      ...connected,
+      routingWarning: {
+        code: 'routing_failed',
+        message: 'applying the tunnel routing failed: ip rule add: exit status 2',
+        time: '2026-11-25T10:00:00Z',
+      },
+    });
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent(
+      'Routing for forwarded traffic could not be applied; retrying…',
+    );
+    expect(screen.getByRole('link', { name: 'Open log for details' })).toHaveAttribute(
+      'href',
+      '/log',
+    );
+  });
+
+  it('shows no routing warning without one', () => {
+    renderCard(connected);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });

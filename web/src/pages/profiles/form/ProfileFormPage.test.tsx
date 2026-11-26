@@ -100,6 +100,7 @@ describe('new profile', () => {
       name: 'mdex',
       protocol: 'openvpn',
       dailyReconnect: { enabled: true, time: '03:15' },
+      publicAddress: '',
       settings: {
         remoteHost: 'publicip20.mdex.de',
         port: 1194,
@@ -190,6 +191,29 @@ describe('new profile', () => {
 
 describe('edit profile', () => {
   const profile = makeProfile({ advisories: mdexAdvisories });
+
+  it('edits and sends the public address with its hint and server error', async () => {
+    const { fetchMock } = renderApp(
+      routes({
+        'GET /api/profiles/p1': { body: { ...profile, publicAddress: '203.0.113.10' } },
+        'PUT /api/profiles/p1': problem(422, 'validation_failed', 'invalid', {
+          fields: { publicAddress: 'must be an IPv4 address or a host name' },
+          fieldCodes: { publicAddress: { code: 'public_address_invalid' } },
+        }),
+      }),
+      '/profiles/p1',
+    );
+    const label = 'Public address of this connection (optional)';
+    expect(await screen.findByLabelText(label)).toHaveValue('203.0.113.10');
+    expect(screen.getByRole('heading', { name: 'Access' })).toBeInTheDocument();
+    change(label, ' vpn.example.com ');
+    submitForm();
+
+    expect(await screen.findByLabelText(label)).toHaveAccessibleDescription(
+      /TunnelDeck-VPN cannot detect it itself..*Enter an IPv4 address or a host name/,
+    );
+    expect(bodyOf(fetchMock, 'PUT', '/api/profiles/p1').publicAddress).toBe('vpn.example.com');
+  });
 
   it('keeps stored secrets, replaces on request and tells that changes apply on the next connect', async () => {
     const { fetchMock } = renderApp(

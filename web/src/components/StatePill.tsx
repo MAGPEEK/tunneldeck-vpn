@@ -3,8 +3,11 @@ import styles from './StatePill.module.css';
 
 export type StateTone = 'neutral' | 'success' | 'warning' | 'danger';
 
+/** A pill's tone: a state, or accent for something switched on that is no state. */
+export type PillTone = StateTone | 'accent';
+
 export interface StatePillProps {
-  tone?: StateTone;
+  tone?: PillTone;
   dot?: boolean;
   children: ReactNode;
 }

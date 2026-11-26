@@ -167,9 +167,13 @@ type CheckResult struct {
 	ID string `json:"id"`
 	OK bool   `json:"ok"`
 	// Warning marks a failed check that only turns a feature off.
-	Warning bool   `json:"warning,omitempty"`
-	Detail  string `json:"detail"`
-	Hint    string `json:"hint,omitempty"`
+	Warning bool `json:"warning,omitempty"`
+	// DetailCode names Detail for translation; Params fill its text.
+	DetailCode string            `json:"detailCode"`
+	Params     map[string]string `json:"params,omitempty"`
+	// Detail is the English text, the fallback for an unknown DetailCode.
+	Detail string `json:"detail"`
+	Hint   string `json:"hint,omitempty"`
 }
 
 // System describes the running server.
@@ -182,4 +186,9 @@ type System struct {
 	TimeZone string
 	// Checks returns the self-check results.
 	Checks func() []CheckResult
+	// StartedAt is when the process started.
+	StartedAt time.Time
+	// HostUptime returns how long the host has been running; ok is false
+	// when that is unknown. Nil means unknown.
+	HostUptime func() (uptime time.Duration, ok bool)
 }

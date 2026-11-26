@@ -135,13 +135,43 @@ describe('StatusList', () => {
   });
 
   it.each<[RemoteAccess, string, string]>([
-    [remoteOn, 'success', 'HTTPS on port 8443'],
+    [remoteOn, 'success', 'https://10.8.0.6:8443'],
     [{ ...remoteOn, listening: false }, 'warning', 'HTTPS on port 8443'],
     [{ ...remoteOn, enabled: false }, 'neutral', 'Off'],
   ])('shows remote access %#', (remoteAccess, tone, text) => {
     renderList(connected, { remoteAccess });
     expect(row('remote')).toHaveAttribute('data-tone', tone);
     expect(row('remote')).toHaveTextContent(text);
+  });
+
+  it('links remote access at the public address with a Copy button', () => {
+    renderList(connected, { remoteAccess: remoteOn, publicAddress: 'vpn.example.com' });
+    const link = within(row('remote')).getByRole('link', { name: 'https://vpn.example.com:8443' });
+    expect(link).toHaveAttribute('href', 'https://vpn.example.com:8443');
+    expect(within(row('remote')).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(row('remote')).not.toHaveTextContent('Set the public address');
+  });
+
+  it('falls back to the VPN IP with a hint when the profile names no public address', () => {
+    renderList(connected, { remoteAccess: remoteOn, publicAddress: '' });
+    expect(
+      within(row('remote')).getByRole('link', { name: 'https://10.8.0.6:8443' }),
+    ).toBeInTheDocument();
+    expect(row('remote')).toHaveTextContent(
+      'Set the public address in the profile if your provider uses a different one.',
+    );
+  });
+
+  it('shows the port while the tunnel is down and the last error while not listening', () => {
+    const { unmount } = renderList(makeStatus(), { remoteAccess: remoteOn });
+    expect(row('remote')).toHaveTextContent('HTTPS on port 8443');
+    expect(within(row('remote')).queryByRole('link')).not.toBeInTheDocument();
+    unmount();
+    renderList(connected, {
+      remoteAccess: { ...remoteOn, listening: false, lastError: 'address already in use' },
+    });
+    expect(row('remote')).toHaveAttribute('data-tone', 'warning');
+    expect(row('remote')).toHaveTextContent('Last error: address already in use');
   });
 
   it('hides remote access when the build has none and the device count while unknown', () => {

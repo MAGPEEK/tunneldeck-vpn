@@ -195,6 +195,9 @@ func TestProfileValidate(t *testing.T) {
 		{"invalid settings JSON", func(p *Profile) { p.Settings["port"] = json.RawMessage(`{`) }, []string{"settings.port"}},
 		{"empty secret key", func(p *Profile) { p.Secrets[""] = "x" }, []string{"secrets"}},
 		{"bad reconnect time", func(p *Profile) { p.DailyReconnect.Time = "25:00" }, []string{"dailyReconnect.time"}},
+		{"public IPv4 address", func(p *Profile) { p.PublicAddress = "203.0.113.10" }, nil},
+		{"public host name", func(p *Profile) { p.PublicAddress = "vpn.example.com" }, nil},
+		{"bad public address", func(p *Profile) { p.PublicAddress = "https://vpn.example.com" }, []string{"publicAddress"}},
 		{
 			"several problems",
 			func(p *Profile) { p.Name = ""; p.Protocol = "" },

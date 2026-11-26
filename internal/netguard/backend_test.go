@@ -58,6 +58,7 @@ func TestBackendDetection(t *testing.T) {
 		script     func(*fakeRunner)
 		wantCalls  []string
 		want       Backend
+		wantCode   string
 	}{
 		{
 			name: "only legacy works",
@@ -65,7 +66,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(nftFilter, notFound()).on(plainVersion, notFound()).on(legacyFilter, ok(ufwFilter))
 			},
 			wantCalls: []string{nftFilter, legacyFilter, legacyNat, plainVersion},
-			want:      Backend{Binary: "iptables-legacy", Reason: "only the legacy backend works"},
+			want:      Backend{Binary: "iptables-legacy", Reason: "only the legacy backend works"}, wantCode: detailIptablesOnlyLegacy,
 		},
 		{
 			name: "only nft works",
@@ -73,7 +74,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(legacyFilter, fail(noPermission)).on(plainVersion, ok(nftVersion))
 			},
 			wantCalls: []string{nftFilter, nftNat, legacyFilter, plainVersion},
-			want:      Backend{Binary: "iptables-nft", Reason: "only the nf_tables backend works"},
+			want:      Backend{Binary: "iptables-nft", Reason: "only the nf_tables backend works"}, wantCode: detailIptablesOnlyNft,
 		},
 		{
 			name: "both work, host rules only in legacy",
@@ -81,7 +82,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(nftFilter, ok(ownChainsOnly)).on(legacyFilter, ok(ufwFilter))
 			},
 			wantCalls: []string{nftFilter, nftNat, legacyFilter, legacyNat},
-			want:      Backend{Binary: "iptables-legacy", Reason: "host rules only in legacy (4)"},
+			want:      Backend{Binary: "iptables-legacy", Reason: "host rules only in legacy (4)"}, wantCode: detailIptablesRulesLegacy,
 		},
 		{
 			name: "both work, host rules only in nft",
@@ -89,7 +90,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(nftNat, ok(dockerDNSNat)).on(legacyFilter, ok(ownChainsOnly))
 			},
 			wantCalls: []string{nftFilter, nftNat, legacyFilter, legacyNat},
-			want:      Backend{Binary: "iptables-nft", Reason: "host rules only in nf_tables (2)"},
+			want:      Backend{Binary: "iptables-nft", Reason: "host rules only in nf_tables (2)"}, wantCode: detailIptablesRulesNft,
 		},
 		{
 			name: "both hold host rules, legacy more",
@@ -102,6 +103,7 @@ func TestBackendDetection(t *testing.T) {
 				Reason: "host rules in both backends (nf_tables 2, legacy 4), chose legacy; the other backend's rules still apply",
 				Mixed:  true,
 			},
+			wantCode: detailIptablesMixed,
 		},
 		{
 			name: "both hold as many host rules, nft wins",
@@ -114,6 +116,7 @@ func TestBackendDetection(t *testing.T) {
 				Reason: "host rules in both backends (nf_tables 4, legacy 4), chose nf_tables; the other backend's rules still apply",
 				Mixed:  true,
 			},
+			wantCode: detailIptablesMixed,
 		},
 		{
 			name: "neither holds host rules, a missing nat table counts as empty",
@@ -122,7 +125,7 @@ func TestBackendDetection(t *testing.T) {
 					on(legacyNat, fail("iptables v1.8.13 (legacy): can't initialize iptables table `nat': Table does not exist"))
 			},
 			wantCalls: []string{nftFilter, nftNat, legacyFilter, legacyNat},
-			want:      Backend{Binary: "iptables-nft", Reason: "no host rules in either backend, nf_tables preferred"},
+			want:      Backend{Binary: "iptables-nft", Reason: "no host rules in either backend, nf_tables preferred"}, wantCode: detailIptablesNoRules,
 		},
 		{
 			name: "plain iptables stands in for a missing iptables-nft",
@@ -130,7 +133,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(nftFilter, notFound()).on(plainVersion, ok(nftVersion)).on(plainFilter, ok(ufwFilter))
 			},
 			wantCalls: []string{nftFilter, legacyFilter, legacyNat, plainVersion, plainFilter, plainNat},
-			want:      Backend{Binary: "iptables", Reason: "host rules only in nf_tables (4)"},
+			want:      Backend{Binary: "iptables", Reason: "host rules only in nf_tables (4)"}, wantCode: detailIptablesRulesNft,
 		},
 		{
 			name: "plain iptables stands in for a missing iptables-legacy",
@@ -138,7 +141,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(legacyFilter, notFound()).on(plainVersion, ok(legacyVersion)).on(plainFilter, ok(ufwFilter))
 			},
 			wantCalls: []string{nftFilter, nftNat, legacyFilter, plainVersion, plainFilter, plainNat},
-			want:      Backend{Binary: "iptables", Reason: "host rules only in legacy (4)"},
+			want:      Backend{Binary: "iptables", Reason: "host rules only in legacy (4)"}, wantCode: detailIptablesRulesLegacy,
 		},
 		{
 			name:       "forced nft ignores legacy rules",
@@ -147,7 +150,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(legacyFilter, ok(ufwFilter))
 			},
 			wantCalls: []string{nftFilter, nftNat},
-			want:      Backend{Binary: "iptables-nft", Reason: "forced to nf_tables by configuration"},
+			want:      Backend{Binary: "iptables-nft", Reason: "forced to nf_tables by configuration"}, wantCode: detailIptablesForced,
 		},
 		{
 			name:       "forced legacy through plain iptables",
@@ -156,7 +159,7 @@ func TestBackendDetection(t *testing.T) {
 				f.on(legacyFilter, notFound()).on(plainVersion, ok("iptables v1.6.1\n"))
 			},
 			wantCalls: []string{legacyFilter, plainVersion, plainFilter, plainNat},
-			want:      Backend{Binary: "iptables", Reason: "forced to legacy by configuration"},
+			want:      Backend{Binary: "iptables", Reason: "forced to legacy by configuration"}, wantCode: detailIptablesForced,
 		},
 	}
 	for _, tt := range tests {
@@ -171,7 +174,11 @@ func TestBackendDetection(t *testing.T) {
 			if !check.OK || check.Detail != "using "+tt.want.Binary+": "+tt.want.Reason {
 				t.Errorf("iptables self-check = %+v, want ok with detail %q", check, "using "+tt.want.Binary+": "+tt.want.Reason)
 			}
-			if got, ok := g.Backend(); !ok || got != tt.want {
+			if check.DetailCode != tt.wantCode || check.Params["binary"] != tt.want.Binary {
+				t.Errorf("iptables self-check = %+v, want detail code %q for %s", check, tt.wantCode, tt.want.Binary)
+			}
+			got, ok := g.Backend()
+			if !ok || got.Binary != tt.want.Binary || got.Reason != tt.want.Reason || got.Mixed != tt.want.Mixed {
 				t.Errorf("Backend() = %+v, %v; want %+v", got, ok, tt.want)
 			}
 			assertCalls(t, f.calls[:min(len(tt.wantCalls), len(f.calls))], tt.wantCalls)

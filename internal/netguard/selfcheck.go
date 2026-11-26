@@ -25,6 +25,59 @@ const (
 	CheckReplyRouting = "reply-routing"
 )
 
+// Self-check detail codes. The UI translates a detail by its code, filled
+// with the result's Params; the English Detail is the fallback.
+const (
+	detailTunPresent          = "tunPresent"
+	detailTunMissing          = "tunMissing"
+	detailTunNotCharDevice    = "tunNotCharDevice"
+	detailIptablesUnavailable = "iptablesUnavailable"
+	detailIptablesForced      = "iptablesForced"
+	detailIptablesOnlyNft     = "iptablesOnlyNft"
+	detailIptablesOnlyLegacy  = "iptablesOnlyLegacy"
+	detailIptablesMixed       = "iptablesMixed"
+	detailIptablesRulesLegacy = "iptablesRulesLegacy"
+	detailIptablesRulesNft    = "iptablesRulesNft"
+	detailIptablesNoRules     = "iptablesNoRules"
+	detailIPToolWorks         = "ipToolWorks"
+	detailIPToolFailed        = "ipToolFailed"
+	detailNetAdminWorks       = "netAdminWorks"
+	detailNetAdminUnverified  = "netAdminUnverified"
+	detailNetAdminFailed      = "netAdminFailed"
+	detailIPForwardOn         = "ipForwardOn"
+	detailIPForwardOff        = "ipForwardOff"
+	detailIPForwardUnreadable = "ipForwardUnreadable"
+	detailLANSubnets          = "lanSubnets"
+	detailLANNone             = "lanNone"
+	detailLANFailed           = "lanFailed"
+	detailExtensionsUnknown   = "extensionsUnverified"
+	detailCountersOn          = "countersOn"
+	detailCountersOff         = "countersOff"
+	detailSYNFloodFull        = "synFloodFull"
+	detailSYNFloodGlobal      = "synFloodGlobal"
+	detailSYNFloodNone        = "synFloodNone"
+	detailPingHashlimit       = "pingHashlimit"
+	detailPingLimit           = "pingLimit"
+	detailPingNone            = "pingNone"
+	detailMSSClampOn          = "mssClampOn"
+	detailMSSClampOff         = "mssClampOff"
+	detailRejectPresent       = "rejectPresent"
+	detailRejectMissing       = "rejectMissing"
+	detailReplyRoutingMark    = "replyRoutingConnmark"
+	detailReplyRoutingAddress = "replyRoutingFallback"
+)
+
+// Kernel modules the extension details name.
+const (
+	moduleComment   = "xt_comment"
+	moduleHashlimit = "xt_hashlimit"
+	moduleLimit     = "xt_limit"
+	moduleTCPMSS    = "xt_TCPMSS"
+	moduleReject    = "ipt_REJECT"
+	moduleConnmark  = "xt_connmark"
+	moduleMangle    = "iptable_mangle"
+)
+
 // Stable English hints for failed checks.
 const (
 	hintTunDevice = "Pass the TUN device into the container (devices: /dev/net/tun)."
@@ -56,15 +109,26 @@ const (
 // probeChain is created and deleted to prove NET_ADMIN is effective.
 const probeChain = "TUNNELDECK-PROBE"
 
-// CheckResult is one line of the startup self-check. Hint is set only when
-// the check failed; Warning marks a failed check that only turns a feature
-// off.
+// CheckResult is one line of the startup self-check. DetailCode names
+// Detail for translation and Params holds the values its text needs;
+// Detail is the English fallback. Hint is set only when the check failed;
+// Warning marks a failed check that only turns a feature off.
 type CheckResult struct {
-	ID      string `json:"id"`
-	OK      bool   `json:"ok"`
-	Warning bool   `json:"warning,omitempty"`
-	Detail  string `json:"detail"`
-	Hint    string `json:"hint,omitempty"`
+	ID         string            `json:"id"`
+	OK         bool              `json:"ok"`
+	Warning    bool              `json:"warning,omitempty"`
+	DetailCode string            `json:"detailCode"`
+	Params     map[string]string `json:"params,omitempty"`
+	Detail     string            `json:"detail"`
+	Hint       string            `json:"hint,omitempty"`
+}
+
+// detail is a check's detail: its code, the code's parameters and the
+// English text.
+type detail struct {
+	code   string
+	params map[string]string
+	text   string
 }
 
 // SelfCheck verifies the prerequisites of SPEC §6 and §16.1: the TUN
@@ -85,56 +149,63 @@ func (g *Guard) SelfCheck(ctx context.Context) []CheckResult {
 }
 
 func (g *Guard) checkTunDevice() CheckResult {
+	path := "/" + tunDevicePath
 	info, err := fs.Stat(g.root, tunDevicePath)
 	switch {
 	case err != nil:
-		return failed(CheckTunDevice, fmt.Sprintf("/%s is missing: %v", tunDevicePath, err), hintTunDevice)
+		return failed(CheckTunDevice, detail{detailTunMissing, map[string]string{"path": path, "error": err.Error()},
+			fmt.Sprintf("%s is missing: %v", path, err)}, hintTunDevice)
 	case info.Mode()&fs.ModeCharDevice == 0:
-		return failed(CheckTunDevice, fmt.Sprintf("/%s is not a character device", tunDevicePath), hintTunDevice)
+		return failed(CheckTunDevice, detail{detailTunNotCharDevice, map[string]string{"path": path},
+			path + " is not a character device"}, hintTunDevice)
 	}
-	return passed(CheckTunDevice, "/"+tunDevicePath+" is present")
+	return passed(CheckTunDevice, detail{detailTunPresent, map[string]string{"path": path}, path + " is present"})
 }
 
 func (g *Guard) checkIptables(ctx context.Context) CheckResult {
 	backend, err := g.detectBackend(ctx)
 	if err != nil {
-		return failed(CheckIptables, err.Error(), hintIptables)
+		return failed(CheckIptables, errorDetail(detailIptablesUnavailable, "", err), hintIptables)
 	}
-	return passed(CheckIptables, "using "+backend.Binary+": "+backend.Reason)
+	return passed(CheckIptables, detail{backend.choice.code, backend.choice.params(backend.Binary),
+		"using " + backend.Binary + ": " + backend.Reason})
 }
 
 func (g *Guard) checkIPTool(ctx context.Context) CheckResult {
 	if _, err := g.ip(ctx, "-4", "rule", "show"); err != nil {
-		return failed(CheckIPTool, err.Error(), hintIPTool)
+		return failed(CheckIPTool, errorDetail(detailIPToolFailed, "", err), hintIPTool)
 	}
-	return passed(CheckIPTool, "ip rule listing works")
+	return passed(CheckIPTool, detail{code: detailIPToolWorks, text: "ip rule listing works"})
 }
 
 // checkNetAdmin creates and deletes a probe chain, which needs NET_ADMIN.
 // A probe chain left over from a crash only has to be deleted.
 func (g *Guard) checkNetAdmin(ctx context.Context) CheckResult {
 	if _, err := g.detectBackend(ctx); err != nil {
-		return failed(CheckNetAdmin, "cannot be verified without iptables: "+err.Error(), hintNetAdmin)
+		return failed(CheckNetAdmin, errorDetail(detailNetAdminUnverified, "cannot be verified without iptables: ", err), hintNetAdmin)
 	}
 	if _, err := g.iptables(ctx, filterTable, "-N", probeChain); err != nil && !isAlreadyExists(err) {
-		return failed(CheckNetAdmin, err.Error(), hintNetAdmin)
+		return failed(CheckNetAdmin, errorDetail(detailNetAdminFailed, "", err), hintNetAdmin)
 	}
 	if _, err := g.iptables(ctx, filterTable, "-X", probeChain); err != nil {
-		return failed(CheckNetAdmin, err.Error(), hintNetAdmin)
+		return failed(CheckNetAdmin, errorDetail(detailNetAdminFailed, "", err), hintNetAdmin)
 	}
-	return passed(CheckNetAdmin, "created and deleted a probe chain")
+	return passed(CheckNetAdmin, detail{code: detailNetAdminWorks, text: "created and deleted a probe chain"})
 }
 
 // checkIPForward reads net.ipv4.ip_forward; netguard never changes it.
 func (g *Guard) checkIPForward() CheckResult {
+	path := "/" + ipForwardPath
 	value, err := g.ipForwardValue()
 	switch {
 	case err != nil:
-		return failed(CheckIPForward, fmt.Sprintf("/%s cannot be read: %v", ipForwardPath, err), hintIPForward)
+		return failed(CheckIPForward, detail{detailIPForwardUnreadable, map[string]string{"path": path, "error": err.Error()},
+			fmt.Sprintf("%s cannot be read: %v", path, err)}, hintIPForward)
 	case value != "1":
-		return failed(CheckIPForward, "IPv4 forwarding is off (net.ipv4.ip_forward = "+value+")", hintIPForward)
+		return failed(CheckIPForward, detail{detailIPForwardOff, map[string]string{"value": value},
+			"IPv4 forwarding is off (net.ipv4.ip_forward = " + value + ")"}, hintIPForward)
 	}
-	return passed(CheckIPForward, "IPv4 forwarding is on")
+	return passed(CheckIPForward, detail{code: detailIPForwardOn, text: "IPv4 forwarding is on"})
 }
 
 // ipForwardValue reads net.ipv4.ip_forward ("1" when on).
@@ -149,11 +220,12 @@ func (g *Guard) checkLAN(ctx context.Context) CheckResult {
 	addrs, err := g.detectLAN(ctx)
 	switch {
 	case err != nil:
-		return failed(CheckLAN, err.Error(), hintLAN)
+		return failed(CheckLAN, errorDetail(detailLANFailed, "", err), hintLAN)
 	case len(addrs) == 0:
-		return failed(CheckLAN, "no IPv4 address on a LAN interface", hintLAN)
+		return failed(CheckLAN, detail{code: detailLANNone, text: "no IPv4 address on a LAN interface"}, hintLAN)
 	}
-	return passed(CheckLAN, "LAN subnets: "+describeLAN(addrs))
+	subnets := describeLAN(addrs)
+	return passed(CheckLAN, detail{detailLANSubnets, map[string]string{"subnets": subnets}, "LAN subnets: " + subnets})
 }
 
 // checkExtensions probes the optional iptables extensions. Without one the
@@ -166,14 +238,14 @@ func (g *Guard) checkLAN(ctx context.Context) CheckResult {
 func (g *Guard) checkExtensions(ctx context.Context) []CheckResult {
 	caps, err := g.detectCapabilities(ctx)
 	if err != nil {
-		detail := "cannot be verified: " + err.Error()
+		d := errorDetail(detailExtensionsUnknown, "cannot be verified: ", err)
 		return []CheckResult{
-			warning(CheckCounters, detail, hintCounters),
-			warning(CheckSYNFlood, detail, hintRateLimit),
-			warning(CheckPingLimit, detail, hintRateLimit),
-			warning(CheckMSSClamp, detail, hintMSSClamp),
-			warning(CheckReject, detail, hintReject),
-			warning(CheckReplyRouting, detail, hintReplyRouting),
+			warning(CheckCounters, d, hintCounters),
+			warning(CheckSYNFlood, d, hintRateLimit),
+			warning(CheckPingLimit, d, hintRateLimit),
+			warning(CheckMSSClamp, d, hintMSSClamp),
+			warning(CheckReject, d, hintReject),
+			warning(CheckReplyRouting, d, hintReplyRouting),
 		}
 	}
 	return []CheckResult{
@@ -187,21 +259,26 @@ func (g *Guard) checkExtensions(ctx context.Context) []CheckResult {
 }
 
 func checkCounters(caps capabilities) CheckResult {
+	params := map[string]string{"module": moduleComment}
 	if !caps.has[extComment] {
-		return warning(CheckCounters, "the iptables comment match is unavailable, so hit counters are off", hintCounters)
+		return warning(CheckCounters, detail{detailCountersOff, params,
+			"the iptables comment match is unavailable, so hit counters are off"}, hintCounters)
 	}
-	return passed(CheckCounters, "the iptables comment match is available")
+	return passed(CheckCounters, detail{detailCountersOn, params, "the iptables comment match is available"})
 }
 
 func checkSYNFlood(caps capabilities) CheckResult {
 	switch {
 	case caps.has[extHashlimit]:
-		return passed(CheckSYNFlood, "SYN flood protection uses the hashlimit match, one rate per sender")
+		return passed(CheckSYNFlood, detail{detailSYNFloodFull, rateLimitParams(),
+			"SYN flood protection uses the hashlimit match, one rate per sender"})
 	case caps.has[extLimit]:
-		return warning(CheckSYNFlood, "the hashlimit match (xt_hashlimit) is unavailable, so SYN flood protection "+
-			"falls back to the limit match: one global rate for all senders instead of one per sender", hintRateLimit)
+		return warning(CheckSYNFlood, detail{detailSYNFloodGlobal, rateLimitParams(),
+			"the hashlimit match (xt_hashlimit) is unavailable, so SYN flood protection " +
+				"falls back to the limit match: one global rate for all senders instead of one per sender"}, hintRateLimit)
 	}
-	return warning(CheckSYNFlood, rateLimitsMissing+"SYN flood protection is left out of the firewall", hintRateLimit)
+	return warning(CheckSYNFlood, detail{detailSYNFloodNone, rateLimitParams(),
+		rateLimitsMissing + "SYN flood protection is left out of the firewall"}, hintRateLimit)
 }
 
 // checkPingLimit passes with either match: the ping limit is one global
@@ -209,50 +286,68 @@ func checkSYNFlood(caps capabilities) CheckResult {
 func checkPingLimit(caps capabilities) CheckResult {
 	switch {
 	case caps.has[extHashlimit]:
-		return passed(CheckPingLimit, "the ping limit uses the hashlimit match")
+		return passed(CheckPingLimit, detail{detailPingHashlimit, rateLimitParams(), "the ping limit uses the hashlimit match"})
 	case caps.has[extLimit]:
-		return passed(CheckPingLimit, "the ping limit uses the limit match")
+		return passed(CheckPingLimit, detail{detailPingLimit, rateLimitParams(), "the ping limit uses the limit match"})
 	}
-	return warning(CheckPingLimit, rateLimitsMissing+"the ping limit is left out of the firewall", hintRateLimit)
+	return warning(CheckPingLimit, detail{detailPingNone, rateLimitParams(),
+		rateLimitsMissing + "the ping limit is left out of the firewall"}, hintRateLimit)
 }
 
 const rateLimitsMissing = "neither the hashlimit match (xt_hashlimit) nor the limit match (xt_limit) is available, so "
 
+// rateLimitParams name the rate limit matches and their modules.
+func rateLimitParams() map[string]string {
+	return map[string]string{"module": moduleHashlimit, "fallback": "limit", "fallbackModule": moduleLimit}
+}
+
 func checkMSSClamp(caps capabilities) CheckResult {
+	params := map[string]string{"module": moduleTCPMSS}
 	if !caps.has[extTCPMSS] {
-		return warning(CheckMSSClamp, "the TCPMSS target (xt_TCPMSS) is unavailable, so MSS clamping is left out of the firewall", hintMSSClamp)
+		return warning(CheckMSSClamp, detail{detailMSSClampOff, params,
+			"the TCPMSS target (xt_TCPMSS) is unavailable, so MSS clamping is left out of the firewall"}, hintMSSClamp)
 	}
-	return passed(CheckMSSClamp, "the TCPMSS target is available")
+	return passed(CheckMSSClamp, detail{detailMSSClampOn, params, "the TCPMSS target is available"})
 }
 
 func checkReject(caps capabilities) CheckResult {
+	params := map[string]string{"module": moduleReject}
 	if !caps.has[extReject] {
-		return warning(CheckReject, "the REJECT target (ipt_REJECT) is unavailable, so rules with the action reject "+
-			"drop instead and send no answer", hintReject)
+		return warning(CheckReject, detail{detailRejectMissing, params,
+			"the REJECT target (ipt_REJECT) is unavailable, so rules with the action reject drop instead and send no answer"},
+			hintReject)
 	}
-	return passed(CheckReject, "the REJECT target is available")
+	return passed(CheckReject, detail{detailRejectPresent, params, "the REJECT target is available"})
 }
 
 // checkReplyRouting warns without CONNMARK: replies of port forwards are
 // then routed by the target's address, which also sends everything else
 // the host routes for that device into the tunnel.
 func checkReplyRouting(caps capabilities) CheckResult {
+	params := map[string]string{"module": moduleConnmark, "table": moduleMangle}
 	if caps.replyRouting() == replyBySource {
-		return warning(CheckReplyRouting, "the CONNMARK target (xt_connmark) or the mangle table (iptable_mangle) is unavailable, "+
-			"so replies of port forwards are routed by the target's address: everything this device routes for a "+
-			"port-forward target goes through the tunnel while it is up", hintReplyRouting)
+		return warning(CheckReplyRouting, detail{detailReplyRoutingAddress, params,
+			"the CONNMARK target (xt_connmark) or the mangle table (iptable_mangle) is unavailable, " +
+				"so replies of port forwards are routed by the target's address: everything this device routes for a " +
+				"port-forward target goes through the tunnel while it is up"}, hintReplyRouting)
 	}
-	return passed(CheckReplyRouting, "replies of port forwards follow a connection mark (CONNMARK in the mangle table)")
+	return passed(CheckReplyRouting, detail{detailReplyRoutingMark, params,
+		"replies of port forwards follow a connection mark (CONNMARK in the mangle table)"})
 }
 
-func passed(id, detail string) CheckResult {
-	return CheckResult{ID: id, OK: true, Detail: detail}
+// errorDetail is code for err, whose text follows prefix in English.
+func errorDetail(code, prefix string, err error) detail {
+	return detail{code, map[string]string{"error": err.Error()}, prefix + err.Error()}
 }
 
-func failed(id, detail, hint string) CheckResult {
-	return CheckResult{ID: id, OK: false, Detail: detail, Hint: hint}
+func passed(id string, d detail) CheckResult {
+	return CheckResult{ID: id, OK: true, DetailCode: d.code, Params: d.params, Detail: d.text}
 }
 
-func warning(id, detail, hint string) CheckResult {
-	return CheckResult{ID: id, OK: false, Warning: true, Detail: detail, Hint: hint}
+func failed(id string, d detail, hint string) CheckResult {
+	return CheckResult{ID: id, OK: false, DetailCode: d.code, Params: d.params, Detail: d.text, Hint: hint}
+}
+
+func warning(id string, d detail, hint string) CheckResult {
+	return CheckResult{ID: id, OK: false, Warning: true, DetailCode: d.code, Params: d.params, Detail: d.text, Hint: hint}
 }

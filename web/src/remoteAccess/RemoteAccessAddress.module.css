@@ -1,0 +1,22 @@
+.address {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.url {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}

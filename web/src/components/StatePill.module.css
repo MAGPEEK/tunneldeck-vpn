@@ -36,3 +36,8 @@
   background: var(--state-danger-bg);
   color: var(--state-danger-text);
 }
+
+.accent {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}

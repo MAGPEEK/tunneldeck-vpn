@@ -67,6 +67,8 @@ export interface Profile {
   settings: Settings;
   secrets: Record<string, { hasValue: boolean }>;
   dailyReconnect: DailyReconnect;
+  /** The address the provider assigns to this connection (IPv4 or host name); "" when not set. */
+  publicAddress?: string;
   createdAt: string;
   updatedAt: string;
   advisories: Advisory[];
@@ -79,6 +81,7 @@ export interface ProfileRequest {
   secrets: Record<string, string>;
   clearSecrets: string[];
   dailyReconnect: DailyReconnect;
+  publicAddress: string;
 }
 
 export type ImportSeverity = 'info' | 'warning' | 'rejected';

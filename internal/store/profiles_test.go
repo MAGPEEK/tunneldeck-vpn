@@ -16,6 +16,7 @@ func TestCreateProfileRoundTrip(t *testing.T) {
 	p := openVPNProfile("  Office  ")
 	p.ID = "ignored"
 	p.Secrets["tlsCryptKey"] = ""
+	p.PublicAddress = "vpn.example.com"
 	created := mustCreate(t, s, p)
 
 	if created.ID == "" || created.ID == "ignored" {
@@ -23,6 +24,9 @@ func TestCreateProfileRoundTrip(t *testing.T) {
 	}
 	if created.Name != "Office" {
 		t.Errorf("Name = %q, want trimmed", created.Name)
+	}
+	if created.PublicAddress != "vpn.example.com" {
+		t.Errorf("PublicAddress = %q", created.PublicAddress)
 	}
 	if created.DailyReconnect != domain.DefaultDailyReconnect() {
 		t.Errorf("DailyReconnect = %+v, want default", created.DailyReconnect)
@@ -46,7 +50,7 @@ func TestCreateProfileRoundTrip(t *testing.T) {
 	if port, err := full.Settings.Int("port"); err != nil || port != 1194 {
 		t.Errorf("settings port = %d, %v", port, err)
 	}
-	if !full.CreatedAt.Equal(created.CreatedAt) || full.Name != "Office" {
+	if !full.CreatedAt.Equal(created.CreatedAt) || full.Name != "Office" || full.PublicAddress != "vpn.example.com" {
 		t.Errorf("reloaded profile differs: %+v", full)
 	}
 }

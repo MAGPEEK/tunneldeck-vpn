@@ -1,6 +1,12 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, type ReactNode } from 'react';
-import type { ConnectionStatus, LogLine, StateEvent, TrafficEvent } from '../api/connection';
+import type {
+  ChannelEvent,
+  ConnectionStatus,
+  LogLine,
+  StateEvent,
+  TrafficEvent,
+} from '../api/connection';
 import { queryKeys } from '../api/queryKeys';
 import { appendLogLines } from './logLines';
 
@@ -54,6 +60,19 @@ function applyTraffic(client: QueryClient, event: TrafficEvent): void {
   );
 }
 
+/** Merges what the tunnel negotiated; an empty field keeps the known value. */
+function applyChannel(client: QueryClient, event: ChannelEvent): void {
+  client.setQueryData<ConnectionStatus>(queryKeys.connection, (status) =>
+    status
+      ? {
+          ...status,
+          dataCipher: event.dataCipher || status.dataCipher,
+          controlChannel: event.controlChannel || status.controlChannel,
+        }
+      : status,
+  );
+}
+
 function applyLog(client: QueryClient, line: LogLine): void {
   client.setQueryData<LogLine[]>(queryKeys.logs, (lines) =>
     lines ? appendLogLines(lines, [line]) : lines,
@@ -68,6 +87,10 @@ function listen(client: QueryClient, source: EventSource): void {
   source.addEventListener('traffic', (event) => {
     const data = parse<TrafficEvent>(event);
     if (data) applyTraffic(client, data);
+  });
+  source.addEventListener('channel', (event) => {
+    const data = parse<ChannelEvent>(event);
+    if (data) applyChannel(client, data);
   });
   source.addEventListener('log', (event) => {
     const data = parse<LogLine>(event);

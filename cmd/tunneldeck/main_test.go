@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -206,11 +207,16 @@ func TestProfileImporter(t *testing.T) {
 }
 
 func TestToCheckResults(t *testing.T) {
-	got := toCheckResults([]netguard.CheckResult{{ID: "ip", OK: false, Detail: "missing", Hint: "install"},
-		{ID: "rule-counters", OK: false, Warning: true, Detail: "off", Hint: "load"}})
-	if len(got) != 2 || got[0] != (api.CheckResult{ID: "ip", OK: false, Detail: "missing", Hint: "install"}) ||
-		got[1] != (api.CheckResult{ID: "rule-counters", OK: false, Warning: true, Detail: "off", Hint: "load"}) {
-		t.Errorf("checks = %+v", got)
+	got := toCheckResults([]netguard.CheckResult{
+		{ID: "ip", OK: false, DetailCode: "ipToolFailed", Params: map[string]string{"error": "missing"}, Detail: "missing", Hint: "install"},
+		{ID: "rule-counters", OK: false, Warning: true, DetailCode: "countersOff", Detail: "off", Hint: "load"},
+	})
+	want := []api.CheckResult{
+		{ID: "ip", OK: false, DetailCode: "ipToolFailed", Params: map[string]string{"error": "missing"}, Detail: "missing", Hint: "install"},
+		{ID: "rule-counters", OK: false, Warning: true, DetailCode: "countersOff", Detail: "off", Hint: "load"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("checks = %+v, want %+v", got, want)
 	}
 }
 

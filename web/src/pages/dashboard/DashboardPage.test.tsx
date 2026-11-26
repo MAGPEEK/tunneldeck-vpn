@@ -204,6 +204,52 @@ describe('DashboardPage', () => {
       }),
     );
     expect(await screen.findByText('HTTPS on port 8443')).toBeInTheDocument();
+    expect(screen.getByText('Remote access on').closest('[data-tone]')).toHaveAttribute(
+      'data-tone',
+      'accent',
+    );
+  });
+
+  it('links remote access at the public address of the profile while connected', async () => {
+    renderApp(
+      routes({
+        'GET /api/profiles': { body: [{ ...profile, publicAddress: '203.0.113.10' }] },
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', vpnIp: '172.21.31.170' }),
+        },
+        'GET /api/remote-access': {
+          body: {
+            enabled: true,
+            port: 8443,
+            certificateSource: 'selfSigned',
+            certificate: null,
+            listening: true,
+          },
+        },
+      }),
+    );
+    expect(
+      await screen.findByRole('link', { name: 'https://203.0.113.10:8443' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows no remote access pill while remote access is off or not listening', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': {
+          body: {
+            enabled: true,
+            port: 8443,
+            certificateSource: 'selfSigned',
+            certificate: null,
+            listening: false,
+            lastError: 'address already in use',
+          },
+        },
+      }),
+    );
+    expect(await screen.findByText('Last error: address already in use')).toBeInTheDocument();
+    expect(screen.queryByText('Remote access on')).not.toBeInTheDocument();
   });
 
   it('links an error to the log page', async () => {
@@ -285,6 +331,32 @@ describe('DashboardPage', () => {
     expect(await within(details).findByText('Received 2.5 MB')).toBeInTheDocument();
     expect(within(details).getByText('↓ 1.0 Mbit/s')).toBeInTheDocument();
     expect(screen.getByText('→ Received: 1.0 Mbit/s')).toBeInTheDocument();
+  });
+
+  it('applies channel events to the encryption row', async () => {
+    renderApp(
+      routes({
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', profileName: 'Office' }),
+        },
+      }),
+    );
+    await screen.findByRole('heading', { name: 'Office' });
+    const source = FakeEventSource.latest();
+    act(() => {
+      source.open();
+      source.emit('channel', { dataCipher: 'AES-256-GCM' });
+    });
+    const details = screen.getByRole('region', { name: 'Connection details' });
+    expect(await within(details).findByText(/Data channel AES-256-GCM/)).toBeInTheDocument();
+
+    act(() => {
+      source.emit('channel', { controlChannel: 'TLSv1.3 TLS_AES_256_GCM_SHA384' });
+    });
+    expect(
+      await within(details).findByText(/Control channel TLSv1.3 TLS_AES_256_GCM_SHA384/),
+    ).toBeInTheDocument();
+    expect(within(details).getByText(/Data channel AES-256-GCM/)).toBeInTheDocument();
   });
 
   it('reconnects the stream with backoff after it ends', async () => {

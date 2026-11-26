@@ -12,7 +12,6 @@ function checkState(t: TFunction, check: CheckResult) {
     return {
       Icon: CircleCheck,
       iconClass: styles.pass,
-      textClass: '',
       label: t('system.checkPassed'),
     };
   }
@@ -20,16 +19,49 @@ function checkState(t: TFunction, check: CheckResult) {
     return {
       Icon: TriangleAlert,
       iconClass: styles.warn,
-      textClass: styles.warnText,
       label: t('system.checkWarning'),
     };
   }
   return {
     Icon: CircleX,
     iconClass: styles.fail,
-    textClass: styles.danger,
     label: t('system.checkFailed'),
   };
+}
+
+/** The detail translated by its code; the server's English detail for an unknown code. */
+function detailText(t: TFunction, check: CheckResult): string {
+  if (!check.detailCode) {
+    return check.detail;
+  }
+  return translateDynamic(t, `system.detail.${check.detailCode}`, check.detail, check.params);
+}
+
+function CheckEntry({ check }: { check: CheckResult }) {
+  const { t } = useTranslation();
+  const { Icon, iconClass, label } = checkState(t, check);
+  const detail = detailText(t, check);
+  return (
+    <li className={styles.check}>
+      <div className={styles.checkHead}>
+        <Icon
+          size={16}
+          className={`${styles.checkIcon} ${iconClass}`}
+          aria-label={label}
+          role="img"
+        />
+        <span className={styles.checkTitle}>
+          {translateDynamic(t, `system.check.${check.id}`, check.id)}
+        </span>
+      </div>
+      {detail !== '' && <p className={styles.checkLine}>{detail}</p>}
+      {!check.ok && (
+        <p className={`${styles.checkLine} ${styles.secondary}`}>
+          {translateDynamic(t, `system.hint.${check.id}`, check.hint ?? '')}
+        </p>
+      )}
+    </li>
+  );
 }
 
 export function SelfCheckCard({ checks }: { checks: CheckResult[] }) {
@@ -40,28 +72,9 @@ export function SelfCheckCard({ checks }: { checks: CheckResult[] }) {
         <p className={styles.secondary}>{t('system.noChecks')}</p>
       ) : (
         <ul className={styles.checks}>
-          {checks.map((check) => {
-            const { Icon, iconClass, textClass, label } = checkState(t, check);
-            return (
-              <li key={check.id} className={styles.check}>
-                <Icon
-                  size={16}
-                  className={`${styles.checkIcon} ${iconClass}`}
-                  aria-label={label}
-                  role="img"
-                />
-                <div className={styles.checkText}>
-                  <span>{translateDynamic(t, `system.check.${check.id}`, check.id)}</span>
-                  {check.detail && <span className={styles.secondary}>{check.detail}</span>}
-                  {!check.ok && (
-                    <span className={textClass}>
-                      {translateDynamic(t, `system.hint.${check.id}`, check.hint ?? '')}
-                    </span>
-                  )}
-                </div>
-              </li>
-            );
-          })}
+          {checks.map((check) => (
+            <CheckEntry key={check.id} check={check} />
+          ))}
         </ul>
       )}
     </Card>

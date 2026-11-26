@@ -182,7 +182,9 @@
     },
     "conflict": "Das ist gerade nicht möglich. Warten Sie einen Moment und versuchen Sie es erneut.",
     "profileMissing": "Dieses Profil existiert nicht mehr.",
-    "openLog": "Protokoll mit Details öffnen"
+    "openLog": "Protokoll mit Details öffnen",
+    "routingWarning": "Das Routing für weitergeleiteten Verkehr konnte nicht angewendet werden; neuer Versuch läuft …",
+    "remoteAccessOn": "Fernzugriff aktiv"
   },
   "log": {
     "title": "Protokoll",
@@ -273,7 +275,10 @@
     "copyName": "{{name}} (Kopie)",
     "duplicateNotice": "Geheimnisse wie Passwörter und Schlüssel werden nicht kopiert. Geben Sie sie erneut ein.",
     "missingTitle": "Fehlt noch in der Datei",
-    "missingFromFile": "Nicht in der Datei – bitte eintragen."
+    "missingFromFile": "Nicht in der Datei – bitte eintragen.",
+    "access": "Zugriff",
+    "publicAddress": "Öffentliche Adresse dieser Verbindung (optional)",
+    "publicAddressHint": "Die Adresse, die Ihr Anbieter dieser Verbindung zuweist, z. B. für Fernzugriff und Portweiterleitungen. TunnelDeck-VPN kann sie nicht selbst ermitteln."
   },
   "schemaForm": {
     "line": "{{label}}, Zeile {{number}}",
@@ -619,6 +624,48 @@
       "mss-clamp": "Das TCPMSS-Ziel auf dem Host laden (modprobe xt_TCPMSS) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, große Übertragungen durch den Tunnel können dann aber hängen.",
       "reject-target": "Das REJECT-Ziel auf dem Host laden (modprobe ipt_REJECT) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, Ablehnen-Regeln verwerfen dann aber stillschweigend.",
       "reply-routing": "Das connmark-Modul und die mangle-Tabelle auf dem Host laden (modprobe xt_connmark iptable_mangle) und den Container neu starten. Portweiterleitungen funktionieren auch ohne; ein Gerät, das eine Portweiterleitung empfängt und dieses Gerät als Gateway nutzt, schickt dann aber seinen gesamten Verkehr durch den Tunnel, solange er besteht."
+    },
+    "processUptime": "TunnelDeck-VPN läuft seit",
+    "hostUptime": "Host läuft seit",
+    "startedAt": "Gestartet {{time}}",
+    "detail": {
+      "tunPresent": "{{path}} ist vorhanden.",
+      "tunMissing": "{{path}} fehlt ({{error}}).",
+      "tunNotCharDevice": "{{path}} ist kein zeichenorientiertes Gerät.",
+      "iptablesUnavailable": "Kein nutzbares iptables-Backend: {{error}}",
+      "iptablesForced": "Verwendet {{binary}}: Das Backend {{backend}} ist per Konfiguration festgelegt.",
+      "iptablesOnlyNft": "Verwendet {{binary}}: Nur das nf_tables-Backend funktioniert.",
+      "iptablesOnlyLegacy": "Verwendet {{binary}}: Nur das legacy-Backend funktioniert.",
+      "iptablesMixed": "Verwendet {{binary}}: Beide Backends enthalten Host-Regeln (nf_tables {{nftRules}}, legacy {{legacyRules}}), {{backend}} enthält mehr. Die Regeln des anderen Backends gelten weiterhin.",
+      "iptablesRulesLegacy": "Verwendet {{binary}}: Nur das legacy-Backend enthält Host-Regeln ({{legacyRules}}).",
+      "iptablesRulesNft": "Verwendet {{binary}}: Nur das nf_tables-Backend enthält Host-Regeln ({{nftRules}}).",
+      "iptablesNoRules": "Verwendet {{binary}}: Kein Backend enthält Host-Regeln, daher wird nf_tables bevorzugt.",
+      "ipToolWorks": "Das Auflisten der Routing-Regeln funktioniert.",
+      "ipToolFailed": "Das Auflisten der Routing-Regeln ist fehlgeschlagen: {{error}}",
+      "netAdminWorks": "Eine Testkette wurde angelegt und gelöscht.",
+      "netAdminUnverified": "Ohne iptables nicht prüfbar: {{error}}",
+      "netAdminFailed": "Anlegen oder Löschen einer Testkette ist fehlgeschlagen: {{error}}",
+      "ipForwardOn": "Die IPv4-Weiterleitung ist eingeschaltet.",
+      "ipForwardOff": "Die IPv4-Weiterleitung ist ausgeschaltet (net.ipv4.ip_forward = {{value}}).",
+      "ipForwardUnreadable": "{{path}} kann nicht gelesen werden: {{error}}",
+      "lanSubnets": "Gefunden: {{subnets}}",
+      "lanNone": "Keine IPv4-Adresse an einer LAN-Schnittstelle.",
+      "lanFailed": "Die LAN-Subnetze können nicht ermittelt werden: {{error}}",
+      "extensionsUnverified": "Die iptables-Erweiterungen können nicht geprüft werden: {{error}}",
+      "countersOn": "Das iptables-Comment-Match ist verfügbar; die Trefferzähler sind an.",
+      "countersOff": "Das iptables-Comment-Match ({{module}}) ist nicht verfügbar, daher sind die Trefferzähler aus.",
+      "synFloodFull": "Verwendet das Hashlimit-Match: ein eigenes Limit je Absender.",
+      "synFloodGlobal": "Das Hashlimit-Match ({{module}}) ist nicht verfügbar, daher weicht der Schutz auf das {{fallback}}-Match aus: ein gemeinsames Limit für alle Absender statt eines je Absender.",
+      "synFloodNone": "Weder das Hashlimit-Match ({{module}}) noch das Limit-Match ({{fallbackModule}}) ist verfügbar, daher fehlt der Schutz vor SYN-Flut in der Firewall.",
+      "pingHashlimit": "Verwendet das Hashlimit-Match.",
+      "pingLimit": "Verwendet das {{fallback}}-Match.",
+      "pingNone": "Weder das Hashlimit-Match ({{module}}) noch das Limit-Match ({{fallbackModule}}) ist verfügbar, daher fehlt die Ping-Begrenzung in der Firewall.",
+      "mssClampOn": "Das TCPMSS-Ziel ist verfügbar.",
+      "mssClampOff": "Das TCPMSS-Ziel ({{module}}) ist nicht verfügbar, daher fehlt die MSS-Anpassung in der Firewall.",
+      "rejectPresent": "Das REJECT-Ziel ist verfügbar.",
+      "rejectMissing": "Das REJECT-Ziel ({{module}}) ist nicht verfügbar, daher verwerfen Ablehnen-Regeln Pakete stattdessen ohne Antwort.",
+      "replyRoutingConnmark": "Antworten auf Portweiterleitungen folgen einer Verbindungsmarkierung (CONNMARK in der mangle-Tabelle).",
+      "replyRoutingFallback": "Das CONNMARK-Ziel ({{module}}) oder die mangle-Tabelle ({{table}}) ist nicht verfügbar, daher werden Antworten auf Portweiterleitungen nach der Adresse des Ziels geroutet: Alles, was dieses Gerät für ein Portweiterleitungsziel routet, läuft durch den Tunnel, solange er besteht."
     }
   },
   "remoteAccess": {
@@ -648,7 +695,9 @@
     "certificatePem": "Zertifikatskette (PEM)",
     "keyPem": "Privater Schlüssel (PEM)",
     "upload": "Zertifikat hochladen",
-    "uploaded": "Zertifikat hochgeladen."
+    "uploaded": "Zertifikat hochgeladen.",
+    "vpnIpHint": "Tragen Sie die öffentliche Adresse im Profil ein, falls Ihr Anbieter eine andere verwendet.",
+    "url": "Adresse"
   },
   "fieldError": {
     "required": "Erforderlich.",
@@ -740,6 +789,18 @@
     "openvpn_file_empty": "Die Datei ist leer oder enthält nur Kommentare.",
     "openvpn_not_a_profile": "Das ist kein OpenVPN-Profil: Die Datei enthält keine OpenVPN-Direktive.",
     "openvpn_tls_crypt_v2_key_invalid": "Muss ein OpenVPN-tls-crypt-v2-Client-Schlüssel sein.",
-    "openvpn_tls_crypt_v2_combined": "Lässt sich nicht mit einem tls-auth- oder tls-crypt-Schlüssel kombinieren."
+    "openvpn_tls_crypt_v2_combined": "Lässt sich nicht mit einem tls-auth- oder tls-crypt-Schlüssel kombinieren.",
+    "public_address_invalid": "Geben Sie eine IPv4-Adresse oder einen Hostnamen ein, z. B. 203.0.113.10 oder vpn.example.com."
+  },
+  "uptime": {
+    "months_one": "{{count}} Monat",
+    "months_other": "{{count}} Monate",
+    "weeks_one": "{{count}} Woche",
+    "weeks_other": "{{count}} Wochen",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tage",
+    "hours": "{{count}} h",
+    "minutes": "{{count}} min",
+    "underMinute": "unter 1 min"
   }
 }

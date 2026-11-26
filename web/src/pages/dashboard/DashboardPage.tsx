@@ -118,6 +118,7 @@ export function DashboardPage() {
               deviceCount={deviceCount}
               version={system.data?.version}
               showLine={items.isVisible('line')}
+              remoteAccess={remoteAccess.data}
             />
             <StatusList
               status={connection.data}
@@ -125,6 +126,7 @@ export function DashboardPage() {
               firewall={firewall.data}
               deviceCount={deviceCount}
               remoteAccess={remoteAccess.data}
+              publicAddress={activeProfile?.publicAddress}
               items={items}
             />
           </>

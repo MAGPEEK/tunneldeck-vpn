@@ -36,6 +36,7 @@ import { stillMissing } from './importMissing';
 import styles from './ProfileForm.module.css';
 import { ProtocolChooser } from './ProtocolChooser';
 import { ReconnectNotice } from './ReconnectNotice';
+import { AccessSection } from './AccessSection';
 import { ScheduleSection } from './ScheduleSection';
 
 export interface ProfileDraft {
@@ -44,6 +45,7 @@ export interface ProfileDraft {
   values: FormValues;
   secrets: SecretStates;
   dailyReconnect: DailyReconnect;
+  publicAddress: string;
 }
 
 export interface ProfileEditorProps {
@@ -107,6 +109,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
       name: draft.name.trim(),
       protocol: draft.protocol,
       dailyReconnect: draft.dailyReconnect,
+      publicAddress: draft.publicAddress.trim(),
       ...toRequestPart(schema, draft.values, draft.secrets),
     });
   };
@@ -203,6 +206,11 @@ export function ProfileEditor(props: ProfileEditorProps) {
         timeZone={timeZone}
         error={fieldErrors?.dailyReconnectTime}
         onChange={(dailyReconnect) => setDraft({ ...draft, dailyReconnect })}
+      />
+      <AccessSection
+        publicAddress={draft.publicAddress}
+        error={fieldErrors?.publicAddress}
+        onChange={(publicAddress) => setDraft({ ...draft, publicAddress })}
       />
       <div className={styles.buttons}>
         <Button type="submit" variant="primary" loading={save.isPending} disabled={!schema}>

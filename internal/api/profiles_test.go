@@ -20,6 +20,7 @@ type profileJSON struct {
 	Settings       map[string]any                `json:"settings"`
 	Secrets        map[string]domain.SecretState `json:"secrets"`
 	DailyReconnect domain.DailyReconnect         `json:"dailyReconnect"`
+	PublicAddress  string                        `json:"publicAddress"`
 	Advisories     []vpn.Advisory                `json:"advisories"`
 }
 
@@ -77,6 +78,7 @@ func TestCreateProfile(t *testing.T) {
 		status     int
 		code       string
 		wantFields []string
+		wantPublic string
 	}{
 		{name: "valid", body: validProfileBody, status: http.StatusCreated},
 		{
@@ -102,6 +104,16 @@ func TestCreateProfile(t *testing.T) {
 			name: "missing protocol", body: `{"name":"X"}`,
 			status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantFields: []string{"protocol"},
 		},
+		{
+			name:   "public address",
+			body:   `{"name":"Home","protocol":"fakevpn","settings":{"host":"h"},"secrets":{"password":"pw"},"publicAddress":" 203.0.113.10 "}`,
+			status: http.StatusCreated, wantPublic: "203.0.113.10",
+		},
+		{
+			name:   "invalid public address",
+			body:   `{"name":"Home","protocol":"fakevpn","settings":{"host":"h"},"secrets":{"password":"pw"},"publicAddress":"2001:db8::1"}`,
+			status: http.StatusUnprocessableEntity, code: CodeValidationFailed, wantFields: []string{"publicAddress"},
+		},
 		{name: "duplicate name", body: strings.Replace(validProfileBody, "Office", "taken", 1), status: http.StatusConflict, code: CodeConflict},
 		{name: "unknown field", body: `{"name":"X","color":"red"}`, status: http.StatusBadRequest, code: CodeBadRequest},
 	}
@@ -126,6 +138,9 @@ func TestCreateProfile(t *testing.T) {
 			got := decode[profileJSON](t, rec)
 			if got.ID == "" || !got.Secrets["password"].HasValue || len(got.Advisories) != 1 {
 				t.Errorf("created = %+v", got)
+			}
+			if got.PublicAddress != tt.wantPublic {
+				t.Errorf("publicAddress = %q, want %q", got.PublicAddress, tt.wantPublic)
 			}
 			if got.DailyReconnect.Time == "" {
 				t.Errorf("daily reconnect time is empty")

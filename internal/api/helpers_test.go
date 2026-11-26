@@ -55,7 +55,11 @@ func newTestEnv(t *testing.T) *testEnv {
 		Devices:       env.devices,
 		System: System{
 			Version: "1.2.3", ListenAddress: "192.168.1.10:8194", UIPort: testUIPort, TimeZone: "Europe/Berlin",
-			Checks: func() []CheckResult { return []CheckResult{{ID: "tun-device", OK: true, Detail: "present"}} },
+			Checks: func() []CheckResult {
+				return []CheckResult{{
+					ID: "tun-device", OK: true, DetailCode: "tunPresent", Params: map[string]string{"path": "/dev/net/tun"}, Detail: "present",
+				}}
+			},
 		},
 		RemoteAccess:         env.remote,
 		RemoteAccessListener: env.listener,

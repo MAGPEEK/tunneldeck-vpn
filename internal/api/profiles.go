@@ -24,6 +24,7 @@ type profileRequest struct {
 	Secrets        map[string]string      `json:"secrets"`
 	ClearSecrets   []string               `json:"clearSecrets"`
 	DailyReconnect *domain.DailyReconnect `json:"dailyReconnect"`
+	PublicAddress  string                 `json:"publicAddress"`
 }
 
 func (req profileRequest) profile() domain.Profile {
@@ -33,6 +34,7 @@ func (req profileRequest) profile() domain.Profile {
 		Settings:       nonNilMap(req.Settings),
 		Secrets:        nonNilMap(req.Secrets),
 		DailyReconnect: domain.DefaultDailyReconnect(),
+		PublicAddress:  req.PublicAddress,
 	}
 	if req.DailyReconnect != nil {
 		p.DailyReconnect = *req.DailyReconnect

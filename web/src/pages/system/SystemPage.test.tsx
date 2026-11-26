@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { problem, type MockRoutes } from '../../test/fetchMock';
+import { makeProfile, makeStatus } from '../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../test/renderApp';
 
 const SYSTEM = {
@@ -103,6 +104,107 @@ describe('SystemPage', () => {
     expect(await screen.findByRole('img', { name: 'Warning' })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: 'Failed' })).not.toBeInTheDocument();
     expect(screen.getByText(/Load the comment match on the host/)).toBeInTheDocument();
+  });
+
+  it('translates each check detail by its code and shows hints only for failures', async () => {
+    renderApp(
+      routes({
+        'GET /api/system': {
+          body: {
+            ...SYSTEM,
+            checks: [
+              {
+                id: 'tun-device',
+                ok: true,
+                detailCode: 'tunPresent',
+                params: { path: '/dev/net/tun' },
+                detail: '/dev/net/tun is present',
+              },
+              {
+                id: 'syn-flood-protection',
+                ok: false,
+                warning: true,
+                detailCode: 'synFloodGlobal',
+                params: { module: 'xt_hashlimit', fallback: 'limit' },
+                detail: 'English fallback',
+                hint: 'x',
+              },
+              {
+                id: 'ip',
+                ok: false,
+                detailCode: 'somethingNew',
+                detail: 'server detail for an unknown code',
+                hint: 'x',
+              },
+            ],
+          },
+        },
+      }),
+      '/system',
+    );
+    const tun = (await screen.findByText('TUN device')).closest('li') as HTMLElement;
+    expect(within(tun).getByText('/dev/net/tun is present.')).toBeInTheDocument();
+    expect(within(tun).getAllByRole('paragraph')).toHaveLength(1);
+
+    const syn = screen.getByText('SYN flood protection').closest('li') as HTMLElement;
+    expect(
+      within(syn).getByText(
+        /xt_hashlimit\) is unavailable, so the protection falls back to the limit match/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(syn).queryByText('English fallback')).not.toBeInTheDocument();
+    expect(within(syn).getByText(/Load the hashlimit match on the host/)).toBeInTheDocument();
+    expect(within(syn).getAllByRole('paragraph')).toHaveLength(2);
+
+    const ip = screen.getByText('ip tool').closest('li') as HTMLElement;
+    expect(within(ip).getByText('server detail for an unknown code')).toBeInTheDocument();
+  });
+
+  it('shows how long TunnelDeck-VPN and the host have been running', async () => {
+    const now = Date.now();
+    renderApp(
+      routes({
+        'GET /api/system': {
+          body: {
+            ...SYSTEM,
+            serverTime: new Date(now).toISOString(),
+            startedAt: new Date(now - ((5 * 24 + 4) * 3600 + 12 * 60 + 30) * 1000).toISOString(),
+            hostUptimeSeconds: 3 * 3600 + 7 * 60 + 10,
+          },
+        },
+      }),
+      '/system',
+    );
+    const process = (await screen.findByText('TunnelDeck-VPN running for')).nextElementSibling;
+    expect(process).toHaveTextContent('5 days 4 h 12 min');
+    expect(process?.querySelector('time')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/^Started /),
+    );
+    expect(screen.getByText('Host running for').nextElementSibling).toHaveTextContent('3 h 7 min');
+  });
+
+  it('leaves out the host uptime when the server does not know it', async () => {
+    renderApp(routes(), '/system');
+    await screen.findByText('1.2.3');
+    expect(screen.queryByText('Host running for')).not.toBeInTheDocument();
+  });
+
+  it('shows the remote access URL at the public address of the connected profile', async () => {
+    renderApp(
+      routes({
+        'GET /api/remote-access': { body: { ...REMOTE, enabled: true, listening: true } },
+        'GET /api/connection': {
+          body: makeStatus({ state: 'connected', profileId: 'p1', vpnIp: '172.21.31.170' }),
+        },
+        'GET /api/profiles': { body: [makeProfile({ publicAddress: 'vpn.example.com' })] },
+      }),
+      '/system',
+    );
+    const card = await remoteCard();
+    expect(
+      await within(card).findByRole('link', { name: 'https://vpn.example.com:8443' }),
+    ).toHaveAttribute('href', 'https://vpn.example.com:8443');
   });
 
   it('shows a neutral note when this build has no remote access', async () => {

@@ -182,7 +182,9 @@
     },
     "conflict": "The connection cannot do that right now. Wait a moment and try again.",
     "profileMissing": "This profile no longer exists.",
-    "openLog": "Open log for details"
+    "openLog": "Open log for details",
+    "routingWarning": "Routing for forwarded traffic could not be applied; retrying…",
+    "remoteAccessOn": "Remote access on"
   },
   "log": {
     "title": "Log",
@@ -273,7 +275,10 @@
     "copyName": "{{name}} (copy)",
     "duplicateNotice": "Secrets such as passwords and keys are not copied. Enter them again.",
     "missingTitle": "Still missing from the file",
-    "missingFromFile": "Not in the file – please enter."
+    "missingFromFile": "Not in the file – please enter.",
+    "access": "Access",
+    "publicAddress": "Public address of this connection (optional)",
+    "publicAddressHint": "The address your provider assigns to this connection, e.g. for remote access and port forwards. TunnelDeck-VPN cannot detect it itself."
   },
   "schemaForm": {
     "line": "{{label}}, line {{number}}",
@@ -619,6 +624,48 @@
       "mss-clamp": "Load the TCPMSS target on the host (modprobe xt_TCPMSS), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but large transfers through the tunnel may stall.",
       "reject-target": "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently.",
       "reply-routing": "Load the connmark module and the mangle table on the host (modprobe xt_connmark iptable_mangle), then restart the container. Port forwards work without them, but a device that receives a port forward and uses this device as its gateway sends all its traffic through the tunnel while it is up."
+    },
+    "processUptime": "TunnelDeck-VPN running for",
+    "hostUptime": "Host running for",
+    "startedAt": "Started {{time}}",
+    "detail": {
+      "tunPresent": "{{path}} is present.",
+      "tunMissing": "{{path}} is missing ({{error}}).",
+      "tunNotCharDevice": "{{path}} is not a character device.",
+      "iptablesUnavailable": "No usable iptables backend: {{error}}",
+      "iptablesForced": "Uses {{binary}}: the {{backend}} backend is set by configuration.",
+      "iptablesOnlyNft": "Uses {{binary}}: only the nf_tables backend works.",
+      "iptablesOnlyLegacy": "Uses {{binary}}: only the legacy backend works.",
+      "iptablesMixed": "Uses {{binary}}: both backends hold host rules (nf_tables {{nftRules}}, legacy {{legacyRules}}), {{backend}} has more. The other backend's rules still apply.",
+      "iptablesRulesLegacy": "Uses {{binary}}: only the legacy backend holds host rules ({{legacyRules}}).",
+      "iptablesRulesNft": "Uses {{binary}}: only the nf_tables backend holds host rules ({{nftRules}}).",
+      "iptablesNoRules": "Uses {{binary}}: neither backend holds host rules, so nf_tables is preferred.",
+      "ipToolWorks": "Listing the routing rules works.",
+      "ipToolFailed": "Listing the routing rules failed: {{error}}",
+      "netAdminWorks": "A test chain was created and deleted.",
+      "netAdminUnverified": "Cannot be checked without iptables: {{error}}",
+      "netAdminFailed": "Creating or deleting a test chain failed: {{error}}",
+      "ipForwardOn": "IPv4 forwarding is on.",
+      "ipForwardOff": "IPv4 forwarding is off (net.ipv4.ip_forward = {{value}}).",
+      "ipForwardUnreadable": "{{path}} cannot be read: {{error}}",
+      "lanSubnets": "Found: {{subnets}}",
+      "lanNone": "No IPv4 address on a LAN interface.",
+      "lanFailed": "The LAN subnets cannot be detected: {{error}}",
+      "extensionsUnverified": "The iptables extensions cannot be checked: {{error}}",
+      "countersOn": "The iptables comment match is available; hit counters are on.",
+      "countersOff": "The iptables comment match ({{module}}) is unavailable, so hit counters are off.",
+      "synFloodFull": "Uses the hashlimit match: one rate per sender.",
+      "synFloodGlobal": "The hashlimit match ({{module}}) is unavailable, so the protection falls back to the {{fallback}} match: one global rate for all senders instead of one per sender.",
+      "synFloodNone": "Neither the hashlimit match ({{module}}) nor the limit match ({{fallbackModule}}) is available, so SYN flood protection is left out of the firewall.",
+      "pingHashlimit": "Uses the hashlimit match.",
+      "pingLimit": "Uses the {{fallback}} match.",
+      "pingNone": "Neither the hashlimit match ({{module}}) nor the limit match ({{fallbackModule}}) is available, so the ping limit is left out of the firewall.",
+      "mssClampOn": "The TCPMSS target is available.",
+      "mssClampOff": "The TCPMSS target ({{module}}) is unavailable, so MSS clamping is left out of the firewall.",
+      "rejectPresent": "The REJECT target is available.",
+      "rejectMissing": "The REJECT target ({{module}}) is unavailable, so reject rules drop instead and send no answer.",
+      "replyRoutingConnmark": "Replies of port forwards follow a connection mark (CONNMARK in the mangle table).",
+      "replyRoutingFallback": "The CONNMARK target ({{module}}) or the mangle table ({{table}}) is unavailable, so replies of port forwards are routed by the target's address: everything this device routes for a port-forward target goes through the tunnel while it is up."
     }
   },
   "remoteAccess": {
@@ -648,7 +695,9 @@
     "certificatePem": "Certificate chain (PEM)",
     "keyPem": "Private key (PEM)",
     "upload": "Upload certificate",
-    "uploaded": "Certificate uploaded."
+    "uploaded": "Certificate uploaded.",
+    "vpnIpHint": "Set the public address in the profile if your provider uses a different one.",
+    "url": "Address"
   },
   "fieldError": {
     "required": "Required.",
@@ -740,6 +789,18 @@
     "openvpn_file_empty": "The file is empty or contains only comments.",
     "openvpn_not_a_profile": "This is not an OpenVPN profile: it contains no OpenVPN directive.",
     "openvpn_tls_crypt_v2_key_invalid": "Must be an OpenVPN tls-crypt-v2 client key.",
-    "openvpn_tls_crypt_v2_combined": "Cannot be combined with a tls-auth or tls-crypt key."
+    "openvpn_tls_crypt_v2_combined": "Cannot be combined with a tls-auth or tls-crypt key.",
+    "public_address_invalid": "Enter an IPv4 address or a host name, e.g. 203.0.113.10 or vpn.example.com."
+  },
+  "uptime": {
+    "months_one": "{{count}} month",
+    "months_other": "{{count}} months",
+    "weeks_one": "{{count}} week",
+    "weeks_other": "{{count}} weeks",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "hours": "{{count}} h",
+    "minutes": "{{count}} min",
+    "underMinute": "under 1 min"
   }
 }

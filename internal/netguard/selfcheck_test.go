@@ -3,6 +3,7 @@ package netguard
 import (
 	"context"
 	"io/fs"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -187,4 +188,177 @@ func TestSelfCheckWithoutTheCommentMatch(t *testing.T) {
 			t.Errorf("%s failed: %+v", r.ID, r)
 		}
 	}
+}
+
+func TestSelfCheckDetailCodes(t *testing.T) {
+	tests := []struct {
+		name   string
+		root   fstest.MapFS
+		script func(*fakeRunner)
+		want   map[string]string
+	}{
+		{
+			name:   "all pass",
+			root:   withTun(charDevice),
+			script: func(*fakeRunner) {},
+			want: map[string]string{
+				CheckTunDevice: detailTunPresent, CheckIptables: detailIptablesForced, CheckIPTool: detailIPToolWorks,
+				CheckNetAdmin: detailNetAdminWorks, CheckIPForward: detailIPForwardOn, CheckLAN: detailLANSubnets,
+				CheckCounters: detailCountersOn, CheckSYNFlood: detailSYNFloodFull, CheckPingLimit: detailPingHashlimit,
+				CheckMSSClamp: detailMSSClampOn, CheckReject: detailRejectPresent, CheckReplyRouting: detailReplyRoutingMark,
+			},
+		},
+		{
+			name: "no tun device, no ip tool, no NET_ADMIN, forwarding unreadable",
+			root: fstest.MapFS{},
+			script: func(f *fakeRunner) {
+				f.on(ruleShow, fail("exec: \"ip\": executable file not found in $PATH")).
+					on(legacy+"-N TUNNELDECK-PROBE", fail(noPermission))
+			},
+			want: map[string]string{
+				CheckTunDevice: detailTunMissing, CheckIPTool: detailIPToolFailed,
+				CheckNetAdmin: detailNetAdminFailed, CheckIPForward: detailIPForwardUnreadable,
+			},
+		},
+		{
+			name:   "tun is not a device",
+			root:   withTun(0),
+			script: func(*fakeRunner) {},
+			want:   map[string]string{CheckTunDevice: detailTunNotCharDevice},
+		},
+		{
+			name: "no iptables backend",
+			root: withTun(charDevice),
+			script: func(f *fakeRunner) {
+				f.on("iptables-legacy -w -t filter -S", fail(noPermission), fail(noPermission), fail(noPermission)).
+					on("iptables -V", ok(nftVersion), ok(nftVersion), ok(nftVersion))
+			},
+			want: map[string]string{
+				CheckIptables: detailIptablesUnavailable, CheckNetAdmin: detailNetAdminUnverified,
+				CheckCounters: detailExtensionsUnknown, CheckReplyRouting: detailExtensionsUnknown,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRunner()
+			tt.script(f)
+			g := newLegacyGuard(f)
+			g.root = tt.root
+			for _, r := range g.SelfCheck(context.Background()) {
+				if want, checked := tt.want[r.ID]; checked && r.DetailCode != want {
+					t.Errorf("%s: detail code = %q, want %q (%+v)", r.ID, r.DetailCode, want, r)
+				}
+				if r.DetailCode == "" || r.Detail == "" {
+					t.Errorf("%s: detail code %q and detail %q must both be set", r.ID, r.DetailCode, r.Detail)
+				}
+			}
+		})
+	}
+}
+
+func TestSelfCheckDetailParams(t *testing.T) {
+	tests := []struct {
+		name      string
+		ipForward string
+		lan       fakeResult
+		id        string
+		wantCode  string
+		wantParam map[string]string
+	}{
+		{name: "forwarding off", ipForward: "0\n", lan: ok(lanListing), id: CheckIPForward,
+			wantCode: detailIPForwardOff, wantParam: map[string]string{"value": "0"}},
+		{name: "LAN subnets", ipForward: "1\n", lan: ok(lanListing), id: CheckLAN,
+			wantCode: detailLANSubnets, wantParam: map[string]string{"subnets": "192.168.2.0/24 (eth0)"}},
+		{name: "no LAN", ipForward: "1\n", lan: ok("1: lo    inet 127.0.0.1/8 scope host lo\n"), id: CheckLAN,
+			wantCode: detailLANNone, wantParam: map[string]string{}},
+		{name: "LAN detection fails", ipForward: "1\n", lan: fail("Cannot open netlink socket"), id: CheckLAN,
+			wantCode: detailLANFailed},
+		{name: "backend choice", ipForward: "1\n", lan: ok(lanListing), id: CheckIptables,
+			wantCode: detailIptablesForced, wantParam: map[string]string{"binary": "iptables-legacy", "backend": "legacy"}},
+		{name: "tun device path", ipForward: "1\n", lan: ok(lanListing), id: CheckTunDevice,
+			wantCode: detailTunPresent, wantParam: map[string]string{"path": "/dev/net/tun"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRunner()
+			g := newLegacyGuard(f)
+			f.always(addrShow, tt.lan)
+			g.root = fstest.MapFS{
+				"dev/net/tun":                  &fstest.MapFile{Mode: charDevice},
+				"proc/sys/net/ipv4/ip_forward": &fstest.MapFile{Data: []byte(tt.ipForward)},
+			}
+			r := resultOf(t, g.SelfCheck(context.Background()), tt.id)
+			if r.DetailCode != tt.wantCode {
+				t.Errorf("detail code = %q, want %q", r.DetailCode, tt.wantCode)
+			}
+			for key, want := range tt.wantParam {
+				if r.Params[key] != want {
+					t.Errorf("param %s = %q, want %q (params %v)", key, r.Params[key], want, r.Params)
+				}
+			}
+			if tt.wantParam == nil && r.Params["error"] == "" {
+				t.Errorf("params = %v, want the error", r.Params)
+			}
+		})
+	}
+}
+
+func TestExtensionDetailCodes(t *testing.T) {
+	all := capabilities{has: map[extension]bool{
+		extComment: true, extHashlimit: true, extLimit: true, extTCPMSS: true, extReject: true, extConnmark: true,
+	}}
+	limitOnly := capabilities{has: map[extension]bool{extLimit: true}}
+	none := capabilities{has: map[extension]bool{}}
+	tests := []struct {
+		name       string
+		check      func(capabilities) CheckResult
+		caps       capabilities
+		wantCode   string
+		wantModule string
+	}{
+		{"counters on", checkCounters, all, detailCountersOn, moduleComment},
+		{"counters off", checkCounters, none, detailCountersOff, moduleComment},
+		{"SYN flood full", checkSYNFlood, all, detailSYNFloodFull, moduleHashlimit},
+		{"SYN flood global", checkSYNFlood, limitOnly, detailSYNFloodGlobal, moduleHashlimit},
+		{"SYN flood none", checkSYNFlood, none, detailSYNFloodNone, moduleHashlimit},
+		{"ping by hashlimit", checkPingLimit, all, detailPingHashlimit, moduleHashlimit},
+		{"ping by limit", checkPingLimit, limitOnly, detailPingLimit, moduleHashlimit},
+		{"ping none", checkPingLimit, none, detailPingNone, moduleHashlimit},
+		{"MSS clamp on", checkMSSClamp, all, detailMSSClampOn, moduleTCPMSS},
+		{"MSS clamp off", checkMSSClamp, none, detailMSSClampOff, moduleTCPMSS},
+		{"REJECT present", checkReject, all, detailRejectPresent, moduleReject},
+		{"REJECT missing", checkReject, none, detailRejectMissing, moduleReject},
+		{"replies by connmark", checkReplyRouting, all, detailReplyRoutingMark, moduleConnmark},
+		{"replies by address", checkReplyRouting, none, detailReplyRoutingAddress, moduleConnmark},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.check(tt.caps)
+			if r.DetailCode != tt.wantCode || r.Params["module"] != tt.wantModule || r.Detail == "" {
+				t.Errorf("result = %+v, want code %q with module %q and an English detail", r, tt.wantCode, tt.wantModule)
+			}
+		})
+	}
+}
+
+func TestMixedBackendDetailParams(t *testing.T) {
+	b := mixedBackend(probe{binary: "iptables-nft", kind: kindNft, rules: 2}, probe{binary: "iptables-legacy", kind: kindLegacy, rules: 4},
+		backendChoice{nftRules: 2, legacyRules: 4})
+	want := map[string]string{"binary": "iptables-legacy", "backend": "legacy", "nftRules": "2", "legacyRules": "4"}
+	if got := b.choice.params(b.Binary); !maps.Equal(got, want) || b.choice.code != detailIptablesMixed || !b.Mixed {
+		t.Errorf("mixed backend = %+v, params %v; want %v", b, got, want)
+	}
+}
+
+// resultOf returns the result with id.
+func resultOf(t *testing.T, results []CheckResult, id string) CheckResult {
+	t.Helper()
+	for _, r := range results {
+		if r.ID == id {
+			return r
+		}
+	}
+	t.Fatalf("no %s result", id)
+	return CheckResult{}
 }

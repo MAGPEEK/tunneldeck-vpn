@@ -23,8 +23,11 @@ type profileRecord struct {
 	Settings       domain.Settings       `json:"settings"`
 	Secrets        map[string]string     `json:"secrets"`
 	DailyReconnect domain.DailyReconnect `json:"dailyReconnect"`
-	CreatedAt      time.Time             `json:"createdAt"`
-	UpdatedAt      time.Time             `json:"updatedAt"`
+	// PublicAddress was added without a schema change: older files lack
+	// it, which reads as empty.
+	PublicAddress string    `json:"publicAddress,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 func defaultProfiles() profilesDocument {
@@ -59,6 +62,7 @@ func (r profileRecord) public() domain.PublicProfile {
 		Settings:       r.Settings,
 		Secrets:        r.Secrets,
 		DailyReconnect: r.DailyReconnect,
+		PublicAddress:  r.PublicAddress,
 		CreatedAt:      r.CreatedAt,
 		UpdatedAt:      r.UpdatedAt,
 	}.Public()
@@ -176,6 +180,7 @@ func (s *Store) ProfileWithSecrets(id string) (domain.Profile, error) {
 		Settings:       r.Settings.Clone(),
 		Secrets:        secrets,
 		DailyReconnect: r.DailyReconnect,
+		PublicAddress:  r.PublicAddress,
 		CreatedAt:      r.CreatedAt,
 		UpdatedAt:      r.UpdatedAt,
 	}, nil
@@ -311,6 +316,7 @@ func newRecord(p domain.Profile, id string, secrets map[string]string, created, 
 		Settings:       p.Settings.Clone(),
 		Secrets:        secrets,
 		DailyReconnect: p.DailyReconnect,
+		PublicAddress:  p.PublicAddress,
 		CreatedAt:      created,
 		UpdatedAt:      updated,
 	}

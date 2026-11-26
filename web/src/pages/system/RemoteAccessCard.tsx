@@ -1,7 +1,10 @@
 import { useTranslation } from 'react-i18next';
+import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import { Notice } from '../../components/Notice';
-import { useRemoteAccess } from '../../queries/queries';
+import { useConnection, useProfiles, useRemoteAccess } from '../../queries/queries';
+import { RemoteAccessAddress } from '../../remoteAccess/RemoteAccessAddress';
+import { remoteAccessActive, remoteAccessTarget } from '../../remoteAccess/remoteAccessUrl';
 import { genericErrorMessage } from '../auth/formError';
 import { RemoteAccessForm } from './RemoteAccessForm';
 import styles from './SystemPage.module.css';
@@ -19,7 +22,30 @@ export function RemoteAccessCard() {
         </Notice>
       )}
       {remote.data === null && <p className={styles.secondary}>{t('remoteAccess.unavailable')}</p>}
+      {remoteAccessActive(remote.data) && remote.data && <RemoteAccessUrl remote={remote.data} />}
       {remote.data && <RemoteAccessForm saved={remote.data} />}
     </Card>
+  );
+}
+
+/** The URL remote access is reached at: the connected profile's public address, else the VPN IP. */
+function RemoteAccessUrl({ remote }: { remote: RemoteAccess }) {
+  const { t } = useTranslation();
+  const connection = useConnection();
+  const profiles = useProfiles();
+  const status = connection.data;
+  const profile = profiles.data?.find((candidate) => candidate.id === status?.profileId);
+  const vpnIp = status?.state === 'connected' ? status.vpnIp : undefined;
+  const target = remoteAccessTarget(remote.port, profile?.publicAddress, vpnIp);
+  if (!target) {
+    return null;
+  }
+  return (
+    <dl className={styles.values}>
+      <dt>{t('remoteAccess.url')}</dt>
+      <dd>
+        <RemoteAccessAddress target={target} />
+      </dd>
+    </dl>
   );
 }

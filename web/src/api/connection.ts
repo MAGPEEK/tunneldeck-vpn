@@ -30,6 +30,8 @@ export interface ConnectionStatus {
   dataCipher?: string;
   /** Control channel TLS version and cipher suite, e.g. "TLSv1.3 TLS_CHACHA20_POLY1305_SHA256". */
   controlChannel?: string;
+  /** Set while a connected tunnel runs without the routing of forwarded traffic; retried. */
+  routingWarning?: StatusError;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -56,6 +58,12 @@ export interface TrafficEvent {
   bytesOut: number;
   rateIn: number;
   rateOut: number;
+}
+
+/** Data of the SSE "channel" event; a missing field leaves the known value unchanged. */
+export interface ChannelEvent {
+  dataCipher?: string;
+  controlChannel?: string;
 }
 
 /** The ring buffer on the server holds this many lines; the UI keeps the same. */

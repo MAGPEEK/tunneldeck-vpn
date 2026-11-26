@@ -1,13 +1,16 @@
+import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import type { ConnectionStatus } from '../../api/connection';
 import type { FirewallState } from '../../api/firewall';
 import type { Profile } from '../../api/profiles';
+import type { RemoteAccess } from '../../api/remoteAccess';
 import { AdvisoryList } from '../../advisories/AdvisoryList';
 import { Button } from '../../components/Button';
 import { StatePill } from '../../components/StatePill';
 import { translateDynamic } from '../../i18n/dynamic';
+import { remoteAccessActive } from '../../remoteAccess/remoteAccessUrl';
 import { protocolName } from '../profiles/profileText';
 import styles from './ConnectionCard.module.css';
 import { ConnectionLine } from './ConnectionLine';
@@ -29,6 +32,8 @@ export interface ConnectionCardProps {
   version?: string;
   /** Whether the connection line is shown; true unless the user hid it. */
   showLine?: boolean;
+  /** null when this build has no remote access; undefined while loading. */
+  remoteAccess?: RemoteAccess | null;
 }
 
 /** The server's host name without port: from the profile, else from the live remote. */
@@ -66,11 +71,15 @@ export function ConnectionCard(props: ConnectionCardProps) {
         </span>
         {name !== undefined && <h2 className={styles.name}>{name}</h2>}
         <StatePill>{protocol}</StatePill>
+        {remoteAccessActive(props.remoteAccess) && (
+          <StatePill tone="accent">{t('connection.remoteAccessOn')}</StatePill>
+        )}
         <div className={styles.actions}>
           <Actions {...props} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
       </div>
       {status.state === 'error' && <ErrorLine status={status} />}
+      {status.routingWarning !== undefined && status.state !== 'error' && <RoutingWarning />}
       {actionError !== undefined && (
         <p role="alert" className={styles.error}>
           {actionError}
@@ -100,6 +109,19 @@ function ErrorLine({ status }: { status: ConnectionStatus }) {
   return (
     <p className={styles.error}>
       {text || t('connection.errorUnknown')} <Link to="/log">{t('connection.openLog')}</Link>
+    </p>
+  );
+}
+
+/** The tunnel is up, but the routing of forwarded traffic failed; the server retries it. */
+function RoutingWarning() {
+  const { t } = useTranslation();
+  return (
+    <p role="status" className={styles.warning}>
+      <TriangleAlert size={16} className={styles.warningIcon} aria-hidden="true" />
+      <span>
+        {t('connection.routingWarning')} <Link to="/log">{t('connection.openLog')}</Link>
+      </span>
     </p>
   );
 }

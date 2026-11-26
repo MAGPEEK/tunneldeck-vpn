@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -51,31 +52,38 @@ type host struct {
 	controlPath string
 	// sockets opens the HTTPS listener of remote access.
 	sockets remoteaccess.SocketListener
+	// root is the host's file system, for /proc/uptime; nil leaves the
+	// host's uptime unknown.
+	root fs.FS
+	// now is the clock; nil means time.Now.
+	now func() time.Time
 }
 
 // app is the wired server. Fields are set in startup order.
 type app struct {
-	cfg      config.Config
-	host     host
-	listen   string
-	uiPort   int
-	store    *store.Store
-	auth     *auth.Service
-	guard    *netguard.Guard
-	checks   []api.CheckResult
-	manager  *vpn.ConnectionManager
-	remote   *remoteaccess.Manager
-	api      *api.Server
-	router   http.Handler
-	control  *control.Server
-	listener net.Listener
-	server   *http.Server
+	cfg       config.Config
+	host      host
+	startedAt time.Time
+	listen    string
+	uiPort    int
+	store     *store.Store
+	auth      *auth.Service
+	guard     *netguard.Guard
+	checks    []api.CheckResult
+	manager   *vpn.ConnectionManager
+	remote    *remoteaccess.Manager
+	api       *api.Server
+	router    http.Handler
+	control   *control.Server
+	listener  net.Listener
+	server    *http.Server
 }
 
 // serveCommand runs the server until ctx ends.
 func serveCommand(ctx context.Context, cfg config.Config) error {
 	a, err := startApp(ctx, cfg, host{
 		runner: netguard.ExecRunner{}, network: systemNetwork{}, controlPath: controlSocketPath(), sockets: &net.ListenConfig{},
+		root: os.DirFS("/"), now: time.Now,
 	})
 	if err != nil {
 		return err
@@ -88,7 +96,10 @@ func serveCommand(ctx context.Context, cfg config.Config) error {
 // protection, drivers and connection manager, control socket, HTTP, and
 // the HTTPS listener of remote access.
 func startApp(ctx context.Context, cfg config.Config, h host) (*app, error) {
-	a := &app{cfg: cfg, host: h}
+	if h.now == nil {
+		h.now = time.Now
+	}
+	a := &app{cfg: cfg, host: h, startedAt: h.now().UTC()}
 	steps := []func(context.Context) error{
 		a.resolveListen, a.openStore, a.resetAdminFromEnv, a.protectHost, a.startManager, a.listenControl, a.listenHTTP,
 		a.startRemoteAccess,
@@ -215,7 +226,9 @@ func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 		Devices: devices.New(a.guard, net.DefaultResolver, time.Now),
 		System: api.System{
 			Version: version, ListenAddress: a.listen, UIPort: a.uiPort, TimeZone: a.cfg.TimeZone,
-			Checks: func() []api.CheckResult { return a.checks },
+			Checks:     func() []api.CheckResult { return a.checks },
+			StartedAt:  a.startedAt,
+			HostUptime: func() (time.Duration, bool) { return hostUptime(a.host.root) },
 		},
 		RemoteAccess: a.store, RemoteAccessListener: a.remote,
 	}

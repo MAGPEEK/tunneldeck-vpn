@@ -35,12 +35,31 @@
 
 .check {
   display: flex;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.checkHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .checkIcon {
   flex: none;
   margin-top: 3px;
+}
+
+.checkTitle {
+  font-weight: var(--font-weight-medium);
+}
+
+/* Detail and hint line up with the title, past the 16 px icon and its gap. */
+.checkLine {
+  margin: 0;
+  padding-left: calc(16px + var(--space-2));
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
 }
 
 .pass {
@@ -53,12 +72,6 @@
 
 .warn {
   color: var(--state-warning-text);
-}
-
-.checkText {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
 
 .secondary {
@@ -131,11 +144,6 @@
 
 .danger {
   color: var(--state-danger-text);
-  font-size: var(--font-size-sm);
-}
-
-.warnText {
-  color: var(--state-warning-text);
   font-size: var(--font-size-sm);
 }
 

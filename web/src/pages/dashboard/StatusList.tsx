@@ -8,6 +8,8 @@ import type { RemoteAccess } from '../../api/remoteAccess';
 import { Card } from '../../components/Card';
 import type { StateTone } from '../../components/StatePill';
 import { formatBitRate, formatBytes, formatDateTime, parseTime } from '../../format/format';
+import { RemoteAccessAddress } from '../../remoteAccess/RemoteAccessAddress';
+import { remoteAccessTarget } from '../../remoteAccess/remoteAccessUrl';
 import { CustomizePanel, CustomizeToggle } from './CustomizePanel';
 import type { DashboardItem, DashboardItems } from './dashboardItems';
 import {
@@ -29,6 +31,8 @@ export interface StatusListProps {
   deviceCount: number | undefined;
   /** null when this build has no remote access. */
   remoteAccess: RemoteAccess | null | undefined;
+  /** Public address of the shown profile; "" or undefined when not set. */
+  publicAddress?: string;
   /** Which rows (and the connection line) this browser shows. */
   items: DashboardItems;
 }
@@ -186,7 +190,7 @@ function firewallRow({ firewall, status, t }: RowContext): Row {
   return { id: 'firewall', label: t('dashboard.details.firewall'), tone, values };
 }
 
-function remoteAccessRow({ remoteAccess, t }: RowContext): Row | undefined {
+function remoteAccessRow({ remoteAccess, publicAddress, status, t }: RowContext): Row | undefined {
   if (!remoteAccess) {
     return undefined;
   }
@@ -194,11 +198,21 @@ function remoteAccessRow({ remoteAccess, t }: RowContext): Row | undefined {
   if (!remoteAccess.enabled) {
     return { id: 'remote', label, tone: 'neutral', values: [t('dashboard.details.remoteOff')] };
   }
+  const port = t('dashboard.details.remoteOn', { port: remoteAccess.port });
+  if (!remoteAccess.listening) {
+    const values: ReactNode[] = [port];
+    if (remoteAccess.lastError) {
+      values.push(t('remoteAccess.lastError', { error: remoteAccess.lastError }));
+    }
+    return { id: 'remote', label, tone: 'warning', values };
+  }
+  const vpnIp = tunnelUp(status.state) ? status.vpnIp : undefined;
+  const target = remoteAccessTarget(remoteAccess.port, publicAddress, vpnIp);
   return {
     id: 'remote',
     label,
-    tone: remoteAccess.listening ? 'success' : 'warning',
-    values: [t('dashboard.details.remoteOn', { port: remoteAccess.port })],
+    tone: 'success',
+    values: [target ? <RemoteAccessAddress target={target} /> : port],
   };
 }
 
