@@ -160,7 +160,7 @@ describe('SystemPage', () => {
     expect(within(ip).getByText('server detail for an unknown code')).toBeInTheDocument();
   });
 
-  it('shows how long TunnelDeck-VPN and the host have been running', async () => {
+  it('shows how long the container has been running, and no host uptime', async () => {
     const now = Date.now();
     renderApp(
       routes({
@@ -169,24 +169,17 @@ describe('SystemPage', () => {
             ...SYSTEM,
             serverTime: new Date(now).toISOString(),
             startedAt: new Date(now - ((5 * 24 + 4) * 3600 + 12 * 60 + 30) * 1000).toISOString(),
-            hostUptimeSeconds: 3 * 3600 + 7 * 60 + 10,
           },
         },
       }),
       '/system',
     );
-    const process = (await screen.findByText('TunnelDeck-VPN running for')).nextElementSibling;
+    const process = (await screen.findByText('Container running for')).nextElementSibling;
     expect(process).toHaveTextContent('5 days 4 h 12 min');
     expect(process?.querySelector('time')).toHaveAttribute(
       'title',
       expect.stringMatching(/^Started /),
     );
-    expect(screen.getByText('Host running for').nextElementSibling).toHaveTextContent('3 h 7 min');
-  });
-
-  it('leaves out the host uptime when the server does not know it', async () => {
-    renderApp(routes(), '/system');
-    await screen.findByText('1.2.3');
     expect(screen.queryByText('Host running for')).not.toBeInTheDocument();
   });
 

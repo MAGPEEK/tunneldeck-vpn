@@ -629,8 +629,7 @@
       "reject-target": "Load the REJECT target on the host (modprobe ipt_REJECT), then restart the container. Some NAS kernels do not ship it; the firewall works without it, but reject rules drop silently.",
       "reply-routing": "Load the connmark module and the mangle table on the host (modprobe xt_connmark iptable_mangle), then restart the container. Port forwards work without them, but a device that receives a port forward and uses this device as its gateway sends all its traffic through the tunnel while it is up."
     },
-    "processUptime": "TunnelDeck-VPN running for",
-    "hostUptime": "Host running for",
+    "containerUptime": "Container running for",
     "startedAt": "Started {{time}}",
     "detail": {
       "tunPresent": "{{path}} is present.",

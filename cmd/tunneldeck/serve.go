@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -52,9 +51,6 @@ type host struct {
 	controlPath string
 	// sockets opens the HTTPS listener of remote access.
 	sockets remoteaccess.SocketListener
-	// root is the host's file system, for /proc/uptime; nil leaves the
-	// host's uptime unknown.
-	root fs.FS
 	// now is the clock; nil means time.Now.
 	now func() time.Time
 }
@@ -83,7 +79,7 @@ type app struct {
 func serveCommand(ctx context.Context, cfg config.Config) error {
 	a, err := startApp(ctx, cfg, host{
 		runner: netguard.ExecRunner{}, network: systemNetwork{}, controlPath: controlSocketPath(), sockets: &net.ListenConfig{},
-		root: os.DirFS("/"), now: time.Now,
+		now: time.Now,
 	})
 	if err != nil {
 		return err
@@ -226,9 +222,8 @@ func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 		Devices: devices.New(a.guard, net.DefaultResolver, time.Now),
 		System: api.System{
 			Version: version, ListenAddress: a.listen, UIPort: a.uiPort, TimeZone: a.cfg.TimeZone,
-			Checks:     func() []api.CheckResult { return a.checks },
-			StartedAt:  a.startedAt,
-			HostUptime: func() (time.Duration, bool) { return hostUptime(a.host.root) },
+			Checks:    func() []api.CheckResult { return a.checks },
+			StartedAt: a.startedAt,
 		},
 		RemoteAccess: a.store, RemoteAccessListener: a.remote,
 	}

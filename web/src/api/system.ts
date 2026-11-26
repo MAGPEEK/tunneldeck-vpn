@@ -20,10 +20,8 @@ export interface SystemInfo {
   serverTime: string;
   timeZone: string;
   checks: CheckResult[];
-  /** Process start, RFC 3339 UTC. */
+  /** Process start, RFC 3339 UTC; the process is the container's main process. */
   startedAt?: string;
-  /** How long the host has been running; missing when unknown. */
-  hostUptimeSeconds?: number;
 }
 
 export function getSystem(): Promise<SystemInfo> {

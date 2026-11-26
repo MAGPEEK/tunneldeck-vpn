@@ -629,8 +629,7 @@
       "reject-target": "Das REJECT-Ziel auf dem Host laden (modprobe ipt_REJECT) und den Container neu starten. Manche NAS-Kernel enthalten es nicht; die Firewall funktioniert auch ohne, Ablehnen-Regeln verwerfen dann aber stillschweigend.",
       "reply-routing": "Das connmark-Modul und die mangle-Tabelle auf dem Host laden (modprobe xt_connmark iptable_mangle) und den Container neu starten. Portweiterleitungen funktionieren auch ohne; ein Gerät, das eine Portweiterleitung empfängt und dieses Gerät als Gateway nutzt, schickt dann aber seinen gesamten Verkehr durch den Tunnel, solange er besteht."
     },
-    "processUptime": "TunnelDeck-VPN läuft seit",
-    "hostUptime": "Host läuft seit",
+    "containerUptime": "Container läuft seit",
     "startedAt": "Gestartet {{time}}",
     "detail": {
       "tunPresent": "{{path}} ist vorhanden.",

@@ -188,7 +188,4 @@ type System struct {
 	Checks func() []CheckResult
 	// StartedAt is when the process started.
 	StartedAt time.Time
-	// HostUptime returns how long the host has been running; ok is false
-	// when that is unknown. Nil means unknown.
-	HostUptime func() (uptime time.Duration, ok bool)
 }

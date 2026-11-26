@@ -46,30 +46,14 @@ func TestGetSystemWithoutChecks(t *testing.T) {
 	}
 }
 
-func TestGetSystemUptime(t *testing.T) {
-	started := time.Date(2026, 11, 20, 6, 0, 0, 0, time.FixedZone("CET", 3600))
-	tests := []struct {
-		name       string
-		uptime     func() (time.Duration, bool)
-		wantUptime any
-	}{
-		{name: "known", uptime: func() (time.Duration, bool) { return 90*time.Minute + 700*time.Millisecond, true }, wantUptime: float64(5400)},
-		{name: "unreadable", uptime: func() (time.Duration, bool) { return 0, false }},
-		{name: "no source", uptime: nil},
+func TestGetSystemStartedAt(t *testing.T) {
+	env := newTestEnv(t)
+	env.server.deps.System.StartedAt = time.Date(2026, 11, 20, 6, 0, 0, 0, time.FixedZone("CET", 3600))
+	got := decode[map[string]any](t, env.do(t, http.MethodGet, "/api/system", ""))
+	if got["startedAt"] != "2026-11-20T05:00:00Z" {
+		t.Errorf("startedAt = %v, want RFC 3339 UTC", got["startedAt"])
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := newTestEnv(t)
-			env.server.deps.System.StartedAt = started
-			env.server.deps.System.HostUptime = tt.uptime
-			got := decode[map[string]any](t, env.do(t, http.MethodGet, "/api/system", ""))
-			if got["startedAt"] != "2026-11-20T05:00:00Z" {
-				t.Errorf("startedAt = %v, want RFC 3339 UTC", got["startedAt"])
-			}
-			uptime, present := got["hostUptimeSeconds"]
-			if (tt.wantUptime == nil) == present || (present && uptime != tt.wantUptime) {
-				t.Errorf("hostUptimeSeconds = %v (present %v), want %v", uptime, present, tt.wantUptime)
-			}
-		})
+	if _, present := got["hostUptimeSeconds"]; present {
+		t.Error("hostUptimeSeconds is present, want it gone")
 	}
 }
