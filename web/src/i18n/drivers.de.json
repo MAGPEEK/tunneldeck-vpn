@@ -85,6 +85,6 @@
   "ipsec.template.generic.hint": "Tragen Sie die Werte Ihres Gateways ein. Die Proposals sind die nach RFC 8247 empfohlenen Vorgaben.",
   "ipsec.template.lancom.hint": "LANCOM: Vergleichen Sie die IKE- und IPsec-Proposals mit den IKEv2-Einstellungen der VPN-Verbindung im Router (LANconfig: VPN → IKEv2/IPSec).",
   "ipsec.template.fritzbox.hint": "FRITZ!Box: Internet → Freigaben → VPN (IPSec) → Verbindung zu einem anderen Netzwerk hinzufügen (LAN-zu-LAN). Verwenden Sie den Modus Netz-zu-Netz mit dem LAN der FRITZ!Box als entferntem Subnetz.",
-  "ipsec.template.fritzboxUser.hint": "FRITZ!Box: Internet → Freigaben → VPN (IPSec) → Benutzer, Werte aus „VPN-Daten“: Server → Gateway-Adresse, IPSec-ID → lokale Identität, Shared Secret → Pre-shared Key, Konto und Kennwort → XAuth-Benutzername und -Passwort.",
+  "ipsec.template.fritzboxUser.hint": "FRITZ!Box: Internet → Freigaben → VPN (IPSec) → Benutzer, Werte aus „VPN-Daten“: Server → Gateway-Adresse, IPSec-ID → lokale Identität, Shared Secret → Pre-shared Key, Konto und Kennwort → XAuth-Benutzername und -Passwort. Lassen Sie die Gateway-Identität leer: Die FRITZ!Box meldet sich mit ihrer Internet-IP-Adresse, nicht mit dem MyFRITZ!-Namen.",
   "ipsec.template.opnsense.hint": "OPNsense, pfSense oder strongSwan: Vergleichen Sie die Proposals von Phase 1 (IKE) und Phase 2 (ESP) mit den Tunnel-Einstellungen des Gateways."
 }

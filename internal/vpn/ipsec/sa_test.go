@@ -71,7 +71,7 @@ func TestTrafficCounterKeepsRekeyedBytes(t *testing.T) {
 
 func TestControlChannelNamesTheIKEVersion(t *testing.T) {
 	m := saMessage(stateEstablished, "10.10.10.5", "7", "1000", "2000")
-	m.section(connName).set("version", "IKEv1")
+	m.section(connName).set("version", "1")
 	if got := parseIKESAs(m)[0].controlChannel(); got != "IKEv1 AES_GCM_16-256/PRF_HMAC_SHA2_384/CURVE_25519" {
 		t.Errorf("control channel = %q", got)
 	}

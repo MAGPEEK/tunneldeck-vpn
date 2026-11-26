@@ -101,10 +101,7 @@ func (sa ikeSA) controlChannel() string {
 			parts = append(parts, part)
 		}
 	}
-	version := sa.version
-	if version == "" {
-		version = "IKEv2"
-	}
+	version := ikeVersionName(sa.version)
 	return version + " " + strings.Join(parts, "/")
 }
 
@@ -170,4 +167,15 @@ func (c *trafficCounter) update(children []childSA) (in, out uint64) {
 		out += child.bytesOut
 	}
 	return in, out
+}
+
+// ikeVersionName turns charon's version field into "IKEv1" or "IKEv2":
+// VICI reports the bare number ("1", "2"); an empty value means IKEv2.
+func ikeVersionName(version string) string {
+	switch version {
+	case "1", "IKEv1":
+		return "IKEv1"
+	default:
+		return "IKEv2"
+	}
 }

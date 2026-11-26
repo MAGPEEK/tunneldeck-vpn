@@ -85,6 +85,6 @@
   "ipsec.template.generic.hint": "Enter the values of your gateway. The proposals are the defaults recommended by RFC 8247.",
   "ipsec.template.lancom.hint": "LANCOM: compare the IKE and IPsec proposals with the IKEv2 settings of the VPN connection on the router (LANconfig: VPN → IKEv2/IPSec).",
   "ipsec.template.fritzbox.hint": "FRITZ!Box: Internet → Permit Access → VPN (IPSec) → add a connection to another network (LAN-to-LAN). Use net-to-net mode with the FRITZ!Box LAN as remote subnet.",
-  "ipsec.template.fritzboxUser.hint": "FRITZ!Box: Internet → Permit Access → VPN (IPSec) → user, values from “VPN-Daten”: Server → gateway address, IPSec-ID → local identity, shared secret → pre-shared key, account and password → XAuth username and password.",
+  "ipsec.template.fritzboxUser.hint": "FRITZ!Box: Internet → Permit Access → VPN (IPSec) → user, values from “VPN-Daten”: Server → gateway address, IPSec-ID → local identity, shared secret → pre-shared key, account and password → XAuth username and password. Leave the gateway identity empty: the FRITZ!Box identifies itself with its internet IP address, not with the MyFRITZ! name.",
   "ipsec.template.opnsense.hint": "OPNsense, pfSense or strongSwan: compare phase 1 (IKE) and phase 2 (ESP) proposals with the tunnel settings of the gateway."
 }
