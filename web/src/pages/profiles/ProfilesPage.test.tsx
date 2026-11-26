@@ -67,6 +67,19 @@ describe('ProfilesPage', () => {
     expect(within(row('Tunnel')).getByText('wg.example.com:51820')).toBeInTheDocument();
   });
 
+  it('shows an IPsec profile with its protocol and gateway', async () => {
+    const gateway = makeProfile({
+      id: 'ip1',
+      name: 'Head office',
+      protocol: 'ipsec',
+      settings: { gateway: 'vpn.example.com', ikeVersion: 'ikev2' },
+    });
+    renderApp(routes({ 'GET /api/profiles': { body: [office, gateway] } }), '/profiles');
+    await screen.findByRole('cell', { name: 'Head office' });
+    expect(within(row('Head office')).getByText('IPsec')).toBeInTheDocument();
+    expect(within(row('Head office')).getByText('vpn.example.com')).toBeInTheDocument();
+  });
+
   it('keeps delete enabled for every profile, also the connected one', async () => {
     renderApp(routes(), '/profiles');
     expect(await screen.findByRole('button', { name: 'Delete mdex' })).toBeEnabled();

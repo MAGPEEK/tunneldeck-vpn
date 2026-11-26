@@ -2,7 +2,14 @@ import type { Advisory } from '../../../api/profiles';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { problem, type MockRoutes } from '../../../test/fetchMock';
-import { DRIVERS, WIREGUARD_SCHEMA, makeProfile, makeStatus } from '../../../test/fixtures';
+import {
+  DRIVERS,
+  IPSEC_SCHEMA,
+  WIREGUARD_SCHEMA,
+  makeFirewall,
+  makeProfile,
+  makeStatus,
+} from '../../../test/fixtures';
 import { SIGNED_IN, renderApp } from '../../../test/renderApp';
 
 const SYSTEM = {
@@ -386,5 +393,125 @@ describe('WireGuard profile', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate key pair' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByLabelText('Private key')).toHaveValue('');
+  });
+});
+
+describe('IPsec profile', () => {
+  const drivers = [...DRIVERS, { protocol: 'ipsec', schema: IPSEC_SCHEMA }];
+  const fritzHint = /FRITZ!Box: Internet → Permit Access → VPN \(IPSec\) → user/;
+
+  function ipsecRoutes(overrides: MockRoutes = {}): MockRoutes {
+    return routes({
+      'GET /api/drivers': { body: drivers },
+      'GET /api/firewall': { body: makeFirewall({ hostAddresses: ['192.168.1.10'] }) },
+      ...overrides,
+    });
+  }
+
+  async function chooseIpsec() {
+    const group = await screen.findByRole('group', { name: 'Protocol' });
+    fireEvent.click(within(group).getByRole('radio', { name: 'IPsec/IKEv2' }));
+  }
+
+  it('offers IPsec next to OpenVPN and switches to its form', async () => {
+    renderApp(ipsecRoutes(), '/profiles/new');
+    const group = await screen.findByRole('group', { name: 'Protocol' });
+    expect(within(group).getByRole('radio', { name: 'IPsec/IKEv2' })).toBeEnabled();
+
+    await chooseIpsec();
+    expect(screen.getByLabelText('Gateway type')).toHaveValue('generic');
+    expect(screen.getByLabelText('IKE version')).toHaveValue('ikev2');
+    expect(screen.getByText(/defaults recommended by RFC 8247/)).toBeInTheDocument();
+    expect(screen.queryByText('IKEv1 Aggressive Mode is insecure')).not.toBeInTheDocument();
+  });
+
+  it('pre-fills the FRITZ!Box user access, warns about IKEv1 and saves it', async () => {
+    const created = makeProfile({ id: 'new1', name: 'Fritz', protocol: 'ipsec' });
+    const { fetchMock } = renderApp(
+      ipsecRoutes({
+        'POST /api/profiles': { status: 201, body: created },
+        'GET /api/profiles/new1': { body: created },
+      }),
+      '/profiles/new',
+    );
+    await chooseIpsec();
+
+    change('Gateway type', 'fritzboxUser');
+    expect(screen.getByLabelText('IKE version')).toHaveValue('ikev1');
+    expect(screen.getByText(fritzHint)).toBeInTheDocument();
+    expect(screen.getByText('IKEv1 Aggressive Mode is insecure')).toBeInTheDocument();
+    expect(screen.queryByText(/Your own values were kept/)).not.toBeInTheDocument();
+
+    change('Name', 'Fritz');
+    change('Gateway address', 'example.myfritz.net');
+    change('Pre-shared key', 'shared-secret-from-vpn-data');
+    change('XAuth username', 'vpnuser');
+    change('XAuth password', 'vpnpassword');
+    submitForm();
+
+    await screen.findByText('Profile saved.');
+    const body = bodyOf(fetchMock, 'POST', '/api/profiles');
+    expect(body.protocol).toBe('ipsec');
+    expect(body.settings).toMatchObject({
+      template: 'fritzboxUser',
+      gateway: 'example.myfritz.net',
+      ikeVersion: 'ikev1',
+      mode: 'virtualIp',
+      xauthUsername: 'vpnuser',
+      ikeProposals: ['aes256-sha512-modp2048', 'aes256-sha512-modp1024', 'aes256-sha1-modp1024'],
+    });
+    expect(body.secrets).toEqual({
+      psk: 'shared-secret-from-vpn-data',
+      xauthPassword: 'vpnpassword',
+    });
+  });
+
+  it('keeps values the user changed and applies the template on request', async () => {
+    renderApp(ipsecRoutes(), '/profiles/new');
+    await chooseIpsec();
+
+    change('IKE proposals, line 1', 'aes128-sha256-modp2048');
+    change('Gateway type', 'lancom');
+
+    expect(screen.getByLabelText('IKE proposals, line 1')).toHaveValue('aes128-sha256-modp2048');
+    expect(screen.getByLabelText('ESP proposals, line 1')).toHaveValue(
+      'aes256gcm16-ecp256-modp2048',
+    );
+    expect(screen.getByText('Your own values were kept for: IKE proposals.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use template values' }));
+    expect(screen.getByLabelText('IKE proposals, line 1')).toHaveValue(
+      'aes256gcm16-prfsha256-ecp256-modp2048',
+    );
+    expect(screen.queryByText(/Your own values were kept/)).not.toBeInTheDocument();
+  });
+
+  it('tells in net-to-net mode which static route the LAN router needs', async () => {
+    renderApp(ipsecRoutes(), '/profiles/new');
+    await chooseIpsec();
+    expect(screen.queryByText('Static route needed in your LAN router')).not.toBeInTheDocument();
+
+    change('Mode', 'netToNet');
+    change('Remote subnets (one IPv4 network per line), line 1', '10.20.0.0/16');
+
+    expect(screen.getByText('Static route needed in your LAN router')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /remote subnets \(10\.20\.0\.0\/16\) with this device \(192\.168\.1\.10\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the saved IKEv1 danger advisory once, above the form', async () => {
+    const saved = makeProfile({
+      id: 'ip1',
+      name: 'Fritz',
+      protocol: 'ipsec',
+      settings: { template: 'fritzboxUser', gateway: 'example.myfritz.net', ikeVersion: 'ikev1' },
+      advisories: [{ code: 'ikev1_aggressive', severity: 'danger', field: 'ikeVersion' }],
+    });
+    renderApp(ipsecRoutes({ 'GET /api/profiles/ip1': { body: saved } }), '/profiles/ip1');
+    await screen.findByLabelText('Gateway address');
+    expect(screen.getAllByText('IKEv1 Aggressive Mode is insecure')).toHaveLength(1);
   });
 });

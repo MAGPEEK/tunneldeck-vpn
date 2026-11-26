@@ -104,3 +104,9 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
 }
+
+.addon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

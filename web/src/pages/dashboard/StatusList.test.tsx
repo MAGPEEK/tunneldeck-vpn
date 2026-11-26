@@ -117,6 +117,21 @@ describe('StatusList', () => {
     expect(row('encryption')).not.toHaveTextContent('Control channel');
   });
 
+  it('shows the IPsec ESP algorithm and IKE proposal', () => {
+    renderList({
+      ...connected,
+      protocol: 'ipsec',
+      dataCipher: 'AES_GCM_16-256',
+      controlChannel: 'IKEv2 AES_GCM_16-256/PRF_HMAC_SHA2_384/CURVE_25519',
+    });
+    expect(row('encryption')).toHaveAttribute('data-tone', 'success');
+    expect(row('encryption')).toHaveTextContent('ESP AES_GCM_16-256');
+    expect(row('encryption')).toHaveTextContent(
+      'Key exchange IKEv2 AES_GCM_16-256/PRF_HMAC_SHA2_384/CURVE_25519',
+    );
+    expect(row('encryption')).not.toHaveTextContent('Data channel');
+  });
+
   it('marks an unencrypted data channel as a problem', () => {
     renderList({ ...connected, dataCipher: 'none' });
     expect(row('encryption')).toHaveAttribute('data-tone', 'danger');

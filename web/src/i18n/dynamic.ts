@@ -41,3 +41,10 @@ export function useDriverText(): (key: string) => string {
   const language = i18n.resolvedLanguage;
   return (key) => driverText(language, key);
 }
+
+/** `driverText` bound to the current language that gives undefined for keys without a text. */
+export function useOptionalDriverText(): (key: string) => string | undefined {
+  const { i18n } = useTranslation();
+  const language = i18n.resolvedLanguage;
+  return (key) => (key in FALLBACK_TEXTS ? driverText(language, key) : undefined);
+}

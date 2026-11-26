@@ -7,16 +7,21 @@ export function protocolName(t: TFunction, protocol: string): string {
   return translateDynamic(t, `protocols.${protocol}`, protocol);
 }
 
+/** Short protocol name for lists and the dashboard ("IPsec"); falls back to the full name. */
+export function protocolShortName(t: TFunction, protocol: string): string {
+  return translateDynamic(t, `protocolShort.${protocol}`, protocolName(t, protocol));
+}
+
 function nonEmpty(value: Settings[string] | undefined): string {
   return typeof value === 'string' ? value : '';
 }
 
 /**
  * "host:port" of the profile's server: a WireGuard `endpoint` as entered,
- * else the remoteHost and port settings; "" when unset.
+ * an IPsec `gateway`, else the remoteHost and port settings; "" when unset.
  */
 export function profileServer(profile: Pick<Profile, 'settings'>): string {
-  const endpoint = nonEmpty(profile.settings.endpoint);
+  const endpoint = nonEmpty(profile.settings.endpoint) || nonEmpty(profile.settings.gateway);
   if (endpoint !== '') {
     return endpoint;
   }
@@ -29,10 +34,13 @@ export function profileServer(profile: Pick<Profile, 'settings'>): string {
   return typeof port === 'number' || typeof port === 'string' ? `${shownHost}:${port}` : shownHost;
 }
 
-/** The server's host name or address without port, from the endpoint or remoteHost; "" when unset. */
+/** The server's host name or address without port, from the endpoint, gateway or remoteHost; "" when unset. */
 export function profileServerHost(settings: Settings): string {
   const endpoint = nonEmpty(settings.endpoint);
-  return endpoint !== '' ? hostOfEndpoint(endpoint) : nonEmpty(settings.remoteHost);
+  if (endpoint !== '') {
+    return hostOfEndpoint(endpoint);
+  }
+  return nonEmpty(settings.gateway) || nonEmpty(settings.remoteHost);
 }
 
 /** "vpn.example.com:51820" → "vpn.example.com", "[2001:db8::1]:51820" → "2001:db8::1". */

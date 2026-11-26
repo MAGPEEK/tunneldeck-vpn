@@ -45,6 +45,55 @@ afterEach(() => {
 });
 
 describe('ConnectionCard', () => {
+  describe('IPsec', () => {
+    const gateway = makeProfile({
+      id: 'ip1',
+      name: 'Head office',
+      protocol: 'ipsec',
+      settings: { gateway: 'vpn.example.com', ikeVersion: 'ikev1' },
+      advisories: [{ code: 'ikev1_aggressive', severity: 'danger', field: 'ikeVersion' }],
+    });
+    const failed: Partial<ConnectionStatus> = {
+      state: 'error',
+      profileId: 'ip1',
+      profileName: 'Head office',
+      protocol: 'ipsec',
+      advisories: gateway.advisories,
+      lastError: {
+        code: 'proposal_mismatch',
+        message: 'NO_PROPOSAL_CHOSEN',
+        time: '2026-11-26T10:00:00Z',
+      },
+    };
+
+    it('names IPsec and the gateway host in the connection line', () => {
+      renderCard({ ...failed, state: 'connecting', lastError: undefined }, { profiles: [gateway] });
+      const line = screen.getByRole('group', { name: /Connecting/ });
+      expect(line).toHaveTextContent('IPsec');
+      expect(line).not.toHaveTextContent('IPsec/IKEv2');
+      expect(line).toHaveTextContent('vpn.example.com');
+    });
+
+    it.each([
+      ['proposal_mismatch', 'The gateway accepted none of the proposals'],
+      ['ts_unacceptable', 'The gateway refused the subnets of the tunnel'],
+      ['no_virtual_ip', 'The gateway assigned no virtual IP'],
+      ['auth_failed', 'The server rejected the credentials'],
+    ])('translates the error code %s', (code, text) => {
+      renderCard(
+        { ...failed, lastError: { code, message: code, time: '2026-11-26T10:00:00Z' } },
+        { profiles: [gateway] },
+      );
+      expect(screen.getByText(text, { exact: false })).toBeInTheDocument();
+    });
+
+    it('shows the IKEv1 advisory as a danger', () => {
+      renderCard(failed, { profiles: [gateway] });
+      const advisory = screen.getByText(/IKEv1 is deprecated \(RFC 9395\)/).closest('li');
+      expect(advisory).toHaveAttribute('data-severity', 'danger');
+    });
+  });
+
   describe('WireGuard', () => {
     const tunnel = makeProfile({
       id: 'wg1',

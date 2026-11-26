@@ -118,7 +118,7 @@ SPEC §18: WireGuard server container in `test/e2e`, matrix case D-wireguard on 
 
 SPEC §19: strongSwan charon with kernel-libipsec in the image, VICI client in Go, `internal/vpn/ipsec` (schema with templates, validation, advisories, swanctl/strongswan.conf rendering into tmpfs, supervisor, state machine, counters), certificate/PKCS#12 upload handling, registry wiring, tests.
 
-## [ ] 29. IPsec UI — medium — after: 28
+## [x] 29. IPsec UI — medium — after: 28
 
 SPEC §19: protocol chooser offers IPsec/IKEv2 with templates; auth method switch; certificate uploads; mode switch (virtual IP / net-to-net) with subnet lists and the static-route hint; dashboard texts; help; i18n de/en.
 

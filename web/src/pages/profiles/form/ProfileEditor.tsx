@@ -40,6 +40,8 @@ import {
   type SecretStates,
 } from '../schema/schemaValues';
 import { KeyPairPanel } from './KeyPairPanel';
+import { ipsecAddons, templateAddons } from './schemaAddons';
+import { applyTemplate, changedTemplate, forceTemplate } from './templatePresets';
 import { splitProfileErrors } from './formErrors';
 import { ImportWarnings } from './ImportWarnings';
 import { stillMissing } from './importMissing';
@@ -94,6 +96,7 @@ export function ProfileEditor(props: ProfileEditorProps) {
   const client = useQueryClient();
   const [draft, setDraft] = useState(initial);
   const [saved, setSaved] = useState(justSaved === true);
+  const [templateKept, setTemplateKept] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
   const schema = drivers.find((driver) => driver.protocol === draft.protocol)?.schema;
 
@@ -125,6 +128,26 @@ export function ProfileEditor(props: ProfileEditorProps) {
       publicAddress: draft.publicAddress.trim(),
       ...toRequestPart(schema, draft.values, draft.secrets),
     });
+  };
+
+  // Choosing a template pre-fills its presets into fields the user has not changed.
+  const changeValues = (values: FormValues) => {
+    const choice = schema && changedTemplate(schema, draft.values, values);
+    if (!schema || !choice) {
+      setDraft({ ...draft, values });
+      return;
+    }
+    const result = applyTemplate(schema, draft.values, choice);
+    setTemplateKept(result.kept);
+    setDraft({ ...draft, values: result.values });
+  };
+
+  const takeTemplateValues = (fieldKey: string) => {
+    const field = schema && schemaFields(schema).find((candidate) => candidate.key === fieldKey);
+    const option = field?.options?.find((candidate) => candidate.value === draft.values[fieldKey]);
+    if (!schema || !field || !option) return;
+    setTemplateKept([]);
+    setDraft({ ...draft, values: forceTemplate(schema, draft.values, { field, option }) });
   };
 
   // The save result is shown above the form; bring it into view.
@@ -199,7 +222,10 @@ export function ProfileEditor(props: ProfileEditorProps) {
             <ProtocolChooser
               available={drivers.map((driver) => driver.protocol)}
               value={draft.protocol}
-              onChange={(protocol) => setDraft({ ...draftFor(protocol), name: draft.name })}
+              onChange={(protocol) => {
+                setTemplateKept([]);
+                setDraft({ ...draftFor(protocol), name: draft.name });
+              }}
             />
           )}
         </div>
@@ -210,9 +236,18 @@ export function ProfileEditor(props: ProfileEditorProps) {
           values={draft.values}
           secrets={draft.secrets}
           errors={schemaErrors}
-          onValuesChange={(values) => setDraft({ ...draft, values })}
+          onValuesChange={changeValues}
           onSecretsChange={(secrets) => setDraft({ ...draft, secrets })}
-          fieldAddons={keyPairAddon(draft, profile, setDraft)}
+          fieldAddons={{
+            ...keyPairAddon(draft, profile, setDraft),
+            ...templateAddons({
+              schema,
+              values: draft.values,
+              kept: templateKept,
+              onForce: takeTemplateValues,
+            }),
+            ...ipsecAddons(draft.protocol, draft.values, profile),
+          }}
         />
       )}
       <ScheduleSection

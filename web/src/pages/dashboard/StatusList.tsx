@@ -127,21 +127,29 @@ function addressRow({ status, publicAddress, t, locale }: RowContext): Row {
   };
 }
 
+/** The encryption row: data and control channel, for IPsec the ESP and IKE algorithms. */
 function encryptionRow({ status, t }: RowContext): Row | undefined {
   const { dataCipher, controlChannel } = status;
   if (!dataCipher && !controlChannel) {
     return undefined;
   }
+  const ipsec = status.protocol === 'ipsec';
   const values: ReactNode[] = [];
-  if (dataCipher) {
+  if (dataCipher === 'none') {
+    values.push(t('dashboard.details.dataChannelNone'));
+  } else if (dataCipher) {
     values.push(
-      dataCipher === 'none'
-        ? t('dashboard.details.dataChannelNone')
+      ipsec
+        ? t('dashboard.details.esp', { cipher: dataCipher })
         : t('dashboard.details.dataChannel', { cipher: dataCipher }),
     );
   }
   if (controlChannel) {
-    values.push(t('dashboard.details.controlChannel', { value: controlChannel }));
+    values.push(
+      ipsec
+        ? t('dashboard.details.ike', { value: controlChannel })
+        : t('dashboard.details.controlChannel', { value: controlChannel }),
+    );
   }
   return {
     id: 'encryption',

@@ -293,14 +293,19 @@ describe('SchemaForm', () => {
     const bytes = new Uint8Array([0x30, 0x82, 0x01, 0xff, 0x02, 0x01, 0x03]);
     const file = new File([bytes], 'client.p12', { type: 'application/x-pkcs12' });
 
-    fireEvent.change(screen.getByLabelText('Load from a file'), { target: { files: [file] } });
+    fireEvent.change(
+      screen.getByLabelText(
+        'Load PKCS#12 file (instead of client certificate and key) from a file',
+      ),
+      { target: { files: [file] } },
+    );
 
     const textarea = screen.getByLabelText('PKCS#12 file (instead of client certificate and key)');
     await waitFor(() => expect(textarea).toHaveValue('MIIB/wIBAw=='));
     expect(submit().secrets).toEqual({ pkcs12: 'MIIB/wIBAw==' });
   });
 
-  it('offers a file picker by the field encoding, not by the key', async () => {
+  it('reads the file by the field encoding, not by the key', async () => {
     const schema: FormSchema = {
       sections: [
         {
@@ -320,14 +325,30 @@ describe('SchemaForm', () => {
       ],
     };
     const { submit } = renderHarness({ schema });
-    const pickers = screen.getAllByLabelText('Load from a file');
-    expect(pickers).toHaveLength(1);
 
-    fireEvent.change(pickers[0] as HTMLElement, {
+    fireEvent.change(screen.getByLabelText('Load TLS crypt key from a file'), {
       target: { files: [new File([new Uint8Array([1, 2, 3])], 'x.bin')] },
     });
     await waitFor(() => expect(screen.getByLabelText('TLS crypt key')).toHaveValue('AQID'));
-    expect(submit().secrets).toEqual({ bundle: 'AQID' });
+    const key = '-----BEGIN KEY-----\n';
+    fireEvent.change(screen.getByLabelText('Load TLS auth key from a file'), {
+      target: { files: [new File([key], 'ta.key')] },
+    });
+    await waitFor(() => expect(screen.getByLabelText('TLS crypt key')).toHaveValue('AQID'));
+    await waitFor(() => expect(screen.getByLabelText('TLS auth key')).toHaveValue(key));
+    expect(submit().secrets).toEqual({ bundle: 'AQID', tlsAuthKey: key });
+  });
+
+  it('loads a PEM file into a text area', async () => {
+    const { submit } = renderHarness({ settings: { authMode: 'certificate' } });
+    const pem = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
+
+    fireEvent.change(screen.getByLabelText('Load CA certificate from a file'), {
+      target: { files: [new File([pem], 'ca.crt')] },
+    });
+
+    await waitFor(() => expect(screen.getByLabelText('CA certificate')).toHaveValue(pem));
+    expect(submit().settings.caCert).toBe(pem);
   });
 
   it('labels the remote networks list', () => {

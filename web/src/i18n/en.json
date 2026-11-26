@@ -140,7 +140,9 @@
       "remoteOn": "HTTPS on port {{port}}",
       "traffic": "Traffic total",
       "received": "Received {{bytes}}",
-      "sent": "Sent {{bytes}}"
+      "sent": "Sent {{bytes}}",
+      "esp": "ESP {{cipher}}",
+      "ike": "Key exchange {{value}}"
     },
     "customize": {
       "open": "Customize",
@@ -299,7 +301,15 @@
     "missingFromFile": "Not in the file – please enter.",
     "access": "Access",
     "publicAddress": "Public address of this connection (optional)",
-    "publicAddressHint": "The address your provider assigns to this connection, e.g. for remote access and port forwards. TunnelDeck-VPN cannot detect it itself."
+    "publicAddressHint": "The address your provider assigns to this connection, e.g. for remote access and port forwards. TunnelDeck-VPN cannot detect it itself.",
+    "templateKept": "Your own values were kept for: {{fields}}.",
+    "templateApply": "Use template values",
+    "ipsec": {
+      "staticRouteTitle": "Static route needed in your LAN router",
+      "staticRoute": "In net-to-net mode the LAN devices keep their addresses. Add a static route in your LAN router for the remote subnets ({{subnets}}) with this device ({{address}}) as gateway; otherwise replies from the LAN do not find their way into the tunnel.",
+      "staticRouteNoAddress": "In net-to-net mode the LAN devices keep their addresses. Add a static route in your LAN router for the remote subnets ({{subnets}}) with this device’s LAN address as gateway; otherwise replies from the LAN do not find their way into the tunnel.",
+      "remoteSubnetsUnset": "not entered yet"
+    }
   },
   "keyPair": {
     "generate": "Generate key pair",
@@ -320,7 +330,8 @@
     "remove": "Remove",
     "undo": "Undo",
     "keepStored": "Keep stored value",
-    "loadFile": "Load from a file"
+    "loadFile": "Load from a file",
+    "loadFileFor": "Load {{label}} from a file"
   },
   "importWarnings": {
     "group": {
@@ -919,5 +930,8 @@
       "system-checks": "System page checks explained",
       "reset-admin": "Lost admin password"
     }
+  },
+  "protocolShort": {
+    "ipsec": "IPsec"
   }
 }

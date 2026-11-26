@@ -140,7 +140,9 @@
       "remoteOn": "HTTPS auf Port {{port}}",
       "traffic": "Datenverkehr gesamt",
       "received": "Empfangen {{bytes}}",
-      "sent": "Gesendet {{bytes}}"
+      "sent": "Gesendet {{bytes}}",
+      "esp": "ESP {{cipher}}",
+      "ike": "Schlüsselaustausch {{value}}"
     },
     "customize": {
       "open": "Anpassen",
@@ -299,7 +301,15 @@
     "missingFromFile": "Nicht in der Datei – bitte eintragen.",
     "access": "Zugriff",
     "publicAddress": "Öffentliche Adresse dieser Verbindung (optional)",
-    "publicAddressHint": "Die Adresse, die Ihr Anbieter dieser Verbindung zuweist, z. B. für Fernzugriff und Portweiterleitungen. TunnelDeck-VPN kann sie nicht selbst ermitteln."
+    "publicAddressHint": "Die Adresse, die Ihr Anbieter dieser Verbindung zuweist, z. B. für Fernzugriff und Portweiterleitungen. TunnelDeck-VPN kann sie nicht selbst ermitteln.",
+    "templateKept": "Ihre eigenen Werte wurden beibehalten für: {{fields}}.",
+    "templateApply": "Werte der Vorlage übernehmen",
+    "ipsec": {
+      "staticRouteTitle": "Statische Route im LAN-Router nötig",
+      "staticRoute": "Im Modus Netz-zu-Netz behalten die LAN-Geräte ihre Adressen. Richten Sie in Ihrem LAN-Router eine statische Route für die entfernten Subnetze ({{subnets}}) mit diesem Gerät ({{address}}) als Gateway ein; sonst finden Antworten aus dem LAN nicht in den Tunnel.",
+      "staticRouteNoAddress": "Im Modus Netz-zu-Netz behalten die LAN-Geräte ihre Adressen. Richten Sie in Ihrem LAN-Router eine statische Route für die entfernten Subnetze ({{subnets}}) mit der LAN-Adresse dieses Geräts als Gateway ein; sonst finden Antworten aus dem LAN nicht in den Tunnel.",
+      "remoteSubnetsUnset": "noch nicht eingetragen"
+    }
   },
   "keyPair": {
     "generate": "Schlüsselpaar erzeugen",
@@ -320,7 +330,8 @@
     "remove": "Entfernen",
     "undo": "Rückgängig",
     "keepStored": "Gespeicherten Wert behalten",
-    "loadFile": "Aus einer Datei laden"
+    "loadFile": "Aus einer Datei laden",
+    "loadFileFor": "{{label}} aus einer Datei laden"
   },
   "importWarnings": {
     "group": {
@@ -919,5 +930,8 @@
       "system-checks": "Prüfungen der System-Seite erklärt",
       "reset-admin": "Administratorpasswort verloren"
     }
+  },
+  "protocolShort": {
+    "ipsec": "IPsec"
   }
 }

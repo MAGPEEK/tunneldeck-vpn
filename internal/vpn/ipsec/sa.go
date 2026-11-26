@@ -16,7 +16,9 @@ type ikeSA struct {
 	localVIPs  []string
 	transforms transforms
 	prf        string
-	children   []childSA
+	// version is "IKEv1" or "IKEv2" as charon reports it.
+	version  string
+	children []childSA
 }
 
 // childSA is what the driver reads of a CHILD_SA.
@@ -55,6 +57,7 @@ func parseIKESA(name string, m *message) ikeSA {
 		name: name, state: m.get("state"),
 		remoteHost: m.get("remote-host"), remotePort: m.get("remote-port"),
 		localVIPs: m.items("local-vips"), transforms: parseTransforms(m), prf: m.get("prf-alg"),
+		version: m.get("version"),
 	}
 	for _, e := range m.section("child-sas").sections() {
 		child := e.section
@@ -88,8 +91,9 @@ func (a transforms) cipher() string {
 	return name
 }
 
-// controlChannel describes the IKE SA's proposal, e.g.
-// "IKEv2 AES_GCM_16-256/PRF_HMAC_SHA2_384/CURVE_25519".
+// controlChannel describes the IKE SA's version and proposal, e.g.
+// "IKEv2 AES_GCM_16-256/PRF_HMAC_SHA2_384/CURVE_25519"; IKEv2 when charon
+// reports no version.
 func (sa ikeSA) controlChannel() string {
 	parts := []string{sa.transforms.cipher()}
 	for _, part := range []string{sa.prf, sa.transforms.keyExchange} {
@@ -97,7 +101,11 @@ func (sa ikeSA) controlChannel() string {
 			parts = append(parts, part)
 		}
 	}
-	return "IKEv2 " + strings.Join(parts, "/")
+	version := sa.version
+	if version == "" {
+		version = "IKEv2"
+	}
+	return version + " " + strings.Join(parts, "/")
 }
 
 // remote is the gateway's address and port.

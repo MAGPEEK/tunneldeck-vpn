@@ -6,7 +6,7 @@ import type { Profile } from '../../api/profiles';
 import { Button } from '../../components/Button';
 import { StatePill } from '../../components/StatePill';
 import { Table, type Column } from '../../components/Table';
-import { profileServer, protocolName } from './profileText';
+import { profileServer, protocolShortName } from './profileText';
 import styles from './ProfileTable.module.css';
 
 export interface ProfileTableProps {
@@ -30,7 +30,7 @@ export function ProfileTable(props: ProfileTableProps) {
     {
       key: 'protocol',
       header: t('profiles.column.protocol'),
-      render: (profile) => protocolName(t, profile.protocol),
+      render: (profile) => protocolShortName(t, profile.protocol),
     },
     {
       key: 'server',

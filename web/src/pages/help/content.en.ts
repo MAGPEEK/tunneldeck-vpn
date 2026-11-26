@@ -75,6 +75,48 @@ export const HELP_CONTENT_EN: HelpContent = {
         'While connecting without an answer from the server, the Dashboard says so after 30 seconds and keeps trying: check the keys and the endpoint.',
       ],
     },
+    { type: 'subheading', text: 'IPsec/IKEv2' },
+    {
+      type: 'paragraph',
+      text: 'Choose the protocol "IPsec/IKEv2" for company and router gateways such as LANCOM, FRITZ!Box, OPNsense, pfSense or strongSwan. IPsec profiles are created with the form; there is no file import.',
+    },
+    {
+      type: 'terms',
+      items: [
+        {
+          term: 'Gateway type',
+          text: 'A template pre-fills the IKE version and the proposals the gateway family accepts, and shows where to find the values on the gateway. Fields you changed yourself keep your values; "Use template values" overwrites them.',
+        },
+        {
+          term: 'Pre-shared key',
+          text: 'A shared secret both sides know. Use a long random key of at least 20 characters.',
+        },
+        {
+          term: 'Certificate',
+          text: 'Load a PKCS#12 file (.p12, .pfx) with its password, or paste or load the client certificate and an unencrypted key in PEM format. The CA certificate of the gateway and the gateway identity are required; the identity must match the gateway certificate.',
+        },
+        {
+          term: 'Username and password (EAP-MSCHAPv2)',
+          text: 'The gateway is authenticated by its certificate (CA certificate and gateway identity required). EAP-MSCHAPv2 is weak; prefer a certificate if the gateway supports it.',
+        },
+        {
+          term: 'Virtual IP',
+          text: 'The gateway assigns an address to this device; it is the VPN IP, and LAN devices are masqueraded behind it as with OpenVPN.',
+        },
+        {
+          term: 'Net-to-net',
+          text: 'Local subnets of your LAN are connected to the remote subnets with their own addresses. Your LAN router needs a static route for the remote subnets with this device as gateway; the form shows the address to use.',
+        },
+      ],
+    },
+    {
+      type: 'list',
+      items: [
+        'IKEv1 is only a fallback for gateways without IKEv2, such as the FRITZ!Box user access: Aggressive Mode with pre-shared key and XAuth. IKEv1 is deprecated (RFC 9395), and Aggressive Mode sends the identity unencrypted and lets an eavesdropper guess the pre-shared key offline. The profile and the Dashboard therefore show a security warning; use IKEv2 or WireGuard where possible.',
+        'FRITZ!Box user access: in the FRITZ!Box under Internet → Permit Access → VPN (IPSec) open the user and the "VPN-Daten". Server → Gateway address, IPSec-ID → Local identity, shared secret → Pre-shared key, account and password → XAuth username and XAuth password.',
+        'When the connection fails, the Dashboard names the reason: the gateway accepted none of the proposals (compare the IKE and ESP proposals), refused the subnets (compare local and remote subnets on both sides), assigned no virtual IP, or rejected the credentials.',
+      ],
+    },
     { type: 'link', target: 'migrate-from-rut240', text: 'Moving from a Teltonika RUT240' },
   ],
   connecting: [

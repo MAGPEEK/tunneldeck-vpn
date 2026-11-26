@@ -11,6 +11,7 @@ describe('profileServer', () => {
     ],
     ['OpenVPN IPv6 host', { remoteHost: '2001:db8::1', port: 1194 }, '[2001:db8::1]:1194'],
     ['WireGuard endpoint', { endpoint: 'wg.example.com:51820' }, 'wg.example.com:51820'],
+    ['IPsec gateway', { gateway: 'vpn.example.com' }, 'vpn.example.com'],
     ['nothing set', {}, ''],
   ])('shows %s', (_name, settings, server) => {
     expect(profileServer({ settings })).toBe(server);
@@ -23,6 +24,7 @@ describe('profileServerHost', () => {
     ['endpoint with port', { endpoint: 'wg.example.com:51820' }, 'wg.example.com'],
     ['endpoint without port', { endpoint: 'wg.example.com' }, 'wg.example.com'],
     ['bracketed IPv6 endpoint', { endpoint: '[2001:db8::1]:51820' }, '2001:db8::1'],
+    ['IPsec gateway', { gateway: 'office.example.com' }, 'office.example.com'],
     ['nothing set', {}, ''],
   ])('takes the host from %s', (_name, settings, host) => {
     expect(profileServerHost(settings)).toBe(host);

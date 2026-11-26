@@ -1,4 +1,5 @@
 import { Field } from '../../../components/Field';
+import { FileInput } from './FileInput';
 import styles from './SchemaForm.module.css';
 
 interface ValueFieldProps {
@@ -38,16 +39,19 @@ export function TextAreaField({
   return (
     <Field label={label} error={error}>
       {(control) => (
-        <textarea
-          {...control}
-          className={`${control.className ?? ''} ${styles.mono}`}
-          value={value}
-          required={required}
-          placeholder={placeholder}
-          spellCheck={false}
-          rows={5}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
+        <>
+          <textarea
+            {...control}
+            className={`${control.className ?? ''} ${styles.mono}`}
+            value={value}
+            required={required}
+            placeholder={placeholder}
+            spellCheck={false}
+            rows={5}
+            onChange={(event) => onChange(event.currentTarget.value)}
+          />
+          <FileInput fieldLabel={label} encoding="text" onValue={onChange} />
+        </>
       )}
     </Field>
   );

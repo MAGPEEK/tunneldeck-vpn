@@ -75,6 +75,48 @@ export const HELP_CONTENT_DE: HelpContent = {
         'Antwortet der Server beim Verbinden nicht, zeigt die Übersicht das nach 30 Sekunden an und versucht es weiter: Prüfen Sie die Schlüssel und den Endpunkt.',
       ],
     },
+    { type: 'subheading', text: 'IPsec/IKEv2' },
+    {
+      type: 'paragraph',
+      text: 'Wählen Sie das Protokoll „IPsec/IKEv2“ für Firmen- und Router-Gateways wie LANCOM, FRITZ!Box, OPNsense, pfSense oder strongSwan. IPsec-Profile legen Sie mit dem Formular an; einen Datei-Import gibt es nicht.',
+    },
+    {
+      type: 'terms',
+      items: [
+        {
+          term: 'Gateway-Typ',
+          text: 'Eine Vorlage füllt die IKE-Version und die Proposals vor, die die Gateway-Familie akzeptiert, und zeigt, wo Sie die Werte am Gateway finden. Felder, die Sie selbst geändert haben, behalten Ihre Werte; „Werte der Vorlage übernehmen“ überschreibt sie.',
+        },
+        {
+          term: 'Pre-shared Key',
+          text: 'Ein gemeinsames Geheimnis, das beide Seiten kennen. Verwenden Sie einen langen zufälligen Schlüssel mit mindestens 20 Zeichen.',
+        },
+        {
+          term: 'Zertifikat',
+          text: 'Laden Sie eine PKCS#12-Datei (.p12, .pfx) mit Passwort, oder fügen Sie Client-Zertifikat und unverschlüsselten Schlüssel im PEM-Format ein bzw. laden Sie sie aus Dateien. CA-Zertifikat und Identität des Gateways sind erforderlich; die Identität muss zum Zertifikat des Gateways passen.',
+        },
+        {
+          term: 'Benutzername und Passwort (EAP-MSCHAPv2)',
+          text: 'Das Gateway weist sich mit seinem Zertifikat aus (CA-Zertifikat und Gateway-Identität erforderlich). EAP-MSCHAPv2 ist schwach; verwenden Sie besser ein Zertifikat, wenn das Gateway es unterstützt.',
+        },
+        {
+          term: 'Virtuelle IP',
+          text: 'Das Gateway vergibt diesem Gerät eine Adresse; sie ist die VPN-IP, und LAN-Geräte werden wie bei OpenVPN dahinter maskiert.',
+        },
+        {
+          term: 'Netz-zu-Netz',
+          text: 'Lokale Subnetze Ihres LANs werden mit ihren eigenen Adressen mit den entfernten Subnetzen verbunden. Ihr LAN-Router braucht eine statische Route für die entfernten Subnetze mit diesem Gerät als Gateway; das Formular zeigt die zu verwendende Adresse.',
+        },
+      ],
+    },
+    {
+      type: 'list',
+      items: [
+        'IKEv1 ist nur ein Notbehelf für Gateways ohne IKEv2, etwa den FRITZ!Box-Benutzerzugang: Aggressive Mode mit Pre-shared Key und XAuth. IKEv1 ist veraltet (RFC 9395), und der Aggressive Mode sendet die Identität unverschlüsselt und lässt einen Mithörer den Pre-shared Key offline erraten. Profil und Dashboard zeigen deshalb eine Sicherheitswarnung; verwenden Sie wo möglich IKEv2 oder WireGuard.',
+        'FRITZ!Box-Benutzerzugang: Öffnen Sie in der FRITZ!Box unter Internet → Freigaben → VPN (IPSec) den Benutzer und die „VPN-Daten“. Server → Gateway-Adresse, IPSec-ID → Lokale Identität, Shared Secret → Pre-shared Key, Konto und Kennwort → XAuth-Benutzername und XAuth-Passwort.',
+        'Schlägt die Verbindung fehl, nennt das Dashboard den Grund: Das Gateway hat keines der Proposals akzeptiert (vergleichen Sie die IKE- und ESP-Proposals), die Subnetze abgelehnt (vergleichen Sie lokale und entfernte Subnetze auf beiden Seiten), keine virtuelle IP vergeben oder die Zugangsdaten abgelehnt.',
+      ],
+    },
     { type: 'link', target: 'migrate-from-rut240', text: 'Umstieg von einem Teltonika RUT240' },
   ],
   connecting: [
