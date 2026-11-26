@@ -24,6 +24,7 @@ const (
 	CodeDuplicateDirective          = "duplicate_directive"
 	CodeManagedByField              = "managed_by_field"
 	CodeDeprecatedIgnored           = "deprecated_ignored"
+	CodeWindowsOnlyIgnored          = "windows_only_ignored"
 	CodeIgnoredForTCP               = "ignored_for_tcp"
 	CodeCompressionConflict         = "compression_conflict"
 	CodeInvalidLine                 = "invalid_line"

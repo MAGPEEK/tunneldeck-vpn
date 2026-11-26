@@ -77,6 +77,13 @@ describe('ConnectionCard', () => {
     expect(screen.getByRole('list', { name: 'Advisories' }).closest('section')).toBeNull();
   });
 
+  it('shows "cipher none" as a warning while the tunnel negotiated a cipher', () => {
+    renderCard({ ...connected, dataCipher: 'CHACHA20-POLY1305' });
+    const items = screen.getAllByRole('listitem');
+    expect(items.map((item) => item.dataset.severity)).toEqual(['warning', 'warning', 'info']);
+    expect(items[0]).toHaveTextContent('This connection negotiated a cipher and is encrypted');
+  });
+
   it('places the actions below the connection line', () => {
     renderCard(connected);
     const line = document.querySelector('[data-link="tunnel"]');

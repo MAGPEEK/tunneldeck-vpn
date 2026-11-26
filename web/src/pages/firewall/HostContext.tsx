@@ -1,11 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import type { FirewallState } from '../../api/firewall';
 import { Notice } from '../../components/Notice';
+import type { Language } from '../../i18n';
+import { useSystem } from '../../queries/queries';
+import { docUrl } from '../help/links';
 import styles from './FirewallPage.module.css';
 
 /** "This device: 192.168.1.10 · Local LAN: 192.168.1.0/24 · IP forwarding: on", a warning when off. */
 export function HostContext({ state }: { state: FirewallState }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const language: Language = i18n.resolvedLanguage === 'de' ? 'de' : 'en';
+  const version = useSystem().data?.version;
   const notDetected = t('firewall.context.notDetected');
   const line = [
     t('firewall.context.host', { address: state.hostAddress || notDetected }),
@@ -21,7 +26,11 @@ export function HostContext({ state }: { state: FirewallState }) {
     <Notice tone="warning" title={line}>
       <p>
         {t('firewall.context.ipForwardOff')}{' '}
-        <a href={t('firewall.context.docsUrl')} target="_blank" rel="noreferrer">
+        <a
+          href={`${docUrl('linux', version, language)}#${t('firewall.context.docsAnchor')}`}
+          target="_blank"
+          rel="noreferrer"
+        >
           {t('firewall.context.docsLink')}
         </a>
       </p>

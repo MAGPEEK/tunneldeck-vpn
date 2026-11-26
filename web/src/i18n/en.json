@@ -213,6 +213,7 @@
       "unencrypted_data_channel": "Traffic is not encrypted"
     },
     "unencrypted_data_channel": "The data channel uses no cipher: everything sent through the tunnel can be read and changed on the way. Use this only if the provider gives no other option.",
+    "unencrypted_data_channel_allowed": "The profile allows an unencrypted data channel (\"none\" in Cipher). This connection negotiated a cipher and is encrypted; remove \"none\" from the Cipher field so that it stays that way.",
     "weak_cipher": "The cipher is outdated. Prefer AES-256-GCM or CHACHA20-POLY1305 if the server supports them.",
     "weak_digest": "The authentication digest is weak. Prefer SHA256 or an AEAD cipher.",
     "compression_enabled": "Compression is enabled. It is deprecated and can leak data (VORACLE).",
@@ -312,6 +313,7 @@
       "duplicate_directive": "is set by TunnelDeck-VPN itself.",
       "managed_by_field": "is set through a profile field.",
       "deprecated_ignored": "is deprecated and ignored by OpenVPN.",
+      "windows_only_ignored": "only applies to OpenVPN clients on Windows and is left out.",
       "ignored_for_tcp": "has no effect over TCP.",
       "compression_conflict": "conflicts with the compression setting.",
       "invalid_line": "cannot be read.",
@@ -354,7 +356,7 @@
       "notDetected": "not detected",
       "ipForwardOff": "Port forwards to other devices and outbound rules need IP forwarding on the host.",
       "docsLink": "How to turn it on",
-      "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.md#ip-forwarding"
+      "docsAnchor": "ip-forwarding"
     },
     "action": {
       "accept": "Allow",

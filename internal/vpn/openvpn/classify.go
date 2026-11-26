@@ -46,6 +46,10 @@ var (
 		code: CodeDeprecatedIgnored, severity: SeverityWarning,
 		message: "dropped: deprecated, OpenVPN 2.7 ignores it",
 	}
+	verdictWindowsOnly = verdict{
+		code: CodeWindowsOnlyIgnored, severity: SeverityInfo,
+		message: "dropped: only OpenVPN clients on Windows use it",
+	}
 	verdictSetenvIgnored = verdict{
 		code: CodeSetenvIgnored, severity: SeverityWarning,
 		message: "dropped: only scripts and client apps read these variables, and TunnelDeck-VPN runs neither",
@@ -108,6 +112,14 @@ var prefixesManagedByField = []string{"data-ciphers"}
 
 var directivesDeprecated = set("fast-io", "persist-key", "comp-noadapt", "ncp-disable")
 
+// directivesWindowsOnly configure the Windows TAP adapter or Windows DNS;
+// Linux ignores or rejects them. Providers ship them in files meant for
+// every platform.
+var directivesWindowsOnly = set(
+	"block-outside-dns", "register-dns", "ip-win32", "route-method", "tap-sleep",
+	"dhcp-renew", "dhcp-release", "dhcp-pre-release", "win-sys", "show-net-up", "allow-nonadmin",
+)
+
 // classify decides what happens to d outside TunnelDeck's own directives.
 // removed is false when d is kept. Matching is case-sensitive, like OpenVPN.
 func classify(d directive) (v verdict, removed bool) {
@@ -132,6 +144,8 @@ func classify(d directive) (v verdict, removed bool) {
 		return verdictManagedByField, true
 	case directivesDeprecated[d.name]:
 		return verdictDeprecated, true
+	case directivesWindowsOnly[d.name]:
+		return verdictWindowsOnly, true
 	}
 	return verdict{}, false
 }

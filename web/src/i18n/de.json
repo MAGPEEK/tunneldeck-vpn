@@ -213,6 +213,7 @@
       "unencrypted_data_channel": "Der Datenverkehr ist nicht verschlüsselt"
     },
     "unencrypted_data_channel": "Der Datenkanal verwendet keine Verschlüsselung: Alles, was durch den Tunnel geht, kann unterwegs gelesen und verändert werden. Nutzen Sie das nur, wenn der Anbieter keine andere Wahl lässt.",
+    "unencrypted_data_channel_allowed": "Das Profil erlaubt einen unverschlüsselten Datenkanal (\"none\" im Feld Cipher). Diese Verbindung hat eine Verschlüsselung ausgehandelt und ist verschlüsselt; entfernen Sie \"none\" aus dem Feld Cipher, damit das so bleibt.",
     "weak_cipher": "Das Verschlüsselungsverfahren ist veraltet. Verwenden Sie AES-256-GCM oder CHACHA20-POLY1305, wenn der Server sie unterstützt.",
     "weak_digest": "Der Authentifizierungs-Digest ist schwach. Verwenden Sie SHA256 oder ein AEAD-Verfahren.",
     "compression_enabled": "Komprimierung ist aktiv. Sie ist veraltet und kann Daten preisgeben (VORACLE).",
@@ -312,6 +313,7 @@
       "duplicate_directive": "setzt TunnelDeck-VPN selbst.",
       "managed_by_field": "wird über ein Profilfeld gesetzt.",
       "deprecated_ignored": "ist veraltet und wird von OpenVPN ignoriert.",
+      "windows_only_ignored": "gilt nur für OpenVPN-Clients unter Windows und wird weggelassen.",
       "ignored_for_tcp": "hat über TCP keine Wirkung.",
       "compression_conflict": "widerspricht der Komprimierungseinstellung.",
       "invalid_line": "kann nicht gelesen werden.",
@@ -354,7 +356,7 @@
       "notDetected": "nicht erkannt",
       "ipForwardOff": "Weiterleitungen an andere Geräte und ausgehende Regeln brauchen die IP-Weiterleitung auf dem Host.",
       "docsLink": "So schalten Sie sie ein",
-      "docsUrl": "https://github.com/MAGPEEK/tunneldeck-vpn/blob/main/docs/linux.de.md#ip-weiterleitung"
+      "docsAnchor": "ip-weiterleitung"
     },
     "action": {
       "accept": "Erlauben",

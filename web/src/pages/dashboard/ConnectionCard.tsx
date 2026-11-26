@@ -6,6 +6,7 @@ import type { ConnectionStatus } from '../../api/connection';
 import type { FirewallState } from '../../api/firewall';
 import type { Profile } from '../../api/profiles';
 import { AdvisoryList, AdvisoryNotice } from '../../advisories/AdvisoryList';
+import { liveAdvisories } from '../../advisories/liveAdvisories';
 import { Button } from '../../components/Button';
 import { translateDynamic } from '../../i18n/dynamic';
 import { protocolName } from '../profiles/profileText';
@@ -59,7 +60,9 @@ export function ConnectionCard(props: ConnectionCardProps) {
   const shownId = idle ? selectedId : (status.profileId ?? selectedId);
   const profile = profiles.find((candidate) => candidate.id === shownId);
   const protocol = protocolName(t, status.protocol ?? profile?.protocol ?? 'openvpn');
-  const advisories = idle ? (profile?.advisories ?? []) : status.advisories;
+  const advisories = idle
+    ? (profile?.advisories ?? [])
+    : liveAdvisories(status.advisories, status.dataCipher);
 
   const actions = (
     <div className={styles.actions}>

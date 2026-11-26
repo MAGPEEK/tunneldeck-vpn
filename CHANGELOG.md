@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard: when the profile allows "cipher none" but the running tunnel negotiated a cipher, the advisory is a warning ("The profile allows an unencrypted data channel …; remove \"none\" from the Cipher field") instead of the red "Traffic is not encrypted"; the red notice stays while the tunnel really runs without a cipher.
+- Import and extra options: Windows-only directives (`block-outside-dns`, `register-dns`, `ip-win32`, `route-method`, `tap-sleep`, `dhcp-renew`, `dhcp-release`, `dhcp-pre-release`, `win-sys`, `show-net-up`, `allow-nonadmin`) are dropped with an info note instead of being rejected as unknown options.
+
+### Fixed
+
+- Firewall page: the "How to turn it on" link for IP forwarding points at the guide of the installed version instead of `main`.
+
 ## [0.2.3] - 2026-11-26
 
 ### Added

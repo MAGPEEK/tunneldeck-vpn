@@ -176,7 +176,10 @@ describe('FirewallPage', () => {
     expect(notice).toHaveAttribute('data-tone', 'warning');
     expect(
       within(notice as HTMLElement).getByRole('link', { name: 'How to turn it on' }),
-    ).toHaveAttribute('href', expect.stringContaining('#ip-forwarding'));
+    ).toHaveAttribute(
+      'href',
+      expect.stringMatching(/\/blob\/[^/]+\/docs\/linux\.md#ip-forwarding$/),
+    );
   });
 
   it('enables Save and Discard only while something changed, and discards edits', async () => {

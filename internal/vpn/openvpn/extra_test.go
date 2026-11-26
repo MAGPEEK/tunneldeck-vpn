@@ -189,7 +189,9 @@ func TestExtraOptionsUnknown(t *testing.T) {
 	}{
 		{"alice", rejected(CodeUnknownDirective)},
 		{"frobnicate 1", rejected(CodeUnknownDirective)},
-		{"block-outside-dns", rejected(CodeUnknownDirective)},
+		{"block-outside-dns", dropped(CodeWindowsOnlyIgnored)},
+		{"register-dns", dropped(CodeWindowsOnlyIgnored)},
+		{"ip-win32 dynamic", dropped(CodeWindowsOnlyIgnored)},
 		{"server 10.8.0.0 255.255.255.0", rejected(CodeUnknownDirective)},
 		{"push \"route 10.0.0.0 255.0.0.0\"", rejected(CodeUnknownDirective)},
 		{"no-replay", rejected(CodeUnknownDirective)},
