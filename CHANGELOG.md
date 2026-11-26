@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-26
+
 ### Changed
 
 - Dashboard: when the profile allows "cipher none" but the running tunnel negotiated a cipher, the advisory is a warning ("The profile allows an unencrypted data channel …; remove \"none\" from the Cipher field") instead of the red "Traffic is not encrypted"; the red notice stays while the tunnel really runs without a cipher.
