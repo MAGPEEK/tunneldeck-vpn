@@ -4,12 +4,18 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] - 2026-11-26
+
 ### Changed
 
 - **Breaking:** `settings.json` schema version 2. The host-access rules become firewall rules (SPEC §16): each one is migrated on start to an inbound rule to "This device" named like "Host port 5001/tcp", and the global firewall protections are switched on. The migrated file is written on the next settings change; older TunnelDeck-VPN versions refuse to start with it, so keep a copy of `/data` before upgrading if you may roll back.
 - The firewall now has two directions and four chains: `TUNNELDECK-INPUT` and `TUNNELDECK-FORWARD` (filter), `TUNNELDECK-PREROUTING` and `TUNNELDECK-POSTROUTING` (nat), each jumped to from position 1 of its built-in chain.
 - OpenVPN profile form: client certificate and client key are no longer required on their own (a PKCS#12 file can replace them; saving still requires one of the two forms). The keep-alive field shows the placeholder `10 120`.
 - **Breaking (API):** `GET`/`PUT /api/host-access` are removed and answer `410 Gone` (problem code `gone`) with a pointer to `/api/firewall`.
+
+### Fixed
+
+- Both compose files had a broken `environment:` block (invalid YAML) in 0.1.0-alpha.1.
 
 ### Added
 

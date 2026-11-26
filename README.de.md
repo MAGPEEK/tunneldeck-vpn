@@ -2,7 +2,7 @@
 
 **Selbst gehosteter VPN-Client mit Weboberfläche, als ein einziger Docker-Container.** Läuft auf jedem Linux-Docker-Host mit amd64 oder arm64: Server, Mini-PC, Raspberry Pi oder NAS.
 
-[English](README.md) · Lizenz: MIT · Status: **Vorab-Version 0.1.0-alpha.1**, noch nicht im Praxistest bestätigt
+[English](README.md) · Lizenz: MIT · Status: **Vorab-Version 0.2.0-alpha.1**, noch nicht im Praxistest bestätigt
 
 ## Was es kann
 
@@ -10,7 +10,7 @@
 - **Dashboard**: Verbindungsstatus, VPN-Adresse, Datenverkehr und Live-Protokoll.
 - **Bleibt verbunden**: verbindet nach Netzfehlern automatisch neu, stoppt sofort bei abgelehnten Zugangsdaten und verbindet nach einem Container-Neustart wieder.
 - **Tägliche Trennung, wenn gewünscht**: einmal am Tag zur eingestellten Uhrzeit, je Profil.
-- **Schützt den Host**: Alles, was durch den Tunnel ankommt, wird gesperrt, außer den freigegebenen Ports. Der Host behält seine eigene Standardroute.
+- **Firewall zwischen VPN und LAN**: Alles ist gesperrt, außer eine Regel erlaubt es. Eingangsregeln öffnen Ports auf diesem Host oder leiten sie an beliebige LAN-Geräte weiter (auch ESP/GRE, z. B. für einen IPsec-Router); Ausgangsregeln lassen ausgewählte LAN-Geräte Netze hinter dem VPN erreichen, mit Kill-Switch. Der Host behält seine eigene Standardroute.
 - **Erkennt veraltete Einstellungen**: unverschlüsselter Datenkanal, schwache Verschlüsselung, Kompression und Ähnliches erscheinen als Hinweis.
 - **Sicher voreingestellt**: Anmeldung nötig, Zugangsdaten verschlüsselt gespeichert, Oberfläche nur im LAN. Fernzugriff per HTTPS zuschaltbar.
 - Oberfläche auf **Deutsch und Englisch**, helles und dunkles Design.
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.1.0-alpha.1
+    image: magpeek/tunneldeck-vpn:0.2.0-alpha.1
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
@@ -47,7 +47,7 @@ services:
 | 8194 | HTTP | nur LAN, nie durch den Tunnel | Weboberfläche. Ändern mit `TUNNELDECK_LISTEN=<LAN-IP>:<Port>`, z. B. `192.168.1.10:9000`. |
 | 8443 (Vorgabe, frei wählbar) | HTTPS | LAN und VPN-Tunnel | Optionaler Fernzugriff auf die Weboberfläche. Standardmäßig aus; einschalten unter **System → Fernzugriff**. Fernzugriff über das VPN nur per HTTPS, nie per reinem HTTP. |
 
-Alle anderen Ports des Hosts sind für den Tunnel gesperrt, außer du gibst sie unter **Host-Zugriff** frei.
+Jeder andere Verkehr zwischen VPN und LAN ist gesperrt, außer du erlaubst ihn auf der Seite **Firewall**.
 
 ## Dokumentation
 
@@ -60,7 +60,7 @@ Alle anderen Ports des Hosts sind für den Tunnel gesperrt, außer du gibst sie 
 ## Fahrplan
 
 - **0.1.0**: OpenVPN-Client, Dashboard, Host-Schutz, tägliche Trennung, Fernzugriff per HTTPS
-- **0.2.0**: LAN-Gateway mit Gerätefreigabe, Kill-Switch, Portweiterleitung, Verkehrsdiagramm
+- **0.2.0**: Firewall mit Portweiterleitung zu LAN-Geräten, Ausgangsregeln und Kill-Switch, IPsec-Vorlage, Remote-Netze, PKCS#12
 - **0.3.0**: WireGuard
 
 ## Entwicklung

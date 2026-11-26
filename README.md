@@ -2,7 +2,7 @@
 
 **A self-hosted VPN client with a web UI, packaged as one Docker container.** Runs on any Linux Docker host, amd64 or arm64: a server, a mini PC, a Raspberry Pi or a NAS.
 
-[Deutsch](README.de.md) · License: MIT · Status: **pre-release 0.1.0-alpha.1**, not yet field-tested
+[Deutsch](README.de.md) · License: MIT · Status: **pre-release 0.2.0-alpha.1**, not yet field-tested
 
 ## What it does
 
@@ -10,7 +10,7 @@
 - **Dashboard**: connection state, VPN address, traffic, and a live log.
 - **Stays connected**: reconnects automatically after network errors, stops immediately when credentials are rejected, and reconnects after a container restart.
 - **Optional daily reconnect** at a time you choose, per profile.
-- **Protects the host**: everything arriving through the tunnel is blocked except the ports you allow. The host keeps its own default route.
+- **Firewall between VPN and LAN**: everything is blocked unless a rule allows it. Inbound rules open ports on this host or forward them to any LAN device (also ESP/GRE, e.g. for an IPsec router); outbound rules let chosen LAN devices reach networks behind the VPN, with a kill switch. The host keeps its own default route.
 - **Flags outdated settings**: an unencrypted data channel, weak ciphers, compression and similar settings are shown as advisories.
 - **Secure by default**: sign-in required, credentials encrypted at rest, web UI on the LAN only. Optional remote access over HTTPS.
 - **German and English** UI, light and dark theme.
@@ -28,7 +28,7 @@
 ```yaml
 services:
   tunneldeck:
-    image: magpeek/tunneldeck-vpn:0.1.0-alpha.1
+    image: magpeek/tunneldeck-vpn:0.2.0-alpha.1
     container_name: tunneldeck
     network_mode: host
     cap_add: [NET_ADMIN]
@@ -47,7 +47,7 @@ Open `http://<host-ip>:8194` and create the admin account. If you forget the pas
 | 8194 | HTTP | LAN only, never through the tunnel | Web UI. Change it with `TUNNELDECK_LISTEN=<lan-ip>:<port>`, e.g. `192.168.1.10:9000`. |
 | 8443 (default, free to choose) | HTTPS | LAN and the VPN tunnel | Optional remote access to the web UI. Off by default; turn it on under **System → Remote access**. Remote access over the VPN is HTTPS only, never plain HTTP. |
 
-All other ports of the host are closed to the tunnel unless you open them under **Host access**.
+All other traffic between the VPN and the LAN is blocked unless you allow it on the **Firewall** page.
 
 ## Documentation
 
@@ -60,7 +60,7 @@ All other ports of the host are closed to the tunnel unless you open them under 
 ## Roadmap
 
 - **0.1.0**: OpenVPN client, dashboard, host protection, daily reconnect, HTTPS remote access
-- **0.2.0**: LAN gateway with device allow-list, kill switch, port forwarding, traffic chart
+- **0.2.0**: firewall with port forwarding to LAN devices, outbound rules and kill switch, IPsec template, remote networks, PKCS#12
 - **0.3.0**: WireGuard
 
 ## Development
