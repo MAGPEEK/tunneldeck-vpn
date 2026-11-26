@@ -266,9 +266,9 @@ Compared with the RUT240 firewall (General settings, Port forwards, Traffic rule
 - Global firewall settings (`settings.firewall`): `dropInvalid` (default on: drop conntrack INVALID on the tunnel), `mssClamp` (default on: clamp TCP MSS to PMTU for traffic forwarded through `tdvpn0`), `synFloodProtection` (default on: limit new TCP connections from the tunnel to 25/s burst 50 per source), `pingLimit` (default on: ICMP echo from the tunnel limited to 5/s burst 10).
 - Not adopted, with reason: raw custom iptables rules (security, clean code), DMZ / forward-everything (unsafe default), source-MAC matching (no MACs exist on a TUN tunnel), conntrack helpers (IPsec with NAT-T needs none; PPTP/SIP later if asked), NAT loopback (LAN clients reach mdex addresses over the internet anyway), per-zone logging (kernel log is not readable from the container). Planned later: time restrictions per rule, hit counters per rule, port-scan prevention.
 
-### 16.2 Reference use case: IPsec from a LANCOM router via the mdex public address
+### 16.2 Reference use case: an IPsec router in the local LAN using the VPN address
 
-A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels using the mdex public address:
+An IPsec router in the local LAN (example `192.168.1.2`; the owner uses a LANCOM) establishes IPsec tunnels using the mdex public address:
 - Inbound: UDP 500 → `192.168.2.2:500`, UDP 4500 → `192.168.2.2:4500`, ESP → `192.168.2.2`, each with `keepSourceAddress` on (IKE identifies peers by address).
 - Outbound: source `192.168.2.2/32` → destination `0.0.0.0/0` (or the peers' addresses), so the LANCOM's own IKE/ESP traffic and its replies leave through the tunnel with the public address. The LANCOM's default gateway (or a route for the peers) points to the host.
 - The UI offers this as a template ("IPsec device") that creates the five rules.
@@ -281,13 +281,15 @@ A LANCOM router in the LAN (example `192.168.2.2`) establishes IPsec tunnels usi
 
 ### 16.4 UI (redesign, owner-approved 2026-11-26)
 
+Amended 2026-11-26 (task 24): there is no "Host" destination; destinations are IP addresses in the "Local LAN" (example 192.168.1.0/24), the flow strip reads `VPN → Local LAN device` / `Local LAN device → VPN`, and all texts are generic (no brand or device-type names).
+
 Based on a comparison of pfSense, OPNsense, OpenWrt LuCI, Teltonika RutOS, UniFi, MikroTik, Firewalla, Fritz!Box and Synology DSM. The rule model (§16.1) is unchanged; only the presentation changes.
 
 - **Rule list** (one list, both directions, in evaluation order): per row an enable switch, a flow strip of chips `Source → (Host) → Target` with the endpoint the rule is about highlighted (accent), a second line with name, service/ports in plain words and notable options ("sender kept", "all ports", "off"), a hit counter, and row actions Edit / Duplicate / Delete; up/down buttons for order. Filter chips: All / Inbound / Outbound.
 - **Add rule = intent first.** Cards: "Make a LAN device reachable from the VPN" (port forward), "Open a service on the host", "Let a LAN device into the VPN" (outbound), "IPsec router" (template, §16.2), "Block something" (drop/reject), "Custom rule" (full form). Each card presets direction, action and destination kind and shows only its fields.
 - **Editor**: the same flow strip on top (live); numbered steps: 1 device (picker), 2 service (presets HTTP 80/tcp, HTTPS 443/tcp, SSH 22/tcp, RDP 3389/tcp, SMB 445/tcp, DNS 53/tcp+udp, "All ports", "Custom" with protocol + port fields), 3 name (prefilled from device + service, editable). A plain-language summary generated from the same model as the rules, e.g. "Connections from any sender to <VPN address>:443 go to Webserver 192.168.2.30:443 (TCP). The webserver sees the host as sender." Collapsible "Restrict and advanced": sender (source CIDR + source port), different port on the VPN address, "Sender seen by the target: Host / Original" (= keepSourceAddress, with one-line explanation), comment. Collapsible "What this rule creates" listing the technical entries (filter accept, DNAT, masquerade, policy route) read-only. Empty fields always mean "any".
 - **Device picker**: LAN neighbours of the host (IP, MAC, hostname when resolvable via reverse DNS or DHCP leases visible to the host) from `GET /api/firewall/devices`; free IP/CIDR entry always possible; a hint when a chosen device's address may change ("Reserve this address in your router").
-- **Hit counters**: `GET /api/firewall` returns per-rule packet/byte counters read from iptables (`-L -v -x`) through `CommandRunner`; counters must survive re-applying unchanged rules (rules are matched by a comment tag `tdrule:<id>` and only changed rules are replaced; counters reset only when a rule changes). Shown as "N hits"; "–" while disabled.
+- **Hit counters**: `GET /api/firewall` returns per-rule packet/byte counters read from iptables (`-L -v -x`) through `CommandRunner`; counters must survive re-applying unchanged rules (rules are matched by a comment tag `tdrule:<id>` and only changed rules are replaced; counters reset only when a rule changes). Shown as "N hits"; "–" while disabled. Granularity is the chain: a chain whose lines (tags in order, each line confirmed with `iptables -C`) already match is left untouched, and a changed chain is refilled with the DROP-safe append-then-trim, which resets the counters of every rule in that chain only.
 - Not done (anti-patterns found): implicit bidirectional rules, auto-generated extra rows in the list, a separate NAT tab.
 
 ## 17. Compared with the Teltonika RUT240 VPN features
