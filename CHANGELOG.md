@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0-alpha.6] - 2026-11-27
+
 ### Added
 
 - App icon (blue square, white shield with padlock) for browser tabs, desktop shortcuts and installed apps: favicon, Apple touch icon, maskable icon and a web app manifest, so "Install", "Create shortcut" and "Add to home screen" show the TunnelDeck-VPN icon.
