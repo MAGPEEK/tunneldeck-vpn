@@ -100,8 +100,9 @@ func (l *loginLimiter) begin(clientIP string, listener Listener, now time.Time) 
 // failed ends an attempt admitted by begin with a failure: the client's
 // cooldown starts and, on the remote listener, the failure counts towards
 // the remote limit. It returns how long the client must wait before its
-// next attempt.
-func (l *loginLimiter) failed(clientIP string, listener Listener, now time.Time) time.Duration {
+// next attempt and, when the failure locked the remote listener for every
+// client, how long that lock lasts.
+func (l *loginLimiter) failed(clientIP string, listener Listener, now time.Time) (retryAfter, remoteLock time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	record := l.clients[clientIP]
@@ -111,13 +112,14 @@ func (l *loginLimiter) failed(clientIP string, listener Listener, now time.Time)
 	cooldown := record.fail(now)
 	slog.Warn("auth: login cooldown started", "client", clientIP, "failures", record.failures, "cooldown", cooldown.String())
 	if listener != ListenerRemote {
-		return cooldown
+		return cooldown, 0
 	}
 	if lock, locked := l.remote.fail(now); locked {
 		slog.Warn("auth: remote sign-in locked for all clients",
 			"failures", remoteMaxFailures, "window", remoteWindow.String(), "lock", lock.String())
+		remoteLock = lock
 	}
-	return max(cooldown, l.remote.wait(now))
+	return max(cooldown, l.remote.wait(now)), remoteLock
 }
 
 // succeeded ends an attempt admitted by begin with a successful login,

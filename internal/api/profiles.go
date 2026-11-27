@@ -164,7 +164,7 @@ func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 	var req profileRequest
-	if err := decodeJSON(w, r, &req); err != nil {
+	if err := s.readJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -183,7 +183,7 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	var req profileRequest
-	if err := decodeJSON(w, r, &req); err != nil {
+	if err := s.readJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -321,7 +321,7 @@ func awaitDisconnected(ctx context.Context, events <-chan domain.Event) bool {
 
 func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
 	var req importRequest
-	if err := decodeJSON(w, r, &req); err != nil {
+	if err := s.readJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"tunneldeck/internal/domain"
 )
 
 // defaultHeartbeat is the interval of the SSE keep-alive comment.
@@ -30,6 +32,8 @@ type Deps struct {
 	RemoteAccessListener RemoteAccessListener
 
 	PublicIPLookup PublicIPLookupSettings
+
+	Audit AuditLog
 }
 
 // Options tune the API; zero values select the defaults.
@@ -63,6 +67,9 @@ type Server struct {
 	// facts caches what drivers compute from profile secrets.
 	facts *secretFactsCache
 
+	// scans counts requests for unknown API paths per client.
+	scans *scanDetector
+
 	closeOnce sync.Once
 	closed    chan struct{} // closed by CloseStreams
 }
@@ -76,6 +83,7 @@ func New(deps Deps, opts Options) *Server {
 		disconnectTimeout: opts.DisconnectTimeout,
 		mux:               http.NewServeMux(),
 		facts:             newSecretFactsCache(),
+		scans:             newScanDetector(),
 		closed:            make(chan struct{}),
 	}
 	if s.now == nil {
@@ -88,7 +96,7 @@ func New(deps Deps, opts Options) *Server {
 		s.disconnectTimeout = defaultDisconnectTimeout
 	}
 	s.routes()
-	s.handler = logRequests(checkCSRF(s.mux))
+	s.handler = logRequests(noStore(s.checkCSRF(s.mux)))
 	return s
 }
 
@@ -141,6 +149,8 @@ func (s *Server) routes() {
 	s.private("GET /api/public-ip-lookup", s.getPublicIPLookup)
 	s.private("PUT /api/public-ip-lookup", s.putPublicIPLookup)
 
+	s.private("GET /api/audit", s.getAudit)
+
 	s.mux.HandleFunc("/api/", s.unmatched)
 }
 
@@ -156,7 +166,8 @@ func (s *Server) private(pattern string, handler http.HandlerFunc) {
 var probeMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}
 
 // unmatched answers requests no route takes: 405 with Allow when the path
-// exists for other methods, 404 otherwise.
+// exists for other methods, 404 otherwise. Repeated 404s from one client
+// are audited as a possible scan.
 func (s *Server) unmatched(w http.ResponseWriter, r *http.Request) {
 	var allowed []string
 	for _, method := range probeMethods {
@@ -167,6 +178,9 @@ func (s *Server) unmatched(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(allowed) == 0 {
+		if count := s.scans.notFound(clientIP(r), s.now()); count > 0 {
+			s.auditCount(r, domain.AuditPossibleScan, "", count)
+		}
 		writeProblem(w, newProblem(http.StatusNotFound, CodeNotFound, "The resource does not exist."))
 		return
 	}

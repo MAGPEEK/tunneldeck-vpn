@@ -724,6 +724,46 @@
       "rejectMissing": "Das REJECT-Ziel ({{module}}) ist nicht verfügbar, daher verwerfen Ablehnen-Regeln Pakete stattdessen ohne Antwort.",
       "replyRoutingConnmark": "Antworten auf Portweiterleitungen folgen einer Verbindungsmarkierung (CONNMARK in der mangle-Tabelle).",
       "replyRoutingFallback": "Das CONNMARK-Ziel ({{module}}) oder die mangle-Tabelle ({{table}}) ist nicht verfügbar, daher werden Antworten auf Portweiterleitungen nach der Adresse des Ziels geroutet: Alles, was dieses Gerät für ein Portweiterleitungsziel routet, läuft durch den Tunnel, solange er besteht."
+    },
+    "audit": {
+      "title": "Anmeldungen",
+      "description": "Anmeldungen, Abmeldungen und von diesem Gerät abgewehrte Anfragen, mit Adresse und Zugang. Versuchte Benutzernamen und Passwörter werden nie gespeichert.",
+      "show": "Anzeigen",
+      "filters": {
+        "all": "Alle Einträge",
+        "failures": "Nur fehlgeschlagene Anmeldungen",
+        "security": "Nur Sicherheitsereignisse"
+      },
+      "time": "Zeit",
+      "event": "Ereignis",
+      "ip": "IP-Adresse",
+      "access": "Zugang",
+      "accessKinds": {
+        "lan": "LAN",
+        "remote": "Fernzugriff"
+      },
+      "repeated": "{{event}} ({{count}}×)",
+      "empty": "Noch keine Einträge.",
+      "older": "Ältere Einträge anzeigen",
+      "warnings_one": "{{count}} abgewehrter Angriffsversuch in den letzten 24 Stunden",
+      "warnings_other": "{{count}} abgewehrte Angriffsversuche in den letzten 24 Stunden",
+      "warningsHint": "TunnelDeck-VPN hat Anfragen abgewiesen, die nach einem Angriff aussehen: erratene Passwörter, Cross-Site-Anfragen oder Scans. Prüfen Sie die Adressen unten. Versuche aus dem Internet bedeuten, dass jemand den Fernzugriff abtastet: Verwenden Sie ein langes Passwort oder schalten Sie den Fernzugriff ab, wenn Sie ihn nicht brauchen.",
+      "newRemoteTitle": "Anmeldung von einer neuen Adresse",
+      "newRemote": "Die letzte Anmeldung kam über den Fernzugriff von {{ip}} ({{time}}), einer Adresse, die keine frühere Anmeldung verwendet hat. Wenn Sie das nicht waren, verwenden Sie „Überall abmelden“ und setzen Sie das Administratorpasswort zurück.",
+      "types": {
+        "signedIn": "Angemeldet",
+        "wrongCredentials": "Falscher Benutzername oder falsches Passwort",
+        "signedOut": "Abgemeldet",
+        "signedOutEverywhere": "Überall abgemeldet",
+        "rateLimited": "Abgewiesen: Wartezeit nach Fehlversuchen",
+        "remoteLocked": "Abgewiesen: Anmeldung per Fernzugriff gesperrt",
+        "remoteLockStarted": "Anmeldung per Fernzugriff für alle gesperrt",
+        "remoteLockEnded": "Anmeldung per Fernzugriff wieder freigegeben",
+        "csrfRejected": "Abgewiesen: Cross-Site- oder Skript-Anfrage",
+        "bodyTooLarge": "Abgewiesen: Anfrage zu groß",
+        "invalidBody": "Abgewiesen: fehlerhafte Anfrage",
+        "possibleScan": "Möglicher Scan: Anfragen an unbekannte Adressen"
+      }
     }
   },
   "remoteAccess": {
@@ -916,6 +956,7 @@
       "firewall": "Firewall",
       "remote-access": "Fernzugriff",
       "system-checks": "Systemprüfungen",
+      "sign-ins": "Anmeldungen und Sicherheitsereignisse",
       "troubleshooting": "Fehlersuche",
       "admin-reset": "Administratorkonto zurücksetzen",
       "about": "Über"

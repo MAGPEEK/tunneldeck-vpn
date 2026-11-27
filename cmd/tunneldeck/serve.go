@@ -66,6 +66,7 @@ type app struct {
 	listen    string
 	uiPort    int
 	store     *store.Store
+	audit     *store.AuditLog
 	auth      *auth.Service
 	guard     *netguard.Guard
 	checks    []api.CheckResult
@@ -129,7 +130,10 @@ func (a *app) openStore(context.Context) error {
 		return err
 	}
 	a.store = st
-	a.auth = auth.NewService(st)
+	if a.audit, err = store.OpenAuditLog(a.cfg.DataDir); err != nil {
+		return fmt.Errorf("open audit log: %w", err)
+	}
+	a.auth = auth.NewService(st, auth.WithLockEvents(auditLockEvents{log: a.audit, now: a.host.now}))
 	return nil
 }
 
@@ -251,6 +255,7 @@ func (a *app) apiDeps(registry *vpn.Registry) api.Deps {
 		},
 		RemoteAccess: a.store, RemoteAccessListener: a.remote,
 		PublicIPLookup: a.store,
+		Audit:          a.audit,
 	}
 }
 
@@ -301,11 +306,13 @@ func (a *app) startRemoteAccess(ctx context.Context) error {
 	return nil
 }
 
+// newRouter serves the API and the SPA; both listeners share it, so every
+// response carries the security headers (SPEC §8).
 func newRouter(apiHandler, spa http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/", spa)
-	return mux
+	return api.SecurityHeaders(mux)
 }
 
 // run serves HTTP until ctx ends or serving fails, then shuts down.
@@ -359,6 +366,11 @@ func (a *app) shutdown() error {
 	if a.control != nil {
 		if err := a.control.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close control socket: %w", err))
+		}
+	}
+	if a.audit != nil {
+		if err := a.audit.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close audit log: %w", err))
 		}
 	}
 	return errors.Join(errs...)

@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"tunneldeck/internal/domain"
+)
 
 type sessionResponse struct {
 	SetupRequired bool   `json:"setupRequired"`
@@ -34,7 +38,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	var body credentialsRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -49,12 +53,15 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 // short.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var body loginRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}
 	remember := body.Remember && rememberAvailable(r)
 	token, err := s.deps.Auth.Login(body.Username, body.Password, loginClient(r), remember)
+	if typ, ok := loginAuditType(err); ok {
+		s.audit(r, typ, body.Username)
+	}
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -68,6 +75,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	err := s.deps.Auth.Logout(s.deps.Cookies.Token(r))
 	s.deps.Cookies.Clear(w, isSecureListener(r))
+	s.audit(r, domain.AuditSignedOut, sessionUser(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -79,6 +87,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) logoutEverywhere(w http.ResponseWriter, r *http.Request) {
 	err := s.deps.Auth.LogoutEverywhere()
 	s.deps.Cookies.Clear(w, isSecureListener(r))
+	s.audit(r, domain.AuditSignedOutEverywhere, sessionUser(r))
 	if err != nil {
 		writeError(w, r, err)
 		return

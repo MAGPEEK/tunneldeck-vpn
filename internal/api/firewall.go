@@ -82,7 +82,7 @@ func (s *Server) getFirewall(w http.ResponseWriter, r *http.Request) {
 // applying fails, the previous configuration is stored and applied again.
 func (s *Server) putFirewall(w http.ResponseWriter, r *http.Request) {
 	var body firewallRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -175,7 +175,7 @@ func firewallSettings(body *firewallSettingsRequest, v *domain.ValidationError) 
 // §16.2) without storing them; the UI inserts them into its rule list.
 func (s *Server) ipsecTemplate(w http.ResponseWriter, r *http.Request) {
 	var body ipsecTemplateRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}

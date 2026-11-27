@@ -22,6 +22,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Known vulnerabilities in the packages that ship in the UI bundle.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm test
       - run: npm run build
@@ -35,6 +37,11 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
       - run: go test ./...
+      # Known vulnerabilities in reachable code of the module and its
+      # dependencies, for the Linux build that ships.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+        env:
+          GOOS: linux
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
@@ -68,4 +75,13 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: tunneldeck:ci
+      # Fails on HIGH or CRITICAL vulnerabilities that have a fixed version.
+      # Pinned by commit (tag v0.36.0): tags of this action can be moved.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: tunneldeck:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

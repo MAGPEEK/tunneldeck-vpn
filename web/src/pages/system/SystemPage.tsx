@@ -4,6 +4,7 @@ import { Page } from '../../layout/Page';
 import { useSystem } from '../../queries/queries';
 import { genericErrorMessage } from '../auth/formError';
 import { HelpLink } from '../help/HelpLink';
+import { AuditCard } from './AuditCard';
 import { PublicIpLookupCard } from './PublicIpLookupCard';
 import { RemoteAccessCard } from './RemoteAccessCard';
 import { SelfCheckCard } from './SelfCheckCard';
@@ -30,6 +31,7 @@ export function SystemPage() {
         )}
         <RemoteAccessCard />
         <PublicIpLookupCard />
+        <AuditCard />
         <SessionsCard />
       </div>
     </Page>

@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"tunneldeck/internal/domain"
 )
 
 // CSRFHeader must be "1" on every request that is not GET or HEAD.
@@ -58,14 +61,18 @@ func logRequests(next http.Handler) http.Handler {
 
 // checkCSRF requires the CSRF header on unsafe methods and, when an Origin
 // header is present, that its host equals the request's Host (RFC 6454).
-func checkCSRF(next http.Handler) http.Handler {
+// Every rejection is audited: it is a sign of a cross-site or scripted
+// request.
+func (s *Server) checkCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isSafeMethod(r.Method) {
 			if r.Header.Get(CSRFHeader) != "1" {
+				s.audit(r, domain.AuditCSRFRejected, "")
 				writeProblem(w, newProblem(http.StatusForbidden, CodeCSRF, "The request header "+CSRFHeader+" is missing."))
 				return
 			}
 			if !originMatches(r) {
+				s.audit(r, domain.AuditCSRFRejected, "")
 				writeProblem(w, newProblem(http.StatusForbidden, CodeCSRF, "The request origin does not match the host."))
 				return
 			}
@@ -90,15 +97,25 @@ func originMatches(r *http.Request) bool {
 	return strings.EqualFold(u.Host, r.Host)
 }
 
-// requireSession answers 401 unless the request carries a valid session.
+type sessionUserKey struct{}
+
+// requireSession answers 401 unless the request carries a valid session;
+// sessionUser returns the signed-in username in the handler.
 func (s *Server) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.deps.Auth.Authenticate(s.deps.Cookies.Token(r)); !ok {
+		username, ok := s.deps.Auth.Authenticate(s.deps.Cookies.Token(r))
+		if !ok {
 			writeProblem(w, newProblem(http.StatusUnauthorized, CodeUnauthenticated, "Sign in first."))
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionUserKey{}, username)))
 	})
+}
+
+// sessionUser is the username of the session requireSession checked.
+func sessionUser(r *http.Request) string {
+	username, _ := r.Context().Value(sessionUserKey{}).(string)
+	return username
 }
 
 // clientIP is the address of the peer; forwarding headers are not trusted.

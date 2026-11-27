@@ -10,5 +10,6 @@ export const queryKeys = {
   system: ['system'] as const,
   remoteAccess: ['remote-access'] as const,
   publicIpLookup: ['public-ip-lookup'] as const,
+  audit: (filter: string) => ['audit', filter] as const,
   importDraft: ['import-draft'] as const,
 };

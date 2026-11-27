@@ -50,7 +50,7 @@ func (s *Server) getRemoteAccess(w http.ResponseWriter, _ *http.Request) {
 // fails, the previous setting is stored and applied again.
 func (s *Server) putRemoteAccess(w http.ResponseWriter, r *http.Request) {
 	var body remoteAccessRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -89,7 +89,7 @@ func (s *Server) rollbackRemoteAccess(ctx context.Context, previous domain.Remot
 // served, the listener switches to the new one.
 func (s *Server) uploadCertificate(w http.ResponseWriter, r *http.Request) {
 	var body certificateUpload
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}

@@ -20,7 +20,7 @@ func (s *Server) getPublicIPLookup(w http.ResponseWriter, _ *http.Request) {
 // detection; a connected tunnel applies it at once.
 func (s *Server) putPublicIPLookup(w http.ResponseWriter, r *http.Request) {
 	var body publicIPLookupBody
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := s.readJSON(w, r, &body); err != nil {
 		writeError(w, r, err)
 		return
 	}

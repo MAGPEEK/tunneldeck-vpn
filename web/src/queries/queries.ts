@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getAudit, type AuditFilter } from '../api/audit';
 import {
   connect,
   disconnect,
@@ -56,6 +57,16 @@ export function useRemoteAccess() {
 
 export function usePublicIpLookup() {
   return useQuery({ queryKey: queryKeys.publicIpLookup, queryFn: getPublicIpLookup });
+}
+
+/** Pages of the audit log, newest first; each next page continues below the last entry. */
+export function useAudit(filter: AuditFilter) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.audit(filter),
+    queryFn: ({ pageParam }) => getAudit(filter, pageParam),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => (last.hasMore ? last.entries.at(-1)?.id : undefined),
+  });
 }
 
 /** Connect, disconnect and reconnect; each answer replaces the cached status. */

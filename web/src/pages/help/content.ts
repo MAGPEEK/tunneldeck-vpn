@@ -8,6 +8,7 @@ export const HELP_SECTIONS = [
   'firewall',
   'remote-access',
   'system-checks',
+  'sign-ins',
   'troubleshooting',
   'admin-reset',
   'about',

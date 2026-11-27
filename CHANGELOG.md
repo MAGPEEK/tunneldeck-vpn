@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- Audit log (SPEC §8.2): the System page card "Sign-ins" lists sign-ins, sign-outs and blocked attacks with time, IP address and access (LAN or Remote): wrong passwords, sign-in attempts during the waiting time or the remote lock, the start and end of the remote lock, cross-site or scripted requests refused by the CSRF check, oversized or malformed request bodies, and possible scans (ten or more requests for unknown API addresses from one address within a minute). Each entry has a severity; repeated events are counted in one entry. Filters "Only failed sign-ins" and "Only security events", a red banner with the number of blocked attempts in the last 24 hours, and a notice when the latest sign-in came over remote access from an address no earlier sign-in used. Attempted usernames, passwords and request contents are never recorded. Kept in `/data/audit-log.json`: the last 500 sign-ins and sign-outs and, separately, the last 500 security events. API: `GET /api/audit` with paging (`limit`, `before`) and `filter`.
+- App log: every sign-in, sign-out and wrong password is logged with the client IP and the access.
+
+### Security
+
+- Security headers on every response of both listeners: a strict Content Security Policy (only the app's own scripts, styles and connections; no framing), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, a `Permissions-Policy` that switches off camera, microphone, location and other unused features, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`; API responses are never cached.
+- CI scans for known vulnerabilities: `govulncheck` for the Go code, `npm audit` for the UI packages and Trivy for the image (fails on fixable HIGH or CRITICAL findings).
+- Dependencies updated: `golang.org/x/crypto` 0.59.0, `golang.org/x/net` 0.62.0 (govulncheck reported advisories in both modules; none in code TunnelDeck-VPN calls).
+
 ## [0.4.2] - 2026-11-27
 
 ### Changed

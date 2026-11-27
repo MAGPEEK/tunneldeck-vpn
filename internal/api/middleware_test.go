@@ -26,6 +26,7 @@ var privateEndpoints = []struct{ method, path string }{
 	{http.MethodPost, "/api/firewall/templates/ipsec"},
 	{http.MethodGet, "/api/firewall/devices"},
 	{http.MethodGet, "/api/system"},
+	{http.MethodGet, "/api/audit"},
 }
 
 func TestPrivateEndpointsRequireASession(t *testing.T) {

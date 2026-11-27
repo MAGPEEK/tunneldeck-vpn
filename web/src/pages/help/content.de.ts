@@ -286,6 +286,41 @@ export const HELP_CONTENT_DE: HelpContent = {
       text: 'Alle Prüfungen im Detail, mit Abhilfe für Linux und DSM',
     },
   ],
+  'sign-ins': [
+    {
+      type: 'paragraph',
+      text: 'Die Karte „Anmeldungen“ auf der System-Seite listet Anmeldungen, Abmeldungen und die von TunnelDeck-VPN abgewiesenen Anfragen, die neuesten zuerst, mit Zeit, IP-Adresse und Zugang (LAN oder Fernzugriff). Sie behält die letzten 500 Anmeldungen und Abmeldungen und getrennt davon die letzten 500 Sicherheitsereignisse, damit eine Angriffswelle die Anmeldungen nie verdrängt. Versuchte Benutzernamen, Passwörter und Inhalte von Anfragen werden nie gespeichert.',
+    },
+    {
+      type: 'terms',
+      items: [
+        {
+          term: 'Falscher Benutzername oder falsches Passwort',
+          text: 'Eine fehlgeschlagene Anmeldung. Einzelne sind meist Tippfehler.',
+        },
+        {
+          term: 'Abgewiesen: Wartezeit, Anmeldung per Fernzugriff gesperrt',
+          text: 'Anmeldeversuche während der Wartezeit nach Fehlversuchen oder während die Anmeldung per Fernzugriff für alle gesperrt ist. Wiederholte Versuche werden in einem Eintrag gezählt.',
+        },
+        {
+          term: 'Abgewiesen: Cross-Site- oder Skript-Anfrage',
+          text: 'Eine ändernde Anfrage ohne den Header, den die Weboberfläche immer sendet, oder von einer fremden Webseite. Browser mit dieser Oberfläche lösen das nie aus, sondern eine andere Webseite oder ein Skript.',
+        },
+        {
+          term: 'Abgewiesen: Anfrage zu groß, fehlerhafte Anfrage',
+          text: 'Ein Anfrageinhalt über 1 MiB oder nicht das JSON, das die Weboberfläche sendet.',
+        },
+        {
+          term: 'Möglicher Scan',
+          text: 'Zehn oder mehr Anfragen an nicht vorhandene API-Adressen von einer Adresse innerhalb einer Minute, in einem Eintrag gezählt.',
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+      text: 'Ein rotes Banner zählt die abgewehrten Versuche der letzten 24 Stunden. Ein gelber Hinweis erscheint, wenn die letzte Anmeldung über den Fernzugriff von einer Adresse kam, die keine frühere Anmeldung verwendet hat: Wenn Sie das nicht waren, melden Sie sich überall ab und setzen Sie das Administratorpasswort zurück.',
+    },
+  ],
   troubleshooting: [
     {
       type: 'paragraph',

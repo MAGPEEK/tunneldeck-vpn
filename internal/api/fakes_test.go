@@ -42,6 +42,7 @@ type fakeAuth struct {
 	remembered  bool // remember of the last Login
 	setupCalled bool
 	logoutErr   error
+	loginErr    error // returned by Login when set
 }
 
 func newFakeAuth() *fakeAuth {
@@ -73,6 +74,9 @@ func (a *fakeAuth) Login(username, password string, client LoginClient, remember
 	defer a.mu.Unlock()
 	a.loginClient = client
 	a.remembered = remember
+	if a.loginErr != nil {
+		return "", a.loginErr
+	}
 	if a.retryAfter > 0 {
 		return "", &RateLimitError{RetryAfter: a.retryAfter, Remote: a.remoteLock}
 	}
@@ -718,4 +722,31 @@ func (fakeSecretAdviser) AdviseSecrets(p domain.Profile) []vpn.Advisory {
 		return nil
 	}
 	return []vpn.Advisory{{Code: "short_secret", Severity: vpn.AdvisoryWarning, Field: "psk"}}
+}
+
+// fakeAuditLog records events and answers AuditEvents with page.
+type fakeAuditLog struct {
+	mu     sync.Mutex
+	events []domain.AuditEvent
+	query  domain.AuditQuery
+	page   domain.AuditPage
+}
+
+func (f *fakeAuditLog) Record(event domain.AuditEvent) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, event)
+}
+
+func (f *fakeAuditLog) AuditEvents(query domain.AuditQuery) domain.AuditPage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.query = query
+	return f.page
+}
+
+func (f *fakeAuditLog) recorded() []domain.AuditEvent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]domain.AuditEvent(nil), f.events...)
 }

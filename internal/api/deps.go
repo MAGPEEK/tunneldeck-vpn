@@ -204,6 +204,14 @@ type PublicIPLookupSettings interface {
 	SetPublicIPLookup(settings domain.PublicIPLookup) error
 }
 
+// AuditLog keeps the audit log of sign-ins and security events (SPEC
+// §8.2); *store.AuditLog implements it.
+type AuditLog interface {
+	// Record adds an entry; it never fails, write errors are logged.
+	Record(event domain.AuditEvent)
+	AuditEvents(query domain.AuditQuery) domain.AuditPage
+}
+
 // RemoteAccessListener runs the HTTPS listener; *remoteaccess.Manager
 // implements it.
 type RemoteAccessListener interface {

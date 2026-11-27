@@ -78,14 +78,31 @@ type AccountStore interface {
 	RemoveAdminAccount() error
 }
 
+// LockEvents is told when the remote listener's lock for every client
+// (SPEC §8.1) starts and ends, for the audit log (SPEC §8.2).
+type LockEvents interface {
+	// RemoteLockStarted names the client whose failure started the lock.
+	RemoteLockStarted(clientIP string)
+	RemoteLockEnded()
+}
+
+// noLockEvents ignores the lock events.
+type noLockEvents struct{}
+
+func (noLockEvents) RemoteLockStarted(string) {}
+func (noLockEvents) RemoteLockEnded()         {}
+
 // Service handles the admin account, sessions and the login rate limit.
 // It is safe for concurrent use.
 type Service struct {
-	store    AccountStore
-	now      func() time.Time
-	hasher   *passwordHasher
-	sessions *sessionStore
-	limiter  *loginLimiter
+	store      AccountStore
+	now        func() time.Time
+	hasher     *passwordHasher
+	sessions   *sessionStore
+	limiter    *loginLimiter
+	lockEvents LockEvents
+	// afterFunc runs f after d; time.AfterFunc unless a test replaces it.
+	afterFunc func(d time.Duration, f func())
 }
 
 // Option configures a Service.
@@ -94,6 +111,11 @@ type Option func(*Service)
 // WithClock replaces time.Now, for tests.
 func WithClock(now func() time.Time) Option {
 	return func(s *Service) { s.now = now }
+}
+
+// WithLockEvents reports the start and end of the remote listener's lock.
+func WithLockEvents(events LockEvents) Option {
+	return func(s *Service) { s.lockEvents = events }
 }
 
 // WithHashParams sets the argon2id parameters for new hashes. Existing
@@ -106,11 +128,13 @@ func WithHashParams(params HashParams) Option {
 // sessions it holds.
 func NewService(store AccountStore, opts ...Option) *Service {
 	s := &Service{
-		store:    store,
-		now:      time.Now,
-		hasher:   newPasswordHasher(),
-		sessions: newSessionStore(store),
-		limiter:  newLoginLimiter(),
+		store:      store,
+		now:        time.Now,
+		hasher:     newPasswordHasher(),
+		sessions:   newSessionStore(store),
+		limiter:    newLoginLimiter(),
+		lockEvents: noLockEvents{},
+		afterFunc:  func(d time.Duration, f func()) { time.AfterFunc(d, f) },
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -161,7 +185,7 @@ func (s *Service) Login(username, password, clientIP string, listener Listener, 
 	valid, err := s.checkCredentials(username, password)
 	var retryAfter time.Duration
 	if err != nil || !valid {
-		retryAfter = s.limiter.failed(clientIP, listener, s.now())
+		retryAfter = s.loginFailed(clientIP, listener)
 	}
 	if err != nil {
 		return "", fmt.Errorf("auth: login: %w", err)
@@ -175,6 +199,17 @@ func (s *Service) Login(username, password, clientIP string, listener Listener, 
 		return "", fmt.Errorf("auth: login: %w", err)
 	}
 	return token, nil
+}
+
+// loginFailed starts the cooldown of clientIP and reports a lock of the
+// remote listener the failure started. It returns the client's wait.
+func (s *Service) loginFailed(clientIP string, listener Listener) time.Duration {
+	retryAfter, lock := s.limiter.failed(clientIP, listener, s.now())
+	if lock > 0 {
+		s.lockEvents.RemoteLockStarted(clientIP)
+		s.afterFunc(lock, s.lockEvents.RemoteLockEnded)
+	}
+	return retryAfter
 }
 
 // Authenticate returns the username behind token and refreshes the

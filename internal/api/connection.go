@@ -48,7 +48,7 @@ func (s *Server) getConnection(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 	var req connectRequest
-	if err := decodeJSON(w, r, &req); err != nil {
+	if err := s.readJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}

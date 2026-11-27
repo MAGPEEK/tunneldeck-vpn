@@ -42,6 +42,7 @@ function routes(overrides: MockRoutes = {}): MockRoutes {
     'GET /api/system': { body: SYSTEM },
     'GET /api/remote-access': { body: REMOTE },
     'GET /api/public-ip-lookup': { body: LOOKUP },
+    'GET /api/audit?limit=50': { body: { entries: [], hasMore: false, recentWarnings: 0 } },
     ...overrides,
   };
 }

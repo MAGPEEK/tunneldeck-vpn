@@ -404,3 +404,45 @@ func TestRateLimitErrorMessage(t *testing.T) {
 		})
 	}
 }
+
+// recordedLockEvents remembers the lock events and the timers started for
+// their end.
+type recordedLockEvents struct {
+	events []string
+	timers []time.Duration
+	ends   []func()
+}
+
+func (r *recordedLockEvents) RemoteLockStarted(clientIP string) {
+	r.events = append(r.events, "started "+clientIP)
+}
+
+func (r *recordedLockEvents) RemoteLockEnded() { r.events = append(r.events, "ended") }
+
+func (r *recordedLockEvents) afterFunc(d time.Duration, f func()) {
+	r.timers = append(r.timers, d)
+	r.ends = append(r.ends, f)
+}
+
+func TestRemoteLockEvents(t *testing.T) {
+	ts := newSetUpService(t)
+	recorded := &recordedLockEvents{}
+	WithLockEvents(recorded)(ts.Service)
+	ts.afterFunc = recorded.afterFunc
+
+	ts.failRemoteLogins(t, 0, remoteMaxFailures-1)
+	ts.failLogin(t, "203.0.113.9", ListenerLAN)
+	if len(recorded.events) != 0 {
+		t.Fatalf("events before the lock: %v", recorded.events)
+	}
+	ts.failLogin(t, "203.0.113.7", ListenerRemote)
+	if fmt.Sprint(recorded.events) != "[started 203.0.113.7]" || fmt.Sprint(recorded.timers) != "[1m0s]" {
+		t.Fatalf("events %v, timers %v", recorded.events, recorded.timers)
+	}
+	recorded.ends[0]()
+	ts.clock.Advance(time.Minute)
+	ts.failRemoteLogins(t, 20, remoteMaxFailures)
+	if fmt.Sprint(recorded.events) != "[started 203.0.113.7 ended started 198.51.100.29]" || fmt.Sprint(recorded.timers) != "[1m0s 2m0s]" {
+		t.Fatalf("events %v, timers %v", recorded.events, recorded.timers)
+	}
+}

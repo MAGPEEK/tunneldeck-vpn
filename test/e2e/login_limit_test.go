@@ -66,6 +66,7 @@ func (sc *scenario) checkLoginLimits(t *testing.T, vpnIP netip.Addr) {
 			time.Sleep(time.Until(failedAt.Add(time.Duration(cooldown)*time.Second + 500*time.Millisecond)))
 		}
 	}
+	sc.checkAuditLog(t, lanURL)
 }
 
 // addRemoteLoginSources adds the remote login source addresses to the
@@ -118,4 +119,54 @@ func (sc *scenario) tryLogin(t *testing.T, url, source string) loginAnswer {
 	}
 	answer.code = problem.Code
 	return answer
+}
+
+// auditEntry is an entry of GET /api/audit.
+type auditEntry struct {
+	Type     string `json:"type"`
+	Severity string `json:"severity"`
+	ClientIP string `json:"clientIp"`
+	Access   string `json:"access"`
+	Username string `json:"username"`
+	Count    int    `json:"count"`
+}
+
+// checkAuditLog checks SPEC §8.2 after the login limits: a request the
+// CSRF check rejects carries the security headers, and it is in the audit
+// log next to the rejections during the LAN cooldown and the remote lock,
+// all without the attempted username.
+func (sc *scenario) checkAuditLog(t *testing.T, lanURL string) {
+	t.Helper()
+	out := sc.stack.exec(t, sc.variant.service, "curl", "--silent", "--show-error", "--max-time", "10", "--dump-header", "-",
+		"--output", "/dev/null", "--header", "Content-Type: application/json", "--data", wrongLogin, lanURL)
+	head := strings.ReplaceAll(out, "\r\n", "\n")
+	if fields := strings.Fields(firstLine(head)); len(fields) < 2 || fields[1] != "403" {
+		t.Errorf("login without the CSRF header: %q, want 403", firstLine(head))
+	}
+	for _, header := range []string{"Content-Security-Policy: default-src 'self'", "X-Frame-Options: DENY", "X-Content-Type-Options: nosniff"} {
+		if !strings.Contains(strings.ToLower(head), strings.ToLower(header)) {
+			t.Errorf("CSRF rejection lacks %q; headers:\n%s", header, head)
+		}
+	}
+
+	var audit struct {
+		Entries        []auditEntry `json:"entries"`
+		RecentWarnings int          `json:"recentWarnings"`
+	}
+	sc.td.must(t, sc.td.api.get("/api/audit?filter=security&limit=500", &audit), "read the audit log")
+	found := map[string]bool{}
+	for _, e := range audit.Entries {
+		found[e.Type+" "+e.Access] = true
+		if e.Username != "" || e.Severity == "" || e.Count < 1 {
+			t.Errorf("audit entry %+v", e)
+		}
+	}
+	for _, want := range []string{"csrfRejected lan", "rateLimited lan", "remoteLocked remote", "remoteLockStarted remote"} {
+		if !found[want] {
+			t.Errorf("audit log lacks %s: %+v", want, audit.Entries)
+		}
+	}
+	if audit.RecentWarnings < 4 {
+		t.Errorf("recentWarnings = %d, want at least 4", audit.RecentWarnings)
+	}
 }

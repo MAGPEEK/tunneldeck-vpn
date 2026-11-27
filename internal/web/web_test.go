@@ -1,8 +1,11 @@
 package web
 
 import (
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -55,6 +58,63 @@ func TestEmbeddedHandlerResponds(t *testing.T) {
 	Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusOK && rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 200 (built) or 503 (not built)", rec.Code)
+	}
+}
+
+// scriptElement captures a script's attributes and content.
+var scriptElement = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script>`)
+
+// inlineMarkup matches the rest of what the Content-Security-Policy of
+// SPEC §8 blocks: <style> elements, style attributes, inline event handlers
+// and javascript: URLs.
+var inlineMarkup = regexp.MustCompile(`(?i)<style\b|\sstyle\s*=|\son[a-z]+\s*=|javascript:`)
+
+// inlineCode returns the first inline code in html, or "".
+func inlineCode(html string) string {
+	for _, script := range scriptElement.FindAllStringSubmatch(html, -1) {
+		if !strings.Contains(strings.ToLower(script[1]), "src=") || strings.TrimSpace(script[2]) != "" {
+			return script[0]
+		}
+	}
+	return inlineMarkup.FindString(html)
+}
+
+// TestBuiltIndexHasNoInlineCode guards the Content-Security-Policy: the
+// built index.html must load everything from files. Skipped before the
+// frontend is built.
+func TestBuiltIndexHasNoInlineCode(t *testing.T) {
+	index, err := fs.ReadFile(dist, "dist/"+indexFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		t.Skip("web UI not built")
+	}
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	if found := inlineCode(string(index)); found != "" {
+		t.Fatalf("index.html has inline code the CSP blocks: %q", found)
+	}
+}
+
+func TestInlineCode(t *testing.T) {
+	tests := []struct {
+		html   string
+		inline bool
+	}{
+		{`<script type="module" crossorigin src="/assets/index.js"></script>`, false},
+		{`<link rel="stylesheet" crossorigin href="/assets/index.css">`, false},
+		{`<meta name="theme-color" content="#1f63c9" />`, false},
+		{`<script>alert(1)</script>`, true},
+		{`<script type="module">import "/a.js"</script>`, true},
+		{`<script src="/a.js">alert(1)</script>`, true},
+		{`<style>body{}</style>`, true},
+		{`<div style="color:red">`, true},
+		{`<body onload="x()">`, true},
+		{`<a href="javascript:x()">`, true},
+	}
+	for _, tt := range tests {
+		if got := inlineCode(tt.html) != ""; got != tt.inline {
+			t.Errorf("%s: inline = %v, want %v", tt.html, got, tt.inline)
+		}
 	}
 }
 

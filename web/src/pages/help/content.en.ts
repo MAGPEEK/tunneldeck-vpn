@@ -286,6 +286,41 @@ export const HELP_CONTENT_EN: HelpContent = {
       text: 'Every check in detail, with fixes for Linux and DSM',
     },
   ],
+  'sign-ins': [
+    {
+      type: 'paragraph',
+      text: 'The card "Sign-ins" on the System page lists sign-ins, sign-outs and the requests TunnelDeck-VPN blocked, newest first, with the time, the IP address and the access (LAN or Remote). It keeps the last 500 sign-ins and sign-outs and, separately, the last 500 security events, so a burst of attacks never pushes the sign-ins out. Attempted usernames, passwords and request contents are never recorded.',
+    },
+    {
+      type: 'terms',
+      items: [
+        {
+          term: 'Wrong username or password',
+          text: 'A failed sign-in. Single ones are usually typing errors.',
+        },
+        {
+          term: 'Blocked: waiting time, remote sign-in locked',
+          text: 'Sign-in attempts during the waiting time after failed ones, or while remote sign-in is locked for everyone. Repeated attempts are counted in one entry.',
+        },
+        {
+          term: 'Blocked: cross-site or scripted request',
+          text: 'A change request without the header the web UI always sends, or from a foreign web page. Browsers using this UI never cause it; another web page or a script did.',
+        },
+        {
+          term: 'Blocked: request too large, malformed request',
+          text: 'A request body over 1 MiB or not the JSON the web UI sends.',
+        },
+        {
+          term: 'Possible scan',
+          text: 'Ten or more requests for API addresses that do not exist from one address within a minute, counted in one entry.',
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+      text: 'A red banner counts the blocked attempts of the last 24 hours. A yellow notice appears when the latest sign-in came over remote access from an address no earlier sign-in used: if that was not you, sign out everywhere and reset the admin password.',
+    },
+  ],
   troubleshooting: [
     {
       type: 'paragraph',

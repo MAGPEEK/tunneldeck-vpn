@@ -110,6 +110,7 @@ Data directory `/data` (volume):
 
 - `settings.json` — admin account (argon2id hash), language default, host-access rules, desired connection state, remembered sessions (token hashes only, §8), remote access (§8.1), public IP detection (§6.1).
 - `profiles.json` — profiles; secret fields stored as `enc:v1:<base64 nonce+ciphertext>`.
+- `audit-log.json` — audit log of sign-ins and security events (§8.2); no secrets.
 - `secret.key` — 32 random bytes, mode 0600, created on first start. Overridden by env `TUNNELDECK_SECRET_KEY` (base64).
 
 Writes are atomic (temp file + rename) and serialised by a mutex. The API never returns secret values; it returns `hasValue: true|false` per secret field. Sending an empty secret on update keeps the stored value.
@@ -122,6 +123,7 @@ Writes are atomic (temp file + rename) and serialised by a mutex. The API never 
 - "Stay signed in" (`POST /api/login {username, password, remember?}`), offered only on the LAN HTTP listener (`GET /api/session` → `rememberAvailable`); the HTTPS listener (§8.1) hides it and ignores the flag. A remembered session has a 30-day idle timeout and a 90-day absolute lifetime, and its cookie gets `Max-Age` (90 days; still `HttpOnly`, `SameSite=Strict`, `Path=/`). Remembered sessions survive a restart: `settings.json` (`rememberedSessions`, schema 4, max 10, oldest dropped) keeps only the SHA-256 token hash, username, created/last-used time (RFC 3339 UTC, last-used written at most once per hour) and the client IP at login — never the token. Logout removes the session from the store too; `DELETE /api/sessions` ("Sign out everywhere" on the System page) ends every session; `reset-admin` and a new admin account drop all remembered sessions.
 - Lost password: `tunneldeck reset-admin` (run via `docker exec`) removes the admin account and all sessions; alternatively env `TUNNELDECK_RESET_ADMIN=1` does the same at start and logs a warning on every start until it is removed. Profiles and settings are kept; the UI shows setup again.
 - Login rate limit (owner-approved 2026-11-27), per client IP (peer address only, never forwarding headers) on both listeners, one record per IP shared by them: after failure n the client must wait 10 s × 2^(n−1), capped at 15 min (10 s, 20 s, 40 s, … 640 s, then 900 s). The failed login already answers `401 invalid_credentials` with `Retry-After` and the extension member `retryAfterSeconds` (the wait it started), so the UI counts down at once. Attempts during the wait get `429 rate_limited` (RFC 6585) with `Retry-After` and `retryAfterSeconds`, without checking the password and without extending the wait or counting a failure. An attempt counts from its start: while one attempt of an IP is being checked, further attempts of that IP get 429 with the wait that follows if it fails. A successful login clears the record; a record is forgotten 30 min after its last failure; at most 10,000 IPs are tracked (least recently seen evicted). Each failure logs a warning with IP, failure count and wait (app log; never the username or password). The login page shows a live countdown and disables "Sign in" until it ends; a hidden polite live region announces only the start and the end. Constant-time comparison.
+- Security headers (owner-approved 2026-11-27, 0.4.3) on every response of both listeners — API, SPA and error responses — set by one middleware around the shared router: `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`; every `/api/*` response carries `Cache-Control: no-store`. The SPA must therefore have no inline scripts, `<style>` elements, style attributes in markup or inline event handlers (React `style` props go through the CSSOM, which `style-src` does not restrict); a Go test checks the built `index.html`.
 
 ### 8.1 Remote access to the UI over the tunnel (HTTPS only)
 
@@ -130,9 +132,31 @@ Off by default. Setting `remoteAccess { enabled bool, port int (default 8443), c
 - When enabled, a second listener serves the same app over **HTTPS only** on `0.0.0.0:<port>` (so it is reachable on the VPN address and, as a bonus, on the LAN). TLS 1.2 minimum, TLS 1.3 preferred, Go's default cipher suites. The plain-HTTP listener stays LAN-only and is never reachable from the tunnel.
 - Certificate: `selfSigned` — ECDSA P-256 certificate generated on first enable, valid 2 years, renewed automatically 30 days before expiry, stored in `/data` with the key encrypted like other secrets; its SHA-256 fingerprint is shown in the UI so the user can verify the browser warning. `uploaded` — PEM certificate chain and key (RFC 7468) validated on upload (key matches, not expired); the key is a secret.
 - `netguard` adds an accept for TCP `<port>` on the tunnel device while enabled. This is the only way the UI becomes reachable from the tunnel; a host-access rule for the HTTP port stays forbidden.
-- On the HTTPS listener: session cookie with `Secure`, `Strict-Transport-Security: max-age=31536000`, same CSRF rules and the per-IP login rate limit of §8. Additionally, across all client IPs: 10 failed logins on the HTTPS listener within 10 min lock it for every client for 1 min, doubling on each further lock up to 15 min; the doubling resets 30 min after the last failure there. Every login on the HTTPS listener counts, whatever the client address; attempts in progress count towards the 10, so parallel attempts cannot exceed it. During the lock every login there gets `429 rate_limited_remote` with `Retry-After` (the longer of the lock and the client's own wait), and the UI says that remote sign-in is temporarily blocked for everyone. The lock start is logged as a warning. The LAN HTTP listener is never affected by this lock.
+- On the HTTPS listener: session cookie with `Secure`, `Strict-Transport-Security: max-age=31536000` in addition to the security headers of §8, same CSRF rules and the per-IP login rate limit of §8. Additionally, across all client IPs: 10 failed logins on the HTTPS listener within 10 min lock it for every client for 1 min, doubling on each further lock up to 15 min; the doubling resets 30 min after the last failure there. Every login on the HTTPS listener counts, whatever the client address; attempts in progress count towards the 10, so parallel attempts cannot exceed it. During the lock every login there gets `429 rate_limited_remote` with `Retry-After` (the longer of the lock and the client's own wait), and the UI says that remote sign-in is temporarily blocked for everyone. The lock start is logged as a warning; start and end are audited (§8.2). The LAN HTTP listener is never affected by this lock.
 - Changing the setting applies without a container restart. The port must not collide with the HTTP port or an enabled host-access rule.
 - API: `GET/PUT /api/remote-access` (state, port, source, certificate subject, expiry, fingerprint; never the key), `POST /api/remote-access/certificate` (upload). UI: section "Remote access" on the System page with a clear warning that the login becomes reachable from the internet.
+
+### 8.2 Audit log (owner-approved 2026-11-27, 0.4.3)
+
+Records sign-ins and security events so the user can tell an attack from normal use. Each entry: RFC 3339 UTC time, type, severity (derived from the type), client IP (peer address, as the rate limit uses), access `lan` | `remote` (the listener), count, and the username for sign-ins and sign-outs only. Never attempted usernames, passwords, request bodies or secrets.
+
+| Type | Severity | Recorded when |
+|---|---|---|
+| `signedIn` | info | Login succeeded |
+| `wrongCredentials` | notice | Login with wrong username or password |
+| `signedOut`, `signedOutEverywhere` | info | `POST /api/logout`, `DELETE /api/sessions` |
+| `rateLimited` | warning | Login rejected during the client's cooldown (429) |
+| `remoteLocked` | warning | Login rejected during the remote lock (429 `rate_limited_remote`) |
+| `remoteLockStarted`, `remoteLockEnded` | warning, info | The remote lock (§8.1) starts (IP of the failure that started it) and ends (no IP) |
+| `csrfRejected` | warning | 403 from the CSRF check: missing or wrong `X-TunnelDeck-Request`, or foreign `Origin` |
+| `bodyTooLarge`, `invalidBody` | warning, notice | 400 for a JSON body over 1 MiB, or not one valid JSON value of the expected shape |
+| `possibleScan` | warning | ≥ 10 requests for unknown `/api/*` paths (404 of the fallback route) from one IP within 1 min; reported once with count 10, then counted per request |
+
+Types marked as repeated (`rateLimited`, `remoteLocked`, `csrfRejected`, `bodyTooLarge`, `invalidBody`, `possibleScan`) are merged: an event of the same type, IP and access within 10 min of the entry's last occurrence increments its `count`, sets `time` to the latest and `firstTime` to the first occurrence, and moves the entry to the newest position (new ID). Storage: `/data/audit-log.json` (own file, `schemaVersion` 1, atomic writes, not in `settings.json` because attackers control its write rate), written at most 2 s after an entry and at shutdown. Two classes with their own cap of 500 entries each — sign-ins/sign-outs/wrong credentials, and security events — so a burst of attack events from many addresses never pushes the sign-in history out; the oldest entry of the full class is dropped. App log: sign-ins and sign-outs at info, wrong credentials at warning, security events at debug (the rate limit already warns when a cooldown or lock starts), always with client IP and access, never the username.
+
+API: `GET /api/audit?limit=1..500 (default 50)&before=<id>&filter=failures|security` → `{ entries: [{ id, time, firstTime?, type, severity, clientIp, access, username?, count }], hasMore, recentWarnings, newRemoteSignIn? }`, newest first; `before` pages to entries with a smaller ID. `failures` = `wrongCredentials`, `rateLimited`, `remoteLocked`; `security` = every type except sign-ins, sign-outs and wrong credentials. `recentWarnings` sums the counts of warning-level entries of the last 24 h (any filter). `newRemoteSignIn` is the latest `signedIn` when its access is `remote` and no earlier `signedIn` in the log has the same IP.
+
+UI: System page card "Sign-ins" / "Anmeldungen": table time (server time zone, like the other times), event (pill coloured by severity, green for sign-in, "(N×)" for counts), IP, access (LAN / Remote); radio filter all / only failed sign-ins / only security events; "Show older entries" loads the next page; a red banner "N blocked attempts in the last 24 hours" when `recentWarnings` > 0; a yellow notice for `newRemoteSignIn`. Help section `sign-ins`.
 
 ## 9. HTTP API
 
@@ -155,6 +179,7 @@ JSON; errors as RFC 9457 problem details (`Content-Type: application/problem+jso
 | POST | `/api/firewall/templates/ipsec` | Returns the rule set for an IPsec device (§16.2), not stored |
 | GET | `/api/system` | Version, self-check results, UI listen address |
 | GET/PUT | `/api/public-ip-lookup` | Public IP detection setting `{ enabled, url }` (§6.1); PUT validates (422 with `fieldCodes`) and applies to a connected tunnel at once |
+| GET | `/api/audit` | Audit log of sign-ins and security events, newest first (§8.2): `limit`, `before`, `filter` |
 
 ## 10. Configuration (environment)
 
@@ -244,6 +269,7 @@ Where an RFC covers something, follow it instead of inventing a format:
 | Language tags (`de`, `en`) | RFC 5646 |
 | TLS minimum for VPN control channels | TLS 1.2+ (RFC 5246 / 8446) |
 | Later: IKEv2 | RFC 7296 |
+| Security headers | CSP Level 3 (W3C); `X-Frame-Options` RFC 7034; HSTS RFC 6797; `Referrer-Policy`, `Permissions-Policy`, COOP/CORP per their W3C/WHATWG specs |
 
 Not RFCs but binding here: Server-Sent Events (WHATWG HTML), Semantic Versioning, Conventional Commits. OpenVPN and WireGuard have no RFC; their official documentation is the reference.
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"tunneldeck/internal/api"
 	"tunneldeck/internal/auth"
@@ -31,6 +32,23 @@ func (a authAdapter) Login(username, password string, client api.LoginClient, re
 		return "", &api.InvalidCredentialsError{RetryAfter: credentials.RetryAfter}
 	}
 	return token, err
+}
+
+// auditLockEvents records the start and end of the remote listener's lock
+// in the audit log (SPEC §8.2).
+type auditLockEvents struct {
+	log interface{ Record(domain.AuditEvent) }
+	now func() time.Time
+}
+
+func (e auditLockEvents) RemoteLockStarted(clientIP string) {
+	e.log.Record(domain.AuditEvent{
+		Time: e.now().UTC(), Type: domain.AuditRemoteLockStarted, ClientIP: clientIP, Access: domain.LoginAccessRemote,
+	})
+}
+
+func (e auditLockEvents) RemoteLockEnded() {
+	e.log.Record(domain.AuditEvent{Time: e.now().UTC(), Type: domain.AuditRemoteLockEnded, Access: domain.LoginAccessRemote})
 }
 
 // sessionCookies sets the auth session cookie; the API passes secure on the

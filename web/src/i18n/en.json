@@ -724,6 +724,46 @@
       "rejectMissing": "The REJECT target ({{module}}) is unavailable, so reject rules drop instead and send no answer.",
       "replyRoutingConnmark": "Replies of port forwards follow a connection mark (CONNMARK in the mangle table).",
       "replyRoutingFallback": "The CONNMARK target ({{module}}) or the mangle table ({{table}}) is unavailable, so replies of port forwards are routed by the target's address: everything this device routes for a port-forward target goes through the tunnel while it is up."
+    },
+    "audit": {
+      "title": "Sign-ins",
+      "description": "Sign-ins, sign-outs and requests this device blocked, with the address and access they came from. Attempted usernames and passwords are never recorded.",
+      "show": "Show",
+      "filters": {
+        "all": "All entries",
+        "failures": "Only failed sign-ins",
+        "security": "Only security events"
+      },
+      "time": "Time",
+      "event": "Event",
+      "ip": "IP address",
+      "access": "Access",
+      "accessKinds": {
+        "lan": "LAN",
+        "remote": "Remote"
+      },
+      "repeated": "{{event}} ({{count}}×)",
+      "empty": "No entries yet.",
+      "older": "Show older entries",
+      "warnings_one": "{{count}} blocked attempt in the last 24 hours",
+      "warnings_other": "{{count}} blocked attempts in the last 24 hours",
+      "warningsHint": "TunnelDeck-VPN refused requests that look like an attack: guessed passwords, cross-site requests or scans. Check the addresses below. Attempts from the internet mean remote access is being probed: use a long password, or turn remote access off if you do not need it.",
+      "newRemoteTitle": "Sign-in from a new address",
+      "newRemote": "The latest sign-in came over remote access from {{ip}} ({{time}}), an address no earlier sign-in used. If that was not you, use \"Sign out everywhere\" and reset the admin password.",
+      "types": {
+        "signedIn": "Signed in",
+        "wrongCredentials": "Wrong username or password",
+        "signedOut": "Signed out",
+        "signedOutEverywhere": "Signed out everywhere",
+        "rateLimited": "Blocked: waiting time after failed sign-ins",
+        "remoteLocked": "Blocked: remote sign-in locked",
+        "remoteLockStarted": "Remote sign-in locked for everyone",
+        "remoteLockEnded": "Remote sign-in unlocked",
+        "csrfRejected": "Blocked: cross-site or scripted request",
+        "bodyTooLarge": "Blocked: request too large",
+        "invalidBody": "Blocked: malformed request",
+        "possibleScan": "Possible scan: requests for unknown addresses"
+      }
     }
   },
   "remoteAccess": {
@@ -916,6 +956,7 @@
       "firewall": "Firewall",
       "remote-access": "Remote access",
       "system-checks": "System checks",
+      "sign-ins": "Sign-ins and security events",
       "troubleshooting": "Troubleshooting",
       "admin-reset": "Admin reset",
       "about": "About"

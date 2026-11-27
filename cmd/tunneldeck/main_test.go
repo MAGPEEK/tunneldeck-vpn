@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"tunneldeck/internal/api"
@@ -23,6 +24,7 @@ import (
 	"tunneldeck/internal/control"
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/netguard"
+	"tunneldeck/internal/web"
 )
 
 func TestRouter(t *testing.T) {
@@ -41,6 +43,57 @@ func TestRouter(t *testing.T) {
 		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
 		if rec.Body.String() != tt.want {
 			t.Errorf("%s served by %q, want %q", tt.path, rec.Body.String(), tt.want)
+		}
+	}
+}
+
+// TestRouterSetsSecurityHeaders checks the headers on API, SPA and error
+// responses, on both listeners.
+func TestRouterSetsSecurityHeaders(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html":    {Data: []byte("<html>index</html>")},
+		"assets/app.js": {Data: []byte("console.log('app')")},
+	}
+	apiHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/missing" {
+			http.Error(w, "missing", http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("{}"))
+	})
+	listeners := map[string]http.Handler{
+		"lan":               newRouter(apiHandler, web.NewHandler(assets)),
+		"remote":            api.SecureListener(newRouter(apiHandler, web.NewHandler(assets))),
+		"lan without build": newRouter(apiHandler, web.NewHandler(fstest.MapFS{})),
+	}
+	for name, router := range listeners {
+		for _, path := range []string{"/api/system", "/api/missing", "/", "/assets/app.js", "/profiles"} {
+			t.Run(name+" "+path, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+				header := rec.Header()
+				for _, want := range []struct{ name, value string }{
+					{"X-Frame-Options", "DENY"},
+					{"X-Content-Type-Options", "nosniff"},
+					{"Referrer-Policy", "no-referrer"},
+					{"Cross-Origin-Opener-Policy", "same-origin"},
+					{"Cross-Origin-Resource-Policy", "same-origin"},
+				} {
+					if got := header.Get(want.name); got != want.value {
+						t.Errorf("%s = %q, want %q", want.name, got, want.value)
+					}
+				}
+				if csp := header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") {
+					t.Errorf("Content-Security-Policy = %q", csp)
+				}
+				if !strings.Contains(header.Get("Permissions-Policy"), "camera=()") {
+					t.Errorf("Permissions-Policy = %q", header.Get("Permissions-Policy"))
+				}
+				hsts := header.Get("Strict-Transport-Security")
+				if (name == "remote") != (hsts != "") {
+					t.Errorf("Strict-Transport-Security = %q on %s", hsts, name)
+				}
+			})
 		}
 	}
 }
