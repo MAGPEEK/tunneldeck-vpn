@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-27
+
+Security hardening: response headers, a login and attack audit log, SSRF and other pentest fixes, and vulnerability scans in CI. A baseline penetration test (OWASP WSTG/ASVS L2) and an automated scan (ZAP, nuclei, testssl.sh, nikto) against a local container found no confirmed vulnerabilities.
+
 ### Added
 
 - Audit log (SPEC §8.2): the System page card "Sign-ins" lists sign-ins, sign-outs and blocked attacks with time, IP address and access (LAN or Remote): wrong passwords, sign-in attempts during the waiting time or the remote lock, the start and end of the remote lock, cross-site or scripted requests refused by the CSRF check, oversized or malformed request bodies, and possible scans (ten or more requests for unknown API addresses from one address within a minute). Each entry has a severity; repeated events are counted in one entry. Filters "Only failed sign-ins" and "Only security events", a red banner with the number of blocked attempts in the last 24 hours, and a notice when the latest sign-in came over remote access from an address no earlier sign-in used. Attempted usernames, passwords and request contents are never recorded. Kept in `/data/audit-log.json`: the last 500 sign-ins and sign-outs and, separately, the last 500 security events. API: `GET /api/audit` with paging (`limit`, `before`) and `filter`.
