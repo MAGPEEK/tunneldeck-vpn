@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Sign-in page: after a failed sign-in it shows at once how long to wait ("You can sign in again in N seconds"), counts down live and keeps "Sign in" disabled until the wait is over; a screen reader hears the start and the end of the wait only. A failed login now answers `401` with `Retry-After` and `retryAfterSeconds`.
+
+### Security
+
+- Login rate limit replaced (SPEC §8): instead of 5 failures per minute (3 for remote clients) before a lockout, every failed sign-in from an address starts a wait of 10 seconds that doubles with each further failure (20, 40 … 640 seconds) up to 15 minutes, on the LAN and the HTTPS listener alike. Attempts during the wait are rejected with `429` without checking the password and without extending the wait; a successful sign-in resets it, and an address is forgotten 30 minutes after its last failure. Each failure is logged as a warning with address, failure count and wait, never with the username or password.
+- Remote access (SPEC §8.1): 10 failed sign-ins within 10 minutes on the HTTPS listener, from any addresses, block sign-in there for everyone for 1 minute, doubling on repeated blocks up to 15 minutes (reset after 30 minutes without failures). Such logins get `429` with the code `rate_limited_remote`, and the sign-in page says that remote sign-in is temporarily blocked for everyone. Sign-in on the LAN address is never affected. Every login on the HTTPS listener now counts as remote, also from private addresses.
+
 ## [0.4.1] - 2026-11-26
 
 ### Added

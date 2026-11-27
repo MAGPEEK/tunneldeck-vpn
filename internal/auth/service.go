@@ -25,16 +25,39 @@ const (
 // username or the password was wrong.
 var ErrInvalidCredentials = errors.New("invalid username or password")
 
-// ErrRateLimited is matched by every *RateLimitError.
-var ErrRateLimited = errors.New("too many failed logins")
-
-// RateLimitError reports a login refused because the client is locked out.
-type RateLimitError struct {
-	// RetryAfter is the remaining lockout.
+// CredentialsError reports a failed login and the cooldown it started; it
+// matches ErrInvalidCredentials.
+type CredentialsError struct {
+	// RetryAfter is how long the client must wait before its next attempt.
 	RetryAfter time.Duration
 }
 
+func (e *CredentialsError) Error() string {
+	return fmt.Sprintf("%s, retry after %s", ErrInvalidCredentials, e.RetryAfter)
+}
+
+// Is makes errors.Is(err, ErrInvalidCredentials) true.
+func (e *CredentialsError) Is(target error) bool {
+	return target == ErrInvalidCredentials
+}
+
+// ErrRateLimited is matched by every *RateLimitError.
+var ErrRateLimited = errors.New("too many failed logins")
+
+// RateLimitError reports a login refused by the rate limit, without
+// checking the credentials.
+type RateLimitError struct {
+	// RetryAfter is the remaining wait.
+	RetryAfter time.Duration
+	// Remote is true when the remote listener rejects every client
+	// (SPEC §8.1), not just this one.
+	Remote bool
+}
+
 func (e *RateLimitError) Error() string {
+	if e.Remote {
+		return fmt.Sprintf("%s on the remote listener, retry after %s", ErrRateLimited, e.RetryAfter)
+	}
 	return fmt.Sprintf("%s, retry after %s", ErrRateLimited, e.RetryAfter)
 }
 
@@ -123,24 +146,30 @@ func (s *Service) Setup(username, password string) error {
 	return nil
 }
 
-// Login checks the credentials and returns a new session token. limit
-// selects how many failures lock clientIP out; remember starts a "stay
-// signed in" session (longer timeouts, kept across restarts). It fails with
-// *RateLimitError while clientIP is locked out and with
-// ErrInvalidCredentials for a wrong username or password; both cases cost
-// the same password hash computation.
-func (s *Service) Login(username, password, clientIP string, limit LoginLimit, remember bool) (string, error) {
-	if retryAfter, allowed := s.limiter.begin(clientIP, limit, s.now()); !allowed {
-		return "", &RateLimitError{RetryAfter: retryAfter}
+// Login checks the credentials and returns a new session token. listener
+// selects the rate limits that apply; remember starts a "stay signed in"
+// session (longer timeouts, kept across restarts). It fails with
+// *RateLimitError, without checking the credentials, while clientIP or the
+// remote listener is cooling down, and with *CredentialsError (matching
+// ErrInvalidCredentials) for a wrong username or password; a wrong username
+// and a wrong password cost the same password hash computation. Every
+// failure, an internal error included, starts a cooldown for clientIP.
+func (s *Service) Login(username, password, clientIP string, listener Listener, remember bool) (string, error) {
+	if err := s.limiter.begin(clientIP, listener, s.now()); err != nil {
+		return "", err
 	}
 	valid, err := s.checkCredentials(username, password)
+	var retryAfter time.Duration
+	if err != nil || !valid {
+		retryAfter = s.limiter.failed(clientIP, listener, s.now())
+	}
 	if err != nil {
 		return "", fmt.Errorf("auth: login: %w", err)
 	}
 	if !valid {
-		return "", ErrInvalidCredentials
+		return "", &CredentialsError{RetryAfter: retryAfter}
 	}
-	s.limiter.succeeded(clientIP)
+	s.limiter.succeeded(clientIP, listener)
 	token, err := s.sessions.create(username, clientIP, remember, s.now())
 	if err != nil {
 		return "", fmt.Errorf("auth: login: %w", err)

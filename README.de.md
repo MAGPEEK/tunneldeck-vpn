@@ -13,7 +13,7 @@
 - **Firewall zwischen VPN und LAN**: Alles ist gesperrt, außer eine Regel erlaubt es. Eingangsregeln öffnen Ports auf diesem Gerät oder leiten sie an beliebige andere Geräte im lokalen LAN weiter (auch ESP/GRE, z. B. für einen IPsec-Router); Ausgangsregeln lassen ausgewählte LAN-Geräte Netze hinter dem VPN erreichen, mit Kill-Switch. Dieses Gerät behält seine eigene Standardroute.
 - **WireGuard eingebaut**: kein Kernelmodul und kein Zusatzpaket nötig, daher auch auf älteren NAS-Kerneln. TunnelDeck-VPN erzeugt das Schlüsselpaar und zeigt den öffentlichen Schlüssel an, den Sie auf dem Server eintragen; Netze unter *Erlaubte IPs* außer `0.0.0.0/0` werden wie Remote-Netze durch den Tunnel geleitet.
 - **Erkennt veraltete Einstellungen**: unverschlüsselter Datenkanal, schwache Verschlüsselung, Kompression und Ähnliches erscheinen als Hinweis.
-- **Sicher voreingestellt**: Anmeldung nötig, Zugangsdaten verschlüsselt gespeichert, Oberfläche nur im LAN. Fernzugriff per HTTPS zuschaltbar.
+- **Sicher voreingestellt**: Anmeldung nötig, mit wachsender Wartezeit nach jedem Fehlversuch (10 s, verdoppelt bis 15 min), Zugangsdaten verschlüsselt gespeichert, Oberfläche nur im LAN. Fernzugriff per HTTPS zuschaltbar; wiederholte Fehlversuche sperren dort die Anmeldung für eine Weile für alle.
 - Oberfläche auf **Deutsch und Englisch**, helles und dunkles Design.
 
 ## Unterstützte VPN-Verfahren

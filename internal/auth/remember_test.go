@@ -29,7 +29,7 @@ func TestRememberedSessionTimeouts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := newSetUpService(t)
-			token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, tt.remember)
+			token, err := ts.Login(testUsername, testPassword, testIP, ListenerLAN, tt.remember)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,7 +199,7 @@ func TestResetAdminRemovesRememberedSessions(t *testing.T) {
 func TestRememberLoginStoreError(t *testing.T) {
 	ts := newSetUpService(t)
 	ts.store.failWrites(errStoreFailed)
-	if _, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, true); !errors.Is(err, errStoreFailed) {
+	if _, err := ts.Login(testUsername, testPassword, testIP, ListenerLAN, true); !errors.Is(err, errStoreFailed) {
 		t.Fatalf("Login: err = %v, want %v", err, errStoreFailed)
 	}
 	if n := len(ts.sessions.sessions); n != 0 {

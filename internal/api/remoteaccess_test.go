@@ -348,7 +348,7 @@ func TestSessionCookieIsSecureOnTheHTTPSListener(t *testing.T) {
 	}
 }
 
-func TestLoginLimitSelection(t *testing.T) {
+func TestLoginListenerSelection(t *testing.T) {
 	tests := []struct {
 		name       string
 		remoteAddr string
@@ -359,12 +359,12 @@ func TestLoginLimitSelection(t *testing.T) {
 		{name: "public over HTTP", remoteAddr: "203.0.113.9:5000", want: LoginClient{IP: "203.0.113.9"}},
 		{name: "public over HTTPS", remoteAddr: "203.0.113.9:5000", https: true, want: LoginClient{IP: "203.0.113.9", Remote: true}},
 		{name: "CGNAT over HTTPS", remoteAddr: "100.64.0.5:5000", https: true, want: LoginClient{IP: "100.64.0.5", Remote: true}},
-		{name: "10/8 over HTTPS", remoteAddr: "10.8.0.6:5000", https: true, want: LoginClient{IP: "10.8.0.6"}},
-		{name: "172.16/12 over HTTPS", remoteAddr: "172.20.1.1:5000", https: true, want: LoginClient{IP: "172.20.1.1"}},
-		{name: "192.168/16 over HTTPS", remoteAddr: "192.168.1.20:5000", https: true, want: LoginClient{IP: "192.168.1.20"}},
-		{name: "loopback over HTTPS", remoteAddr: "127.0.0.1:5000", https: true, want: LoginClient{IP: "127.0.0.1"}},
-		{name: "link-local over HTTPS", remoteAddr: "169.254.10.1:5000", https: true, want: LoginClient{IP: "169.254.10.1"}},
-		{name: "mapped private over HTTPS", remoteAddr: "[::ffff:192.168.1.20]:5000", https: true, want: LoginClient{IP: "::ffff:192.168.1.20"}},
+		{name: "10/8 over HTTPS", remoteAddr: "10.8.0.6:5000", https: true, want: LoginClient{IP: "10.8.0.6", Remote: true}},
+		{name: "172.16/12 over HTTPS", remoteAddr: "172.20.1.1:5000", https: true, want: LoginClient{IP: "172.20.1.1", Remote: true}},
+		{name: "192.168/16 over HTTPS", remoteAddr: "192.168.1.20:5000", https: true, want: LoginClient{IP: "192.168.1.20", Remote: true}},
+		{name: "loopback over HTTPS", remoteAddr: "127.0.0.1:5000", https: true, want: LoginClient{IP: "127.0.0.1", Remote: true}},
+		{name: "link-local over HTTPS", remoteAddr: "169.254.10.1:5000", https: true, want: LoginClient{IP: "169.254.10.1", Remote: true}},
+		{name: "mapped private over HTTPS", remoteAddr: "[::ffff:192.168.1.20]:5000", https: true, want: LoginClient{IP: "::ffff:192.168.1.20", Remote: true}},
 		{name: "unparseable over HTTPS", remoteAddr: "garbage", https: true, want: LoginClient{IP: "garbage", Remote: true}},
 	}
 	for _, tt := range tests {

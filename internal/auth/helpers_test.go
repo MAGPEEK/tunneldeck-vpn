@@ -158,7 +158,7 @@ func newSetUpService(t *testing.T) *testService {
 
 func (ts *testService) mustLogin(t *testing.T) string {
 	t.Helper()
-	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, false)
+	token, err := ts.Login(testUsername, testPassword, testIP, ListenerLAN, false)
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -167,7 +167,7 @@ func (ts *testService) mustLogin(t *testing.T) string {
 
 func (ts *testService) mustRemember(t *testing.T) string {
 	t.Helper()
-	token, err := ts.Login(testUsername, testPassword, testIP, LoginLimitStandard, true)
+	token, err := ts.Login(testUsername, testPassword, testIP, ListenerLAN, true)
 	if err != nil {
 		t.Fatalf("Login with remember: %v", err)
 	}

@@ -13,7 +13,7 @@
 - **Firewall between VPN and LAN**: everything is blocked unless a rule allows it. Inbound rules open ports on this device or forward them to any other device in the local LAN (also ESP/GRE, e.g. for an IPsec router); outbound rules let chosen LAN devices reach networks behind the VPN, with a kill switch. This device keeps its own default route.
 - **WireGuard built in**: no kernel module and no extra package needed, so it also runs on older NAS kernels. TunnelDeck-VPN generates the key pair and shows the public key to enter on the server; networks in *Allowed IPs* other than `0.0.0.0/0` are routed through the tunnel like remote networks.
 - **Flags outdated settings**: an unencrypted data channel, weak ciphers, compression and similar settings are shown as advisories.
-- **Secure by default**: sign-in required, credentials encrypted at rest, web UI on the LAN only. Optional remote access over HTTPS.
+- **Secure by default**: sign-in required, with a growing wait after each failed attempt (10 s, doubling up to 15 min), credentials encrypted at rest, web UI on the LAN only. Optional remote access over HTTPS, where repeated failed sign-ins block remote sign-in for everyone for a while.
 - **German and English** UI, light and dark theme.
 
 ## Supported VPN methods

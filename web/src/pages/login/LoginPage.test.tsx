@@ -1,5 +1,5 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { problem, type MockReply } from '../../test/fetchMock';
 import { SIGNED_IN, SIGNED_OUT, renderApp } from '../../test/renderApp';
 
@@ -23,28 +23,101 @@ function loginBody(fetchMock: ReturnType<typeof renderApp>['fetchMock']) {
   return JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
 }
 
+function liveRegion() {
+  return document.querySelector('[aria-live="polite"]');
+}
+
+function tick(seconds: number) {
+  act(() => {
+    vi.advanceTimersByTime(seconds * 1000);
+  });
+}
+
 describe('LoginPage', () => {
-  it('shows a generic message for wrong credentials', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows a generic message for wrong credentials without a cooldown', async () => {
     await signIn(problem(401, 'invalid_credentials', 'bad login'));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Username or password is incorrect.',
     );
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });
 
-  it('shows the wait time when rate limited', async () => {
+  it('counts the cooldown down right after a failed login and then re-enables sign-in', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    await signIn(
+      problem(401, 'invalid_credentials', 'bad login', { headers: { 'Retry-After': '10' } }),
+    );
+    const start = 'Wrong username or password. You can sign in again in 10 seconds.';
+    expect(await screen.findByText(start, { selector: 'p:not([aria-live])' })).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Sign in' });
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(liveRegion()).toHaveClass('visually-hidden');
+    expect(liveRegion()).toHaveTextContent(start);
+
+    tick(1);
+    expect(
+      screen.getByText('Wrong username or password. You can sign in again in 9 seconds.'),
+    ).toBeInTheDocument();
+    expect(liveRegion()).toHaveTextContent(start);
+    tick(8);
+    expect(
+      screen.getByText('Wrong username or password. You can sign in again in 1 second.'),
+    ).toBeInTheDocument();
+    expect(button).toBeDisabled();
+
+    tick(1);
+    expect(button).toBeEnabled();
+    expect(screen.getByText('Username or password is incorrect.')).toBeInTheDocument();
+    expect(liveRegion()).toHaveTextContent('You can sign in again now.');
+  });
+
+  it('counts down the wait when rate limited', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     await signIn(
       problem(429, 'rate_limited', 'too many attempts', { headers: { 'Retry-After': '45' } }),
     );
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Too many failed attempts. Try again in 45 seconds.',
-    );
+    expect(
+      await screen.findByText('Too many failed attempts. Please wait 45 more seconds.', {
+        selector: 'p:not([aria-live])',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    tick(44);
+    expect(
+      screen.getByText('Too many failed attempts. Please wait 1 more second.'),
+    ).toBeInTheDocument();
+    tick(1);
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+    expect(liveRegion()).toHaveTextContent('You can sign in again now.');
   });
 
-  it('falls back to a later hint when no wait time is given', async () => {
-    await signIn(problem(429, 'rate_limited', 'too many attempts'));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Too many failed attempts. Try again later.',
+  it('says when remote sign-in is blocked for everyone', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    await signIn(
+      problem(429, 'rate_limited_remote', 'remote locked', { headers: { 'Retry-After': '60' } }),
     );
+    const start =
+      'Remote sign-in is temporarily blocked for everyone after too many failed attempts. Please wait 60 more seconds.';
+    expect(await screen.findByText(start, { selector: 'p:not([aria-live])' })).toBeInTheDocument();
+    expect(liveRegion()).toHaveTextContent(start);
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+  });
+
+  it.each([
+    ['rate_limited', 'Too many failed attempts. Try again later.'],
+    [
+      'rate_limited_remote',
+      'Remote sign-in is temporarily blocked for everyone after too many failed attempts. Try again later.',
+    ],
+  ])('falls back to a later hint for %s without a wait time', async (code, message) => {
+    await signIn(problem(429, code, 'too many attempts'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });
 
   it('opens the app after a successful login', async () => {

@@ -16,9 +16,28 @@ import (
 // password.
 var ErrInvalidCredentials = errors.New("invalid username or password")
 
-// RateLimitError is returned by Auth.Login while the client is locked out.
+// InvalidCredentialsError is returned by Auth.Login for a wrong username or
+// password; RetryAfter is the cooldown the failure started. It matches
+// ErrInvalidCredentials.
+type InvalidCredentialsError struct {
+	RetryAfter time.Duration
+}
+
+func (e *InvalidCredentialsError) Error() string {
+	return fmt.Sprintf("%s, retry after %s", ErrInvalidCredentials, e.RetryAfter)
+}
+
+// Is makes errors.Is(err, ErrInvalidCredentials) true.
+func (e *InvalidCredentialsError) Is(target error) bool {
+	return target == ErrInvalidCredentials
+}
+
+// RateLimitError is returned by Auth.Login while the client is cooling
+// down. Remote is true while the remote listener rejects every client
+// (SPEC §8.1).
 type RateLimitError struct {
 	RetryAfter time.Duration
+	Remote     bool
 }
 
 func (e *RateLimitError) Error() string {
@@ -28,9 +47,8 @@ func (e *RateLimitError) Error() string {
 // LoginClient describes who attempts a login.
 type LoginClient struct {
 	IP string
-	// Remote is true for a client outside the private, loopback and
-	// link-local ranges on the HTTPS listener; it gets the stricter login
-	// limit (SPEC §8.1).
+	// Remote is true on the HTTPS remote-access listener, whose logins also
+	// count towards the limit across all clients (SPEC §8.1).
 	Remote bool
 }
 
@@ -41,7 +59,8 @@ type Auth interface {
 	// *domain.ValidationError.
 	Setup(username, password string) error
 	// Login returns a session token; remember starts a "stay signed in"
-	// session. It fails with ErrInvalidCredentials or *RateLimitError.
+	// session. It fails with *InvalidCredentialsError (or
+	// ErrInvalidCredentials) or *RateLimitError.
 	Login(username, password string, client LoginClient, remember bool) (token string, err error)
 	Authenticate(token string) (username string, ok bool)
 	// Logout ends the session behind token; unknown tokens are ignored.

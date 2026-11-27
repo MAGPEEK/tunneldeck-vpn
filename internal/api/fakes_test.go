@@ -36,6 +36,8 @@ type fakeAuth struct {
 	setupDone   bool
 	tokens      map[string]string
 	retryAfter  time.Duration // locks logins out when > 0
+	remoteLock  bool          // the lockout is the remote listener's
+	failureWait time.Duration // cooldown reported with a failed login when > 0
 	loginClient LoginClient
 	remembered  bool // remember of the last Login
 	setupCalled bool
@@ -72,9 +74,12 @@ func (a *fakeAuth) Login(username, password string, client LoginClient, remember
 	a.loginClient = client
 	a.remembered = remember
 	if a.retryAfter > 0 {
-		return "", &RateLimitError{RetryAfter: a.retryAfter}
+		return "", &RateLimitError{RetryAfter: a.retryAfter, Remote: a.remoteLock}
 	}
 	if username != testUser || password != "correct-password" {
+		if a.failureWait > 0 {
+			return "", &InvalidCredentialsError{RetryAfter: a.failureWait}
+		}
 		return "", ErrInvalidCredentials
 	}
 	a.tokens["new-token"] = username

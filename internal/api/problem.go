@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 
 	"tunneldeck/internal/domain"
 	"tunneldeck/internal/vpn"
@@ -24,6 +25,7 @@ const (
 	CodeSetupDone          = "setup_done"
 	CodeValidationFailed   = "validation_failed"
 	CodeRateLimited        = "rate_limited"
+	CodeRateLimitedRemote  = "rate_limited_remote"
 	CodeInternal           = "internal"
 	CodeFirewallFailed     = "firewall_failed"
 	CodeRemoteAccessFailed = "remote_access_failed"
@@ -33,18 +35,20 @@ const (
 
 const problemContentType = "application/problem+json"
 
-// problem is an RFC 9457 problem details object; Code, Fields and
-// FieldCodes are extension members. FieldCodes holds the stable code (and
-// its parameters) of every field message that has one, so clients can
-// translate it; Fields keeps the English message for all fields.
+// problem is an RFC 9457 problem details object; Code, Fields, FieldCodes
+// and RetryAfterSeconds are extension members. FieldCodes holds the stable
+// code (and its parameters) of every field message that has one, so clients
+// can translate it; Fields keeps the English message for all fields.
+// RetryAfterSeconds repeats the Retry-After header of a login cooldown.
 type problem struct {
-	Type       string                       `json:"type"`
-	Title      string                       `json:"title"`
-	Status     int                          `json:"status"`
-	Detail     string                       `json:"detail,omitempty"`
-	Code       string                       `json:"code"`
-	Fields     map[string]string            `json:"fields,omitempty"`
-	FieldCodes map[string]domain.FieldIssue `json:"fieldCodes,omitempty"`
+	Type              string                       `json:"type"`
+	Title             string                       `json:"title"`
+	Status            int                          `json:"status"`
+	Detail            string                       `json:"detail,omitempty"`
+	Code              string                       `json:"code"`
+	Fields            map[string]string            `json:"fields,omitempty"`
+	FieldCodes        map[string]domain.FieldIssue `json:"fieldCodes,omitempty"`
+	RetryAfterSeconds int                          `json:"retryAfterSeconds,omitempty"`
 }
 
 func newProblem(status int, code, detail string) problem {
@@ -60,12 +64,34 @@ func writeProblem(w http.ResponseWriter, p problem) {
 	}
 }
 
+// writeRateLimited answers a login rejected by the rate limit (RFC 6585):
+// rate_limited for the client's own cooldown, rate_limited_remote while the
+// remote listener rejects every client.
+func writeRateLimited(w http.ResponseWriter, rateLimit *RateLimitError) {
+	p := newProblem(http.StatusTooManyRequests, CodeRateLimited, "Too many failed logins. Try again later.")
+	if rateLimit.Remote {
+		p = newProblem(http.StatusTooManyRequests, CodeRateLimitedRemote,
+			"Remote sign-in is blocked for everyone after too many failed logins. Try again later.")
+	}
+	writeProblem(w, withRetryAfter(w, p, rateLimit.RetryAfter))
+}
+
+// withRetryAfter sets the Retry-After header (RFC 9110, whole seconds,
+// rounded up, at least 1) and the retryAfterSeconds member of p.
+func withRetryAfter(w http.ResponseWriter, p problem, wait time.Duration) problem {
+	seconds := max(1, int(math.Ceil(wait.Seconds())))
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	p.RetryAfterSeconds = seconds
+	return p
+}
+
 // writeError maps err to a problem response. Messages of domain errors
 // never carry submitted values, so they are safe to return; unknown errors
 // are logged and answered with a generic detail.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var validation *domain.ValidationError
 	var rateLimit *RateLimitError
+	var credentials *InvalidCredentialsError
 	var badRequest badRequestError
 	var unavailable unavailableError
 	switch {
@@ -77,9 +103,10 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		p.FieldCodes = validation.Issues
 		writeProblem(w, p)
 	case errors.As(err, &rateLimit):
-		seconds := max(1, int(math.Ceil(rateLimit.RetryAfter.Seconds())))
-		w.Header().Set("Retry-After", strconv.Itoa(seconds))
-		writeProblem(w, newProblem(http.StatusTooManyRequests, CodeRateLimited, "Too many failed logins. Try again later."))
+		writeRateLimited(w, rateLimit)
+	case errors.As(err, &credentials):
+		p := newProblem(http.StatusUnauthorized, CodeInvalidCredentials, "The username or password is wrong.")
+		writeProblem(w, withRetryAfter(w, p, credentials.RetryAfter))
 	case errors.Is(err, ErrInvalidCredentials):
 		writeProblem(w, newProblem(http.StatusUnauthorized, CodeInvalidCredentials, "The username or password is wrong."))
 	case errors.Is(err, domain.ErrSetupAlreadyDone):

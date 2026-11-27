@@ -67,9 +67,15 @@
     "title": "Sign in",
     "submit": "Sign in",
     "invalidCredentials": "Username or password is incorrect.",
-    "rateLimited_one": "Too many failed attempts. Try again in {{count}} second.",
-    "rateLimited_other": "Too many failed attempts. Try again in {{count}} seconds.",
+    "invalidCredentialsWait_one": "Wrong username or password. You can sign in again in {{count}} second.",
+    "invalidCredentialsWait_other": "Wrong username or password. You can sign in again in {{count}} seconds.",
+    "rateLimited_one": "Too many failed attempts. Please wait {{count}} more second.",
+    "rateLimited_other": "Too many failed attempts. Please wait {{count}} more seconds.",
     "rateLimitedLater": "Too many failed attempts. Try again later.",
+    "rateLimitedRemote_one": "Remote sign-in is temporarily blocked for everyone after too many failed attempts. Please wait {{count}} more second.",
+    "rateLimitedRemote_other": "Remote sign-in is temporarily blocked for everyone after too many failed attempts. Please wait {{count}} more seconds.",
+    "rateLimitedRemoteLater": "Remote sign-in is temporarily blocked for everyone after too many failed attempts. Try again later.",
+    "waitOver": "You can sign in again now.",
     "remember": "Stay signed in"
   },
   "errors": {

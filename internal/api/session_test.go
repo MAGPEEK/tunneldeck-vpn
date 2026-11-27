@@ -64,23 +64,35 @@ func TestSetup(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
+	const correct = `{"username":"admin","password":"correct-password"}`
 	tests := []struct {
-		name       string
-		body       string
-		retryAfter time.Duration
-		status     int
-		code       string
-		wantRetry  string
+		name        string
+		body        string
+		retryAfter  time.Duration
+		remoteLock  bool
+		failureWait time.Duration
+		status      int
+		code        string
+		wantRetry   string
+		wantSeconds int
 	}{
-		{name: "sets the cookie", body: `{"username":"admin","password":"correct-password"}`, status: http.StatusNoContent},
+		{name: "sets the cookie", body: correct, status: http.StatusNoContent},
 		{name: "wrong password", body: `{"username":"admin","password":"wrong-password"}`, status: http.StatusUnauthorized, code: CodeInvalidCredentials},
 		{
-			name: "rate limited rounds up", body: `{"username":"admin","password":"correct-password"}`,
-			retryAfter: 1500 * time.Millisecond, status: http.StatusTooManyRequests, code: CodeRateLimited, wantRetry: "2",
+			name: "wrong password reports the cooldown", body: `{"username":"admin","password":"wrong-password"}`,
+			failureWait: 10 * time.Second, status: http.StatusUnauthorized, code: CodeInvalidCredentials, wantRetry: "10", wantSeconds: 10,
 		},
 		{
-			name: "rate limited below a second", body: `{"username":"admin","password":"correct-password"}`,
-			retryAfter: 10 * time.Millisecond, status: http.StatusTooManyRequests, code: CodeRateLimited, wantRetry: "1",
+			name: "rate limited rounds up", body: correct,
+			retryAfter: 1500 * time.Millisecond, status: http.StatusTooManyRequests, code: CodeRateLimited, wantRetry: "2", wantSeconds: 2,
+		},
+		{
+			name: "rate limited below a second", body: correct,
+			retryAfter: 10 * time.Millisecond, status: http.StatusTooManyRequests, code: CodeRateLimited, wantRetry: "1", wantSeconds: 1,
+		},
+		{
+			name: "remote listener locked", body: correct, retryAfter: time.Minute, remoteLock: true,
+			status: http.StatusTooManyRequests, code: CodeRateLimitedRemote, wantRetry: "60", wantSeconds: 60,
 		},
 		{name: "unknown field", body: `{"username":"admin","password":"x","stay":true}`, status: http.StatusBadRequest, code: CodeBadRequest},
 	}
@@ -88,11 +100,16 @@ func TestLogin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			env := newTestEnv(t)
 			env.auth.retryAfter = tt.retryAfter
+			env.auth.remoteLock = tt.remoteLock
+			env.auth.failureWait = tt.failureWait
 			rec := env.do(t, http.MethodPost, "/api/login", tt.body, anonymous)
 			if tt.code != "" {
-				assertProblem(t, rec, tt.status, tt.code)
+				p := assertProblem(t, rec, tt.status, tt.code)
 				if got := rec.Header().Get("Retry-After"); got != tt.wantRetry {
 					t.Errorf("Retry-After = %q, want %q", got, tt.wantRetry)
+				}
+				if p.RetryAfterSeconds != tt.wantSeconds {
+					t.Errorf("retryAfterSeconds = %d, want %d", p.RetryAfterSeconds, tt.wantSeconds)
 				}
 				return
 			}
@@ -102,7 +119,7 @@ func TestLogin(t *testing.T) {
 				t.Errorf("Set-Cookie = %q", cookie)
 			}
 			if env.auth.loginClient != (LoginClient{IP: "192.0.2.1"}) {
-				t.Errorf("client = %+v, want the RemoteAddr host 192.0.2.1 with the standard limit", env.auth.loginClient)
+				t.Errorf("client = %+v, want the RemoteAddr host 192.0.2.1 on the LAN listener", env.auth.loginClient)
 			}
 		})
 	}

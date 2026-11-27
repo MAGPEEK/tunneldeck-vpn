@@ -10,7 +10,8 @@ export const HELP_CONTENT_DE: HelpContent = {
       type: 'list',
       items: [
         'Beim ersten Aufruf legen Sie das Administratorkonto an. Das Passwort braucht mindestens 12 Zeichen. Es gibt genau ein Administratorkonto.',
-        'Melden Sie sich mit Benutzername und Passwort an. Nach fünf Fehlversuchen innerhalb einer Minute von einer Adresse wird die Anmeldung für eine Weile gesperrt.',
+        'Melden Sie sich mit Benutzername und Passwort an. Nach jedem Fehlversuch muss die Adresse, von der Sie sich anmelden, vor dem nächsten Versuch warten: 10 Sekunden, dann 20, 40 und so weiter, höchstens 15 Minuten. Die Anmeldeseite zählt die Wartezeit herunter. Eine erfolgreiche Anmeldung setzt sie zurück.',
+        'Über den Fernzugriff sperren 10 Fehlversuche innerhalb von 10 Minuten, von beliebigen Adressen, die Anmeldung über den Fernzugriff für alle für 1 Minute (bei Wiederholung länger, höchstens 15 Minuten). Die Anmeldung über die LAN-Adresse funktioniert weiter.',
         '„Angemeldet bleiben“ hält diesen Browser bis zu 90 Tage angemeldet, auch über Neustarts des Containers hinweg; nach 30 Tagen ohne Nutzung endet die Sitzung. Die Option gibt es nur über die LAN-Adresse, nicht über den Fernzugriff.',
         '„Überall abmelden“ auf der System-Seite beendet alle Sitzungen, auch gemerkte.',
       ],

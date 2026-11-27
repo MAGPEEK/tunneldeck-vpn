@@ -362,8 +362,8 @@ func (sc *scenario) expectReachable(t *testing.T, vpnIP netip.Addr, port int, wa
 }
 
 // checkRemoteAccess enables the HTTPS listener: it answers through the
-// tunnel with HSTS while the plain UI port stays closed; disabling closes
-// it again.
+// tunnel with HSTS while the plain UI port stays closed, and the first
+// scenario checks the login rate limits; disabling closes it again.
 func (sc *scenario) checkRemoteAccess(t *testing.T, vpnIP netip.Addr) {
 	t.Helper()
 	sc.td.setRemoteAccess(t, true, remoteAccessPort)
@@ -375,6 +375,9 @@ func (sc *scenario) checkRemoteAccess(t *testing.T, vpnIP netip.Addr) {
 	}
 	if !strings.Contains(strings.ToLower(headers), "strict-transport-security: max-age=31536000") {
 		t.Errorf("GET %s: no HSTS header in\n%s", url, headers)
+	}
+	if sc.checksLoginLimits() {
+		sc.checkLoginLimits(t, vpnIP)
 	}
 	sc.expectReachable(t, vpnIP, uiPort, false)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -122,43 +123,57 @@ func (f *fakeAccounts) SetRememberedSessions([]domain.RememberedSession) error {
 	return nil
 }
 
-func TestAuthAdapterMapsErrors(t *testing.T) {
+func newAdapterService(t *testing.T) authAdapter {
+	t.Helper()
 	service := auth.NewService(&fakeAccounts{}, auth.WithHashParams(auth.HashParams{MemoryKiB: 64, Iterations: 1, Parallelism: 1, KeyLength: 32, SaltLength: 16}))
-	adapter := authAdapter{service}
 	if err := service.Setup("admin", "correct horse battery"); err != nil {
 		t.Fatalf("Setup: %v", err)
 	}
+	return authAdapter{service}
+}
+
+func TestAuthAdapterMapsErrors(t *testing.T) {
+	adapter := newAdapterService(t)
 	if _, err := adapter.Login("admin", "correct horse battery", api.LoginClient{IP: "192.0.2.1"}, false); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	var lastErr error
-	for range 6 {
-		_, lastErr = adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.2"}, false)
+	client := api.LoginClient{IP: "192.0.2.2"}
+	_, err := adapter.Login("admin", "wrong password!", client, false)
+	var credentials *api.InvalidCredentialsError
+	if !errors.As(err, &credentials) || !errors.Is(err, api.ErrInvalidCredentials) || credentials.RetryAfter != 10*time.Second {
+		t.Errorf("wrong password = %v, want *api.InvalidCredentialsError with a 10s cooldown", err)
 	}
+	_, err = adapter.Login("admin", "correct horse battery", client, false)
 	var rateLimit *api.RateLimitError
-	if !errors.As(lastErr, &rateLimit) || rateLimit.RetryAfter <= 0 {
-		t.Errorf("sixth failure = %v, want *api.RateLimitError", lastErr)
-	}
-	if _, err := adapter.Login("admin", "wrong password!", api.LoginClient{IP: "192.0.2.3"}, false); !errors.Is(err, api.ErrInvalidCredentials) {
-		t.Errorf("wrong password = %v, want api.ErrInvalidCredentials", err)
+	if !errors.As(err, &rateLimit) || rateLimit.RetryAfter <= 0 || rateLimit.Remote {
+		t.Errorf("attempt during the cooldown = %v, want *api.RateLimitError of the client", err)
 	}
 }
 
-func TestAuthAdapterUsesTheStrictLimitForRemoteClients(t *testing.T) {
-	service := auth.NewService(&fakeAccounts{}, auth.WithHashParams(auth.HashParams{MemoryKiB: 64, Iterations: 1, Parallelism: 1, KeyLength: 32, SaltLength: 16}))
-	if err := service.Setup("admin", "correct horse battery"); err != nil {
-		t.Fatalf("Setup: %v", err)
+func TestAuthAdapterAppliesTheRemoteLimitOnTheRemoteListener(t *testing.T) {
+	tests := []struct {
+		name       string
+		remote     bool
+		wantLocked bool
+	}{
+		{name: "remote listener", remote: true, wantLocked: true},
+		{name: "LAN listener", remote: false, wantLocked: false},
 	}
-	adapter := authAdapter{service}
-	remote := api.LoginClient{IP: "203.0.113.9", Remote: true}
-	for range 3 {
-		if _, err := adapter.Login("admin", "wrong password!", remote, false); !errors.Is(err, api.ErrInvalidCredentials) {
-			t.Fatalf("failure = %v, want api.ErrInvalidCredentials", err)
-		}
-	}
-	var rateLimit *api.RateLimitError
-	if _, err := adapter.Login("admin", "correct horse battery", remote, false); !errors.As(err, &rateLimit) {
-		t.Errorf("fourth attempt = %v, want *api.RateLimitError after 3 failures", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := newAdapterService(t)
+			for i := range 10 {
+				client := api.LoginClient{IP: fmt.Sprintf("203.0.113.%d", i), Remote: tt.remote}
+				if _, err := adapter.Login("admin", "wrong password!", client, false); !errors.Is(err, api.ErrInvalidCredentials) {
+					t.Fatalf("failure %d = %v, want api.ErrInvalidCredentials", i+1, err)
+				}
+			}
+			_, err := adapter.Login("admin", "correct horse battery", api.LoginClient{IP: "203.0.113.99", Remote: tt.remote}, false)
+			var rateLimit *api.RateLimitError
+			if locked := errors.As(err, &rateLimit) && rateLimit.Remote; locked != tt.wantLocked {
+				t.Errorf("login from a new client = %v, want remote lock %v", err, tt.wantLocked)
+			}
+		})
 	}
 }
 

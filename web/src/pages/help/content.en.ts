@@ -10,7 +10,8 @@ export const HELP_CONTENT_EN: HelpContent = {
       type: 'list',
       items: [
         'On the first visit you create the admin account. The password needs at least 12 characters. There is exactly one admin account.',
-        'Sign in with username and password. After five failed attempts within a minute from one address, sign-in is locked for a while.',
+        'Sign in with username and password. After every failed attempt, the address you sign in from has to wait before the next one: 10 seconds, then 20, 40 and so on, at most 15 minutes. The sign-in page counts the wait down. A successful sign-in resets it.',
+        'Over remote access, 10 failed attempts within 10 minutes from any addresses block remote sign-in for everyone for 1 minute (longer if it happens again, at most 15 minutes). Sign-in on the LAN address keeps working.',
         '"Stay signed in" keeps this browser signed in for up to 90 days, also across container restarts; the session ends after 30 days without use. It is offered on the LAN address only, not over remote access.',
         '"Sign out everywhere" on the System page ends every session, remembered ones included.',
       ],

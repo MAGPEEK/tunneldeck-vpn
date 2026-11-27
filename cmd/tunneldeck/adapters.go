@@ -17,17 +17,18 @@ import (
 type authAdapter struct{ *auth.Service }
 
 func (a authAdapter) Login(username, password string, client api.LoginClient, remember bool) (string, error) {
-	limit := auth.LoginLimitStandard
+	listener := auth.ListenerLAN
 	if client.Remote {
-		limit = auth.LoginLimitStrict
+		listener = auth.ListenerRemote
 	}
-	token, err := a.Service.Login(username, password, client.IP, limit, remember)
+	token, err := a.Service.Login(username, password, client.IP, listener, remember)
 	var rateLimit *auth.RateLimitError
+	var credentials *auth.CredentialsError
 	switch {
 	case errors.As(err, &rateLimit):
-		return "", &api.RateLimitError{RetryAfter: rateLimit.RetryAfter}
-	case errors.Is(err, auth.ErrInvalidCredentials):
-		return "", api.ErrInvalidCredentials
+		return "", &api.RateLimitError{RetryAfter: rateLimit.RetryAfter, Remote: rateLimit.Remote}
+	case errors.As(err, &credentials):
+		return "", &api.InvalidCredentialsError{RetryAfter: credentials.RetryAfter}
 	}
 	return token, err
 }

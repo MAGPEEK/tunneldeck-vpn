@@ -67,9 +67,15 @@
     "title": "Anmelden",
     "submit": "Anmelden",
     "invalidCredentials": "Benutzername oder Passwort ist falsch.",
-    "rateLimited_one": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunde erneut.",
-    "rateLimited_other": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Sekunden erneut.",
+    "invalidCredentialsWait_one": "Falsches Passwort oder Benutzername. Sie können sich in {{count}} Sekunde erneut anmelden.",
+    "invalidCredentialsWait_other": "Falsches Passwort oder Benutzername. Sie können sich in {{count}} Sekunden erneut anmelden.",
+    "rateLimited_one": "Zu viele Fehlversuche. Bitte noch {{count}} Sekunde warten.",
+    "rateLimited_other": "Zu viele Fehlversuche. Bitte noch {{count}} Sekunden warten.",
     "rateLimitedLater": "Zu viele Fehlversuche. Versuchen Sie es später erneut.",
+    "rateLimitedRemote_one": "Die Anmeldung über den Fernzugriff ist nach zu vielen Fehlversuchen vorübergehend für alle gesperrt. Bitte noch {{count}} Sekunde warten.",
+    "rateLimitedRemote_other": "Die Anmeldung über den Fernzugriff ist nach zu vielen Fehlversuchen vorübergehend für alle gesperrt. Bitte noch {{count}} Sekunden warten.",
+    "rateLimitedRemoteLater": "Die Anmeldung über den Fernzugriff ist nach zu vielen Fehlversuchen vorübergehend für alle gesperrt. Versuchen Sie es später erneut.",
+    "waitOver": "Sie können sich jetzt erneut anmelden.",
     "remember": "Angemeldet bleiben"
   },
   "errors": {
