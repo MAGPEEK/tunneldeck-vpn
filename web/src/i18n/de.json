@@ -903,6 +903,7 @@
     "public_address_invalid": "Geben Sie eine IPv4-Adresse oder einen Hostnamen ein, z. B. 203.0.113.10 oder vpn.example.com.",
     "public_ip_url_invalid": "Geben Sie eine vollständige http- oder https-Adresse ein, z. B. https://api.ipify.org.",
     "url_credentials_not_allowed": "Darf keinen Benutzernamen und kein Passwort enthalten.",
+    "public_ip_url_internal": "Darf nicht auf eine Adresse auf diesem Host oder in Ihrem Netzwerk zeigen.",
     "number_between": "Geben Sie eine ganze Zahl von {{min}} bis {{max}} ein.",
     "wireguard_key_invalid": "Muss ein WireGuard-Schlüssel sein: 44 Zeichen Base64, wie wg genkey ihn ausgibt.",
     "wireguard_peer_is_self": "Geben Sie den öffentlichen Schlüssel des Servers ein, nicht den dieses Profils.",

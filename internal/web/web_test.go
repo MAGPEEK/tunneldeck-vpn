@@ -42,6 +42,37 @@ func TestHandlerServesFilesAndFallsBackToIndex(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsNonReadMethods(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html":    {Data: []byte("<html>index</html>")},
+		"assets/app.js": {Data: []byte("console.log('app')")},
+	}
+	handler := NewHandler(assets)
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch, http.MethodOptions, http.MethodTrace} {
+		for _, p := range []string{"/", "/assets/app.js", "/profiles/42"} {
+			t.Run(method+" "+p, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, httptest.NewRequest(method, p, nil))
+				if rec.Code != http.StatusMethodNotAllowed {
+					t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+				}
+				if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+					t.Fatalf("Allow = %q, want %q", got, "GET, HEAD")
+				}
+			})
+		}
+	}
+}
+
+func TestHandlerAllowsHead(t *testing.T) {
+	assets := fstest.MapFS{"index.html": {Data: []byte("<html>index</html>")}}
+	rec := httptest.NewRecorder()
+	NewHandler(assets).ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/assets/missing", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
 func TestHandlerReportsMissingBuild(t *testing.T) {
 	rec := httptest.NewRecorder()
 	NewHandler(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

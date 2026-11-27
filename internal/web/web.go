@@ -48,6 +48,14 @@ func Handler() http.Handler {
 func NewHandler(assets fs.FS) http.Handler {
 	files := http.FileServerFS(assets)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The SPA is read-only: only GET and HEAD are served. Other methods
+		// (e.g. TRACE, PATCH, POST to a non-API path) are refused here as
+		// defense in depth; API routes have their own method handling.
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		if isServableFile(assets, r.URL.Path) {
 			files.ServeHTTP(w, r)
 			return

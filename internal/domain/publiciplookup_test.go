@@ -24,6 +24,21 @@ func TestPublicIPLookupValidate(t *testing.T) {
 		{name: "port only", settings: PublicIPLookup{URL: "https://:443/ip"}, wantCode: "public_ip_url_invalid"},
 		{name: "unparsable", settings: PublicIPLookup{URL: "https://exa mple.com\x7f"}, wantCode: "public_ip_url_invalid"},
 		{name: "credentials", settings: PublicIPLookup{URL: "https://user:s3cr3t@example.com/ip"}, wantCode: "url_credentials_not_allowed"},
+		// H2: IP-literal hosts in internal ranges are rejected (SPEC §6.1).
+		{name: "public host name", settings: PublicIPLookup{URL: "https://api.ipify.org"}},
+		{name: "public IPv4 literal", settings: PublicIPLookup{URL: "https://203.0.113.10/ip"}},
+		{name: "loopback v4", settings: PublicIPLookup{URL: "http://127.0.0.1/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "loopback v4 high", settings: PublicIPLookup{URL: "http://127.9.9.9:8080/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "loopback v6", settings: PublicIPLookup{URL: "http://[::1]/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "link-local v4", settings: PublicIPLookup{URL: "http://169.254.1.1/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "metadata address", settings: PublicIPLookup{URL: "http://169.254.169.254/latest/meta-data"}, wantCode: "public_ip_url_internal"},
+		{name: "link-local v6", settings: PublicIPLookup{URL: "http://[fe80::1]/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "private 10", settings: PublicIPLookup{URL: "http://10.0.0.1/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "private 172.16", settings: PublicIPLookup{URL: "http://172.16.5.4/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "private 192.168", settings: PublicIPLookup{URL: "http://192.168.1.1/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "private v6 ula", settings: PublicIPLookup{URL: "http://[fc00::1]/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "cgnat", settings: PublicIPLookup{URL: "http://100.64.0.1/ip"}, wantCode: "public_ip_url_internal"},
+		{name: "ipv4-mapped loopback", settings: PublicIPLookup{URL: "http://[::ffff:127.0.0.1]/ip"}, wantCode: "public_ip_url_internal"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

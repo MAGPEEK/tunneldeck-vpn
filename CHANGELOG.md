@@ -11,6 +11,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Security
 
+- Public IP detection (SPEC §6.1): the service URL may no longer point to an IP address on this host or inside your network (loopback, link-local including the cloud metadata address, private and carrier-grade NAT ranges), closing a server-side request forgery vector. Normal public services such as `https://api.ipify.org` are unaffected.
+- SPA static files (defense in depth): requests with a method other than GET or HEAD now get `405 Method Not Allowed`.
 - Security headers on every response of both listeners: a strict Content Security Policy (only the app's own scripts, styles and connections; no framing), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, a `Permissions-Policy` that switches off camera, microphone, location and other unused features, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`; API responses are never cached.
 - CI scans for known vulnerabilities: `govulncheck` for the Go code, `npm audit` for the UI packages and Trivy for the image (fails on fixable HIGH or CRITICAL findings).
 - Dependencies updated: `golang.org/x/crypto` 0.59.0, `golang.org/x/net` 0.62.0 (govulncheck reported advisories in both modules; none in code TunnelDeck-VPN calls).

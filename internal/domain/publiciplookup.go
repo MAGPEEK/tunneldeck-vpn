@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"net/netip"
 	"net/url"
 	"strconv"
 )
@@ -50,4 +51,30 @@ func checkLookupURL(v *ValidationError, raw string) {
 	if u.User != nil {
 		v.AddIssue("url", Issue("url_credentials_not_allowed"), "must not contain a user name or password")
 	}
+	if isInternalIPLiteral(u.Hostname()) {
+		v.AddIssue("url", Issue("public_ip_url_internal"), "must not be an address on this host or inside this network")
+	}
+}
+
+// cgnatPrefix is the carrier-grade NAT range (RFC 6598); the standard
+// library has no predicate for it.
+var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10")
+
+// isInternalIPLiteral reports whether host is an IP address literal in a
+// range that must never be the public-IP lookup target (SSRF, SPEC §6.1):
+// loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16 incl. the
+// 169.254.169.254 metadata address, fe80::/10), private (10/8, 172.16/12,
+// 192.168/16, fc00::/7) or carrier-grade NAT (100.64.0.0/10). A host name
+// (not an IP literal) is allowed; it is resolved by the host resolver at
+// request time, so this guard does not see it.
+func isInternalIPLiteral(host string) bool {
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	return addr.IsLoopback() ||
+		addr.IsLinkLocalUnicast() ||
+		addr.IsPrivate() ||
+		cgnatPrefix.Contains(addr)
 }
