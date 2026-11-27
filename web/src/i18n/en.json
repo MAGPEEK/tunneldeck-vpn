@@ -727,6 +727,10 @@
     },
     "audit": {
       "title": "Sign-ins",
+      "titleWithAttacks_one": "{{title}} · {{count}} attack",
+      "titleWithAttacks_other": "{{title}} · {{count}} attacks",
+      "attackTag": "Attack",
+      "failureTag": "Failed",
       "description": "Sign-ins, sign-outs and requests this device blocked, with the address and access they came from. Attempted usernames and passwords are never recorded.",
       "show": "Show",
       "filters": {

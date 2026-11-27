@@ -1,3 +1,4 @@
+import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuditEntry, AuditFilter } from '../../api/audit';
@@ -28,6 +29,29 @@ function entryTone(entry: AuditEntry): StateTone {
   }
 }
 
+/**
+ * How a row stands out: `attack` (warning-level security events) is danger-tinted,
+ * `failure` (notice-level, e.g. a wrong password) is milder amber. Successes and
+ * plain info rows return `null` and stay normal. Each kind carries its own icon,
+ * tone and label so it reads without relying on colour alone.
+ */
+interface RowMark {
+  kind: 'attack' | 'failure';
+  tone: StateTone;
+  labelKey: 'system.audit.attackTag' | 'system.audit.failureTag';
+}
+
+function rowMark(entry: AuditEntry): RowMark | null {
+  switch (entry.severity) {
+    case 'warning':
+      return { kind: 'attack', tone: 'danger', labelKey: 'system.audit.attackTag' };
+    case 'notice':
+      return { kind: 'failure', tone: 'warning', labelKey: 'system.audit.failureTag' };
+    default:
+      return null;
+  }
+}
+
 /** SPEC §8.2: sign-ins, sign-outs and blocked attacks, newest first. */
 export function AuditCard() {
   const { t, i18n } = useTranslation();
@@ -41,8 +65,31 @@ export function AuditCard() {
   const first = audit.data?.pages[0];
   const entries = audit.data?.pages.flatMap((page) => page.entries) ?? [];
 
+  const attacks = first?.recentWarnings ?? 0;
+  const title =
+    attacks > 0
+      ? t('system.audit.titleWithAttacks', { title: t('system.audit.title'), count: attacks })
+      : t('system.audit.title');
+
   const columns: Column<AuditEntry>[] = [
-    { key: 'time', header: t('system.audit.time'), render: (entry) => time(entry.time) },
+    {
+      key: 'time',
+      header: t('system.audit.time'),
+      render: (entry) => {
+        const mark = rowMark(entry);
+        return (
+          <div className={styles.timeCell}>
+            {mark && (
+              <StatePill tone={mark.tone}>
+                <TriangleAlert size={14} aria-hidden="true" />
+                {t(mark.labelKey)}
+              </StatePill>
+            )}
+            <span>{time(entry.time)}</span>
+          </div>
+        );
+      },
+    },
     {
       key: 'event',
       header: t('system.audit.event'),
@@ -70,7 +117,7 @@ export function AuditCard() {
   ];
 
   return (
-    <Card title={t('system.audit.title')}>
+    <Card title={title}>
       <div className={styles.form}>
         <p className={styles.secondary}>{t('system.audit.description')}</p>
         {first !== undefined && first.recentWarnings > 0 && (
@@ -115,6 +162,20 @@ export function AuditCard() {
             rows={entries}
             rowKey={(entry) => String(entry.id)}
             emptyMessage={t('system.audit.empty')}
+            rowClassName={(entry) => {
+              const mark = rowMark(entry);
+              if (mark?.kind === 'attack') {
+                return styles.attackRow;
+              }
+              if (mark?.kind === 'failure') {
+                return styles.failureRow;
+              }
+              return undefined;
+            }}
+            rowProps={(entry) => {
+              const mark = rowMark(entry);
+              return mark ? { 'data-severity': mark.kind } : undefined;
+            }}
           />
         )}
         {audit.hasNextPage && (

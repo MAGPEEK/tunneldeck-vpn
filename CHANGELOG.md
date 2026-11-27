@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Audit log card "Sign-ins": attack and failed-sign-in entries now stand out as whole rows, not just a coloured event column. Warning-level events (blocked attacks) get a danger-tinted row with a warning icon and an "Attack"/"Angriff" tag; failed sign-ins get a milder amber row with a "Failed"/"Fehlversuch" tag. The tags carry the meaning without relying on colour. When there were blocked attempts in the last 24 hours, the card title shows their count (for example "Sign-ins · 3 attacks").
+
 ## [0.4.3] - 2026-11-27
 
 Security hardening: response headers, a login and attack audit log, SSRF and other pentest fixes, and vulnerability scans in CI. A baseline penetration test (OWASP WSTG/ASVS L2) and an automated scan (ZAP, nuclei, testssl.sh, nikto) against a local container found no confirmed vulnerabilities.

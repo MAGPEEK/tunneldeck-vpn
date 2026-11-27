@@ -18,6 +18,10 @@ export interface TableProps<Row> {
   rowDetail?: (row: Row) => ReactNode;
   /** Marks a row, such as `highlighted` for an unsaved insert (styled in Table.module.css). */
   rowState?: (row: Row) => 'highlighted' | undefined;
+  /** Extra class name for a row's `<tr>`, letting callers tint it; defaults to none. */
+  rowClassName?: (row: Row) => string | undefined;
+  /** Extra attributes (e.g. `data-*`) for a row's `<tr>`; defaults to none. */
+  rowProps?: (row: Row) => Record<string, string | undefined> | undefined;
 }
 
 export function Table<Row>({
@@ -28,6 +32,8 @@ export function Table<Row>({
   caption,
   rowDetail,
   rowState,
+  rowClassName,
+  rowProps,
 }: TableProps<Row>) {
   const alignClass = (column: Column<Row>) => (column.align === 'end' ? styles.end : undefined);
   return (
@@ -55,7 +61,11 @@ export function Table<Row>({
               const detail = rowDetail?.(row);
               return (
                 <Fragment key={rowKey(row)}>
-                  <tr data-state={rowState?.(row)}>
+                  <tr
+                    data-state={rowState?.(row)}
+                    className={rowClassName?.(row)}
+                    {...rowProps?.(row)}
+                  >
                     {columns.map((column) => (
                       <td key={column.key} className={alignClass(column)}>
                         {column.render(row)}

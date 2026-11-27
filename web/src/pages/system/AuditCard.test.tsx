@@ -57,7 +57,8 @@ function routes(page: AuditPage, extra: MockRoutes = {}): MockRoutes {
 }
 
 async function auditCard(): Promise<HTMLElement> {
-  return (await screen.findByRole('heading', { name: 'Sign-ins' })).closest(
+  // The title gains an attack count when there are recent warnings, so match a prefix.
+  return (await screen.findByRole('heading', { name: /^Sign-ins/ })).closest(
     'section',
   ) as HTMLElement;
 }
@@ -88,10 +89,32 @@ describe('AuditCard', () => {
     expect(within(card).queryByText(/blocked attempt/)).not.toBeInTheDocument();
   });
 
+  it('highlights attack and failed rows and leaves successes plain', async () => {
+    renderApp(routes(PAGE), '/system');
+    const card = await auditCard();
+    const rows = await within(card).findAllByRole('row');
+    // Warning-level security event: danger styling plus the attack tag.
+    const attack = rows[1] as HTMLElement;
+    expect(attack).toHaveAttribute('data-severity', 'attack');
+    expect(within(attack).getByText('Attack')).toBeInTheDocument();
+    // Notice-level failed sign-in: milder styling plus the failed tag.
+    const failed = rows[2] as HTMLElement;
+    expect(failed).toHaveAttribute('data-severity', 'failure');
+    expect(within(failed).getByText('Failed')).toBeInTheDocument();
+    // Successful sign-in: no severity marker.
+    const success = rows[3] as HTMLElement;
+    expect(success).not.toHaveAttribute('data-severity');
+    expect(within(success).queryByText('Attack')).not.toBeInTheDocument();
+    expect(within(success).queryByText('Failed')).not.toBeInTheDocument();
+  });
+
   it('warns about blocked attempts of the last 24 hours and a sign-in from a new address', async () => {
     const newRemote = entry({ id: 9, clientIp: '10.8.0.6', access: 'remote' });
     renderApp(routes({ ...PAGE, recentWarnings: 12, newRemoteSignIn: newRemote }), '/system');
     const card = await auditCard();
+    expect(
+      await within(card).findByRole('heading', { name: 'Sign-ins · 12 attacks' }),
+    ).toBeInTheDocument();
     expect(
       await within(card).findByText('12 blocked attempts in the last 24 hours'),
     ).toBeInTheDocument();

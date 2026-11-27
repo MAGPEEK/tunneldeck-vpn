@@ -159,3 +159,33 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+
+/* Audit rows: the time cell stacks the severity tag above the timestamp. */
+.timeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/*
+ * Attack (warning-level) and failed-sign-in (notice-level) rows are tinted by
+ * severity. A translucent mix of the state background keeps the event and tag
+ * pills (which use the full background) readable on top, and a coloured left bar
+ * plus the tag's icon and text make the row distinct without relying on colour.
+ */
+.attackRow td {
+  background: color-mix(in srgb, var(--state-danger-bg) 55%, transparent);
+}
+
+.attackRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--state-danger-text);
+}
+
+.failureRow td {
+  background: color-mix(in srgb, var(--state-warning-bg) 50%, transparent);
+}
+
+.failureRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--state-warning-text);
+}
