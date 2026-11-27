@@ -289,7 +289,7 @@ export const HELP_CONTENT_EN: HelpContent = {
   'sign-ins': [
     {
       type: 'paragraph',
-      text: 'The card "Sign-ins" on the System page lists sign-ins, sign-outs and the requests TunnelDeck-VPN blocked, newest first, with the time, the IP address and the access (LAN or Remote). It keeps the last 500 sign-ins and sign-outs and, separately, the last 500 security events, so a burst of attacks never pushes the sign-ins out. Attempted usernames, passwords and request contents are never recorded.',
+      text: 'The "Sign-ins" tab on the Log page lists sign-ins, sign-outs and the requests TunnelDeck-VPN blocked, newest first, with the time, the IP address and the access (LAN or Remote). It keeps the last 500 sign-ins and sign-outs and, separately, the last 500 security events, so a burst of attacks never pushes the sign-ins out. Attempted usernames, passwords and request contents are never recorded.',
     },
     {
       type: 'terms',

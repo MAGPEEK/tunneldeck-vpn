@@ -205,6 +205,11 @@
   },
   "log": {
     "title": "Log",
+    "tabs": {
+      "label": "Log views",
+      "vpn": "VPN log",
+      "signIns": "Sign-ins"
+    },
     "level": "Level",
     "filter": {
       "all": "All",

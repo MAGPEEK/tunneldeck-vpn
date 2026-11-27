@@ -289,7 +289,7 @@ export const HELP_CONTENT_DE: HelpContent = {
   'sign-ins': [
     {
       type: 'paragraph',
-      text: 'Die Karte „Anmeldungen“ auf der System-Seite listet Anmeldungen, Abmeldungen und die von TunnelDeck-VPN abgewiesenen Anfragen, die neuesten zuerst, mit Zeit, IP-Adresse und Zugang (LAN oder Fernzugriff). Sie behält die letzten 500 Anmeldungen und Abmeldungen und getrennt davon die letzten 500 Sicherheitsereignisse, damit eine Angriffswelle die Anmeldungen nie verdrängt. Versuchte Benutzernamen, Passwörter und Inhalte von Anfragen werden nie gespeichert.',
+      text: 'Der Tab „Anmeldungen“ auf der Protokoll-Seite listet Anmeldungen, Abmeldungen und die von TunnelDeck-VPN abgewiesenen Anfragen, die neuesten zuerst, mit Zeit, IP-Adresse und Zugang (LAN oder Fernzugriff). Sie behält die letzten 500 Anmeldungen und Abmeldungen und getrennt davon die letzten 500 Sicherheitsereignisse, damit eine Angriffswelle die Anmeldungen nie verdrängt. Versuchte Benutzernamen, Passwörter und Inhalte von Anfragen werden nie gespeichert.',
     },
     {
       type: 'terms',

@@ -42,7 +42,6 @@ function routes(overrides: MockRoutes = {}): MockRoutes {
     'GET /api/system': { body: SYSTEM },
     'GET /api/remote-access': { body: REMOTE },
     'GET /api/public-ip-lookup': { body: LOOKUP },
-    'GET /api/audit?limit=50': { body: { entries: [], hasMore: false, recentWarnings: 0 } },
     ...overrides,
   };
 }
@@ -69,6 +68,12 @@ describe('SystemPage', () => {
     expect(screen.getByRole('img', { name: 'Passed' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Failed' })).toBeInTheDocument();
     expect(screen.getByText(/Install iptables in the image and make sure/)).toBeInTheDocument();
+  });
+
+  it('no longer shows the sign-ins audit log; it lives on the Log page', async () => {
+    renderApp(routes(), '/system');
+    await screen.findByText('1.2.3');
+    expect(screen.queryByRole('heading', { name: /^Sign-ins/ })).not.toBeInTheDocument();
   });
 
   it('labels the IP forwarding and LAN checks and translates their hints', async () => {

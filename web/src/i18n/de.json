@@ -205,6 +205,11 @@
   },
   "log": {
     "title": "Protokoll",
+    "tabs": {
+      "label": "Protokollansichten",
+      "vpn": "VPN-Protokoll",
+      "signIns": "Anmeldungen"
+    },
     "level": "Stufe",
     "filter": {
       "all": "Alle",

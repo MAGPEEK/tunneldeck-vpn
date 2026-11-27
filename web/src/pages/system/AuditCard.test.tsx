@@ -51,6 +51,7 @@ function routes(page: AuditPage, extra: MockRoutes = {}): MockRoutes {
       body: { enabled: false, port: 8443, certificateSource: 'selfSigned', listening: false },
     },
     'GET /api/public-ip-lookup': { body: { enabled: true, url: 'https://api.ipify.org' } },
+    'GET /api/logs?tail=2000': { body: { lines: [] } },
     'GET /api/audit?limit=50': { body: page },
     ...extra,
   };
@@ -65,7 +66,7 @@ async function auditCard(): Promise<HTMLElement> {
 
 describe('AuditCard', () => {
   it('lists entries with zoned time, coloured event, IP and access', async () => {
-    renderApp(routes(PAGE), '/system');
+    renderApp(routes(PAGE), '/log?tab=sign-ins');
     const card = await auditCard();
     const rows = await within(card).findAllByRole('row');
     expect(rows).toHaveLength(4);
@@ -90,7 +91,7 @@ describe('AuditCard', () => {
   });
 
   it('highlights attack and failed rows and leaves successes plain', async () => {
-    renderApp(routes(PAGE), '/system');
+    renderApp(routes(PAGE), '/log?tab=sign-ins');
     const card = await auditCard();
     const rows = await within(card).findAllByRole('row');
     // Warning-level security event: danger styling plus the attack tag.
@@ -110,7 +111,10 @@ describe('AuditCard', () => {
 
   it('warns about blocked attempts of the last 24 hours and a sign-in from a new address', async () => {
     const newRemote = entry({ id: 9, clientIp: '10.8.0.6', access: 'remote' });
-    renderApp(routes({ ...PAGE, recentWarnings: 12, newRemoteSignIn: newRemote }), '/system');
+    renderApp(
+      routes({ ...PAGE, recentWarnings: 12, newRemoteSignIn: newRemote }),
+      '/log?tab=sign-ins',
+    );
     const card = await auditCard();
     expect(
       await within(card).findByRole('heading', { name: 'Sign-ins · 12 attacks' }),
@@ -134,7 +138,7 @@ describe('AuditCard', () => {
         'GET /api/audit?limit=50&filter=failures': { body: failures },
         'GET /api/audit?limit=50&filter=security': { body: security },
       }),
-      '/system',
+      '/log?tab=sign-ins',
     );
     const card = await auditCard();
     await within(card).findByText('Signed in');
@@ -163,7 +167,7 @@ describe('AuditCard', () => {
         { ...PAGE, entries: PAGE.entries.slice(0, 2), hasMore: true },
         { 'GET /api/audit?limit=50&before=2': { body: older } },
       ),
-      '/system',
+      '/log?tab=sign-ins',
     );
     const card = await auditCard();
     fireEvent.click(await within(card).findByRole('button', { name: 'Show older entries' }));
@@ -175,7 +179,7 @@ describe('AuditCard', () => {
   });
 
   it('shows an empty log', async () => {
-    renderApp(routes({ entries: [], hasMore: false, recentWarnings: 0 }), '/system');
+    renderApp(routes({ entries: [], hasMore: false, recentWarnings: 0 }), '/log?tab=sign-ins');
     const card = await auditCard();
     expect(await within(card).findByText('No entries yet.')).toBeInTheDocument();
   });

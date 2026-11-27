@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- The sign-in and attack log "Sign-ins" moved from the System page to a tab on the Log page, so all logs sit together: the Log page now has a "VPN log"/"VPN-Protokoll" tab (the live tunnel protocol, shown by default) and an "Sign-ins"/"Anmeldungen" tab. The selected tab is kept in the URL (`?tab=sign-ins`), so it is linkable and survives the back button.
+
 ## [0.4.4] - 2026-11-27
 
 ### Changed
