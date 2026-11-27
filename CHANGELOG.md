@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-27
+
 ### Changed
 
 - Sign-in page: after a failed sign-in it shows at once how long to wait ("You can sign in again in N seconds"), counts down live and keeps "Sign in" disabled until the wait is over; a screen reader hears the start and the end of the wait only. A failed login now answers `401` with `Retry-After` and `retryAfterSeconds`.
